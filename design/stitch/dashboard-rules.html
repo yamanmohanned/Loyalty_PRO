@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>قواعد الولاء - إدارة الولاء</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error-container": "#93000a",
+                      "surface-tint": "#086b53",
+                      "primary-container": "#0f6e56",
+                      "outline": "#6f7a74",
+                      "on-surface-variant": "#3f4944",
+                      "tertiary": "#78352b",
+                      "error": "#ba1a1a",
+                      "on-primary-fixed-variant": "#00513e",
+                      "on-tertiary-container": "#ffd3cc",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-container": "#954c41",
+                      "charcoal-ink": "#1A1D21",
+                      "surface": "#f7faf6",
+                      "primary-fixed-dim": "#84d6b9",
+                      "on-background": "#181d1a",
+                      "secondary-fixed-dim": "#c0c7d6",
+                      "on-tertiary-fixed-variant": "#743329",
+                      "surface-bright": "#f7faf6",
+                      "primary": "#005440",
+                      "primary-fixed": "#a0f3d4",
+                      "inverse-primary": "#84d6b9",
+                      "teal-tint": "#E1F5EE",
+                      "surface-variant": "#e0e3e0",
+                      "signal-red": "#B0322E",
+                      "on-surface": "#181d1a",
+                      "whisper-border": "rgba(17, 24, 39, 0.08)",
+                      "surface-dim": "#d7dbd7",
+                      "inverse-surface": "#2d312f",
+                      "signal-amber": "#B26B00",
+                      "surface-container": "#ebefeb",
+                      "on-error": "#ffffff",
+                      "on-tertiary": "#ffffff",
+                      "tertiary-fixed": "#ffdad4",
+                      "secondary": "#585f6c",
+                      "canvas": "#F7F8FA",
+                      "surface-container-high": "#e5e9e5",
+                      "on-primary-container": "#9aedcf",
+                      "background": "#f7faf6",
+                      "on-secondary-fixed": "#151c27",
+                      "on-secondary-fixed-variant": "#404754",
+                      "tertiary-fixed-dim": "#ffb4a8",
+                      "on-secondary-container": "#5e6572",
+                      "surface-container-low": "#f1f4f1",
+                      "signal-green": "#1E7B4D",
+                      "outline-variant": "#bec9c3",
+                      "on-tertiary-fixed": "#3b0804",
+                      "surface-container-highest": "#e0e3e0",
+                      "inverse-on-surface": "#eef2ee",
+                      "secondary-container": "#dce2f3",
+                      "on-secondary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "on-primary": "#ffffff",
+                      "pure-surface": "#FFFFFF",
+                      "on-primary-fixed": "#002117",
+                      "secondary-fixed": "#dce2f3"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "padding-card-mobile": "16px",
+                      "gutter": "16px",
+                      "max-width-dashboard": "1440px",
+                      "padding-card-web": "24px",
+                      "base": "8px"
+              },
+              "fontFamily": {
+                      "body-lg": [
+                              "ibmPlexSans"
+                      ],
+                      "body-md": [
+                              "ibmPlexSans"
+                      ],
+                      "amount-display": [
+                              "jetbrainsMono"
+                      ],
+                      "headline-lg": [
+                              "plusJakartaSans"
+                      ],
+                      "label-sm": [
+                              "ibmPlexSans"
+                      ],
+                      "headline-md": [
+                              "plusJakartaSans"
+                      ]
+              },
+              "fontSize": {
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "amount-display": [
+                              "28px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            background-color: theme('colors.canvas');
+            color: theme('colors.on-surface');
+            font-family: 'IBM Plex Sans', sans-serif;
+        }
+        
+        .font-ibm-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Hide scrollbar for clean look but keep functionality */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.outline-variant');
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline');
+        }
+        
+        /* Custom Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: theme('colors.primary');
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: theme('colors.primary');
+        }
+        .toggle-checkbox {
+            right: 0;
+            z-index: 1;
+            border-color: theme('colors.outline');
+            transition: all 0.3s;
+        }
+        .toggle-label {
+            background-color: theme('colors.surface-variant');
+            transition: all 0.3s;
+        }
+        
+        /* Segmented Control Active State */
+        .segmented-btn.active {
+            background-color: theme('colors.pure-surface');
+            color: theme('colors.primary');
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-weight: 600;
+        }
+        
+        /* Input Focus Ring overrides */
+        input:focus {
+            box-shadow: 0 0 0 2px theme('colors.teal-tint') !important;
+            border-color: theme('colors.primary') !important;
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex selection:bg-teal-tint selection:text-primary">
+<!-- SideNavBar (Desktop) -->
+<aside class="hidden md:flex flex-col bg-surface-container-lowest dark:bg-charcoal-ink fixed right-0 top-0 h-full w-64 z-40 border-l border-whisper-border dark:border-outline-variant shadow-sm py-6 gap-2">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-teal-tint flex items-center justify-center text-primary">
+<span class="material-symbols-outlined font-bold">loyalty</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">ولاء</h1>
+<p class="font-label-sm text-label-sm text-secondary">إدارة الولاء</p>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:text-primary hover:bg-surface-container dark:hover:bg-on-secondary-fixed-variant transition-all font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>لوحة القيادة</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:text-primary hover:bg-surface-container dark:hover:bg-on-secondary-fixed-variant transition-all font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span>الأعضاء</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:text-primary hover:bg-surface-container dark:hover:bg-on-secondary-fixed-variant transition-all font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="local_offer">local_offer</span>
+<span>العروض</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:text-primary hover:bg-surface-container dark:hover:bg-on-secondary-fixed-variant transition-all font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span>التقارير</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:text-primary hover:bg-surface-container dark:hover:bg-on-secondary-fixed-variant transition-all font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="storefront">storefront</span>
+<span>الفروع</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-container text-on-primary-container font-semibold transition-transform translate-x-1 font-label-sm text-label-sm mx-2" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>الإعدادات</span>
+</a>
+</nav>
+<div class="px-6 mt-auto pt-6 border-t border-whisper-border">
+<a class="flex items-center justify-center w-full py-3 px-4 rounded-lg bg-primary text-on-primary font-label-sm text-label-sm hover:bg-on-primary-fixed-variant transition-colors mb-4" href="#">
+<span class="material-symbols-outlined ml-2 text-[18px]">add</span>
+                إضافة عرض جديد
+            </a>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary hover:text-signal-red hover:bg-error-container transition-colors font-label-sm text-label-sm" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span>تسجيل الخروج</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<main class="flex-1 w-full md:mr-64 pb-24 md:pb-32 flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="w-full h-16 sticky top-0 bg-pure-surface dark:bg-charcoal-ink border-b border-whisper-border dark:border-outline-variant flex flex-row-reverse justify-between items-center px-gutter md:px-8 z-30">
+<div class="flex items-center gap-4">
+<!-- Mobile Menu Button (Placeholder for behavior) -->
+<button class="md:hidden text-secondary hover:text-primary transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="font-headline-md text-headline-md font-bold text-primary dark:text-on-primary-container md:hidden">ولاء</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-low hover:text-primary transition-colors relative group">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-signal-red border-2 border-pure-surface"></span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-secondary hover:bg-surface-container-low hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<button class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center ml-2 border border-whisper-border overflow-hidden">
+<img alt="Administrator profile avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a middle-eastern corporate manager looking confident, soft studio lighting, clean background, modern business attire, high resolution, photorealistic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbhftVcvCZ1wUrBSBwJyB5wkY3LcXuLyGBYlTNJLbW-TQMdlwkWO7MzNFWR-jMwDN_YcKMZ8QpzDuUo9YqgBquXDIVfPu_9tgcN0q8dyqN8saknRfGjzULpqytJvKNxaPGK9LrUC8IDhiJ7wkLvDXD6ZipAX1GkAaiJDwCpnDgkcwGdGpd3s711HwR7g9Y0rOYWP6KFcdhTqkBhtBM74VuX5sQRFMRZQI00KJScZ0yhRsjAjJTmaKayw"/>
+</button>
+</div>
+</header>
+<!-- Page Content -->
+<div class="w-full max-w-max-width-dashboard mx-auto px-4 md:px-8 py-8 md:py-10 flex-1">
+<!-- Page Header -->
+<div class="mb-8 md:mb-10">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2">قواعد الولاء</h2>
+<p class="font-body-md text-body-md text-secondary">حدّد عتبات الإنفاق ونسب الخصم وبرمجة مكافآت الزبائن.</p>
+</div>
+<!-- Content Grid (Asymmetric) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+<!-- Main Column -->
+<div class="lg:col-span-8 flex flex-col gap-6">
+<!-- Default Rule Card -->
+<section class="bg-pure-surface rounded-xl p-padding-card-mobile md:p-padding-card-web border border-whisper-border shadow-[0_2px_8px_rgba(17,24,39,0.02)]">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">القاعدة الافتراضية (لكل الزبائن)</h3>
+<p class="font-label-sm text-label-sm text-secondary">الشرائح المطبقة على جميع الزبائن غير المصنفين.</p>
+</div>
+<button class="w-8 h-8 rounded flex items-center justify-center text-secondary hover:bg-surface-container hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">info</span>
+</button>
+</div>
+<!-- Tiered Table -->
+<div class="overflow-x-auto w-full mb-4">
+<table class="w-full text-right border-collapse min-w-[600px]">
+<thead>
+<tr class="border-b border-whisper-border">
+<th class="pb-3 pr-4 font-label-sm text-label-sm text-secondary font-medium w-2/5">عتبة الإنفاق</th>
+<th class="pb-3 px-4 font-label-sm text-label-sm text-secondary font-medium w-1/4">نسبة الخصم</th>
+<th class="pb-3 px-4 font-label-sm text-label-sm text-secondary font-medium w-1/4">صلاحية الكوبون (أيام)</th>
+<th class="pb-3 pl-4 font-label-sm text-label-sm text-secondary font-medium w-16 text-center"></th>
+</tr>
+</thead>
+<tbody>
+<!-- Row 1 -->
+<tr class="border-b border-whisper-border/50 hover:bg-canvas transition-colors group">
+<td class="py-4 pr-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-12 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" value="100,000"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-label-sm">د.ع</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-10 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="3"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-ibm-mono">%</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg px-4 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="14"/>
+</td>
+<td class="py-4 pl-4 text-center">
+<button class="w-8 h-8 rounded text-outline hover:text-signal-red hover:bg-error-container transition-colors inline-flex items-center justify-center opacity-50 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="border-b border-whisper-border/50 hover:bg-canvas transition-colors group">
+<td class="py-4 pr-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-12 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" value="250,000"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-label-sm">د.ع</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-10 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="5"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-ibm-mono">%</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg px-4 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="14"/>
+</td>
+<td class="py-4 pl-4 text-center">
+<button class="w-8 h-8 rounded text-outline hover:text-signal-red hover:bg-error-container transition-colors inline-flex items-center justify-center opacity-50 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-canvas transition-colors group">
+<td class="py-4 pr-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-12 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="text" value="500,000"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-label-sm">د.ع</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="relative w-full">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg pr-4 pl-10 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="8"/>
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-secondary font-ibm-mono">%</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<input class="w-full h-12 bg-surface border border-outline-variant rounded-lg px-4 font-ibm-mono text-[16px] text-on-surface focus:outline-none focus:border-primary transition-all" type="text" value="30"/>
+</td>
+<td class="py-4 pl-4 text-center">
+<button class="w-8 h-8 rounded text-outline hover:text-signal-red hover:bg-error-container transition-colors inline-flex items-center justify-center opacity-50 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<button class="flex items-center justify-center gap-2 h-12 px-6 rounded-lg border border-outline-variant text-primary font-label-sm font-semibold hover:bg-teal-tint transition-colors w-full sm:w-auto">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                            إضافة شريحة
+                        </button>
+</section>
+<!-- Custom Overrides Card -->
+<section class="bg-pure-surface rounded-xl p-padding-card-mobile md:p-padding-card-web border border-whisper-border shadow-[0_2px_8px_rgba(17,24,39,0.02)]">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+<div>
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-1">قواعد مخصصة للزبائن / الفئات</h3>
+<p class="font-label-sm text-label-sm text-secondary">استثناءات محددة تتجاوز القاعدة الافتراضية.</p>
+</div>
+<button class="flex items-center justify-center gap-2 h-12 px-6 rounded-lg bg-primary text-on-primary font-label-sm font-semibold hover:bg-on-primary-fixed-variant transition-colors whitespace-nowrap active:scale-[0.98]">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                                إضافة قاعدة مخصصة
+                            </button>
+</div>
+<!-- Override List -->
+<div class="flex flex-col gap-3">
+<!-- Item 1 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-whisper-border rounded-lg hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-4 mb-3 sm:mb-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">category</span>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-label-sm font-semibold text-on-surface">فئة الزبائن:</span>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-secondary-container text-on-secondary-container">
+                                                جملة
+                                            </span>
+</div>
+<div class="font-label-sm text-secondary flex items-center gap-2">
+<span>الخصم المطبق:</span>
+<span class="font-ibm-mono font-medium text-on-surface">12%</span>
+<span class="text-outline-variant mx-1">|</span>
+<span>العتبة:</span>
+<span class="font-ibm-mono font-medium text-on-surface">1,000,000 د.ع</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 border-t border-whisper-border sm:border-0 pt-3 sm:pt-0">
+<button class="w-9 h-9 rounded-lg text-secondary hover:text-primary hover:bg-teal-tint transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="w-9 h-9 rounded-lg text-secondary hover:text-signal-red hover:bg-error-container transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-whisper-border rounded-lg hover:border-outline-variant transition-colors">
+<div class="flex items-center gap-4 mb-3 sm:mb-0">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center overflow-hidden">
+<img alt="Customer avatar" class="w-full h-full object-cover" data-alt="A portrait of a distinguished older middle-eastern man, soft natural lighting, high quality, professional, corporate." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaZ0MZwnoPq-rFk9d6heWrPFmZG5H5dOlOc-iLlr3Qeq977CUpsGhIfO3ZtiTHEgrPcDn9THk_WxKMfZvUfSYX_QGCdowmssJeMOrFtKtnYWzEFPKzlciDwHwcio7qjvIVO8iGUH8ZMSwfkTrxbNjwHKnbku-7OYEk_fhYKqcueXIOH0wpwh6AAnmQDP1z5i3JPmIJTyY9rKeq7BSUBFyLrkFTanCIz_Pm0qSZkIUaz7brE_Vg79HUlw"/>
+</div>
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-label-sm font-semibold text-on-surface">زبون محدد:</span>
+<span class="font-label-sm font-medium text-on-surface">أحمد عبد الله</span>
+</div>
+<div class="font-label-sm text-secondary flex items-center gap-2">
+<span>الخصم المطبق:</span>
+<span class="font-ibm-mono font-medium text-on-surface">15%</span>
+<span class="text-outline-variant mx-1">|</span>
+<span>العتبة:</span>
+<span class="font-ibm-mono font-medium text-on-surface">لا يوجد</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 border-t border-whisper-border sm:border-0 pt-3 sm:pt-0">
+<button class="w-9 h-9 rounded-lg text-secondary hover:text-primary hover:bg-teal-tint transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="w-9 h-9 rounded-lg text-secondary hover:text-signal-red hover:bg-error-container transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Side Column (Settings) -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- General Settings Card -->
+<section class="bg-pure-surface rounded-xl p-padding-card-mobile md:p-padding-card-web border border-whisper-border shadow-[0_2px_8px_rgba(17,24,39,0.02)]">
+<h3 class="font-body-lg text-body-lg font-semibold text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">tune</span>
+                            الإعدادات العامة
+                        </h3>
+<!-- Program Toggle -->
+<div class="flex items-center justify-between p-4 bg-teal-tint/30 rounded-lg border border-teal-tint mb-6">
+<div>
+<h4 class="font-label-sm font-semibold text-on-surface mb-0.5">تفعيل برنامج الولاء</h4>
+<p class="text-[12px] text-secondary">إيقاف البرنامج سيمنع احتساب النقاط مؤقتاً.</p>
+</div>
+<label class="flex items-center cursor-pointer" for="loyalty-toggle">
+<div class="relative">
+<input checked="" class="sr-only toggle-checkbox" id="loyalty-toggle" type="checkbox"/>
+<div class="block w-12 h-7 rounded-full toggle-label"></div>
+<div class="dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition transform translate-x-5"></div>
+</div>
+</label>
+</div>
+<!-- Calculation Period Segmented Control -->
+<div class="mb-6">
+<label class="block font-label-sm font-semibold text-on-surface mb-3">فترة احتساب الرصيد (التراكمي)</label>
+<div class="flex p-1 bg-surface-container rounded-lg border border-whisper-border">
+<button class="flex-1 py-2 px-3 text-[13px] text-secondary rounded-md transition-colors hover:text-on-surface">أسبوعياً</button>
+<button class="flex-1 py-2 px-3 text-[13px] rounded-md transition-colors segmented-btn active">شهرياً</button>
+<button class="flex-1 py-2 px-3 text-[13px] text-secondary rounded-md transition-colors hover:text-on-surface">فترة مخصصة</button>
+</div>
+<p class="text-[12px] text-secondary mt-2">يتم تصفير الرصيد التراكمي للزبون في نهاية هذه الفترة إذا لم يصل للعتبة.</p>
+</div>
+<hr class="border-whisper-border my-6"/>
+<!-- Notifications Settings -->
+<div>
+<label class="block font-label-sm font-semibold text-on-surface mb-4">إشعارات النظام</label>
+<div class="space-y-3">
+<label class="flex items-start gap-3 cursor-pointer group">
+<input checked="" class="mt-1 w-4 h-4 text-primary bg-surface border-outline-variant rounded focus:ring-primary focus:ring-2 focus:ring-offset-1" type="checkbox"/>
+<div>
+<span class="block font-label-sm text-on-surface group-hover:text-primary transition-colors">إشعار عند وصول الزبون للعتبة</span>
+</div>
+</label>
+<label class="flex items-start gap-3 cursor-pointer group">
+<input checked="" class="mt-1 w-4 h-4 text-primary bg-surface border-outline-variant rounded focus:ring-primary focus:ring-2 focus:ring-offset-1" type="checkbox"/>
+<div>
+<span class="block font-label-sm text-on-surface group-hover:text-primary transition-colors">إشعار بقرب انتهاء صلاحية الكوبون</span>
+</div>
+</label>
+</div>
+</div>
+</section>
+</div>
+</div>
+</div>
+<!-- Sticky Bottom Action Bar -->
+<div class="fixed bottom-0 right-0 md:right-64 left-0 bg-pure-surface border-t border-whisper-border p-4 md:px-8 flex justify-end gap-4 z-30 shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+<button class="h-12 px-6 rounded-lg border border-outline-variant text-on-surface font-label-sm font-semibold hover:bg-surface-container-low transition-colors">
+                إلغاء
+            </button>
+<button class="h-12 px-8 rounded-lg bg-primary text-on-primary font-label-sm font-semibold hover:bg-on-primary-fixed-variant transition-colors flex items-center gap-2 shadow-sm active:scale-[0.98]">
+<span class="material-symbols-outlined text-[20px]">save</span>
+                حفظ التغييرات
+            </button>
+</div>
+</main>
+<script>
+        // Simple script to handle segmented control visual interaction
+        document.addEventListener('DOMContentLoaded', () => {
+            const segmentedBtns = document.querySelectorAll('.segmented-btn, .flex-1.py-2.px-3');
+            
+            // Only attach to the segmented control buttons inside that specific container
+            const container = document.querySelector('.bg-surface-container.rounded-lg');
+            if(container) {
+                const buttons = container.querySelectorAll('button');
+                buttons.forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        // Remove active class from all
+                        buttons.forEach(b => {
+                            b.classList.remove('active', 'bg-pure-surface', 'text-primary', 'shadow-sm', 'font-semibold');
+                            b.classList.add('text-secondary');
+                        });
+                        
+                        // Add active class to clicked
+                        const target = e.target;
+                        target.classList.remove('text-secondary');
+                        target.classList.add('active', 'bg-pure-surface', 'text-primary', 'shadow-sm', 'font-semibold');
+                    });
+                });
+            }
+
+            // Simple toggle visual logic for the custom checkbox styling
+            const toggle = document.getElementById('loyalty-toggle');
+            const dot = document.querySelector('.dot');
+            if(toggle && dot) {
+                toggle.addEventListener('change', function() {
+                    if(this.checked) {
+                        dot.classList.add('translate-x-5');
+                        dot.classList.remove('translate-x-0');
+                    } else {
+                        dot.classList.remove('translate-x-5');
+                        dot.classList.add('translate-x-0');
+                    }
+                });
+            }
+        });
+    </script>
+</body></html>

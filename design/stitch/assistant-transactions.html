@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>العمليات - ولاء كاشير</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&amp;family=IBM+Plex+Sans:wght@400;500&amp;family=JetBrains+Mono:wght@600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary": "#ffffff",
+                        "surface-container-high": "#e5e9e5",
+                        "on-tertiary-fixed-variant": "#743329",
+                        "tertiary-fixed-dim": "#ffb4a8",
+                        "on-secondary": "#ffffff",
+                        "tertiary": "#78352b",
+                        "on-primary-fixed-variant": "#00513e",
+                        "on-primary-fixed": "#002117",
+                        "on-error": "#ffffff",
+                        "surface-container-highest": "#e0e3e0",
+                        "secondary": "#585f6c",
+                        "on-tertiary-fixed": "#3b0804",
+                        "surface-container-low": "#f1f4f1",
+                        "inverse-on-surface": "#eef2ee",
+                        "surface-container": "#ebefeb",
+                        "outline-variant": "#bec9c3",
+                        "on-secondary-container": "#5e6572",
+                        "on-surface": "#181d1a",
+                        "secondary-fixed": "#dce2f3",
+                        "whisper-border": "rgba(17, 24, 39, 0.08)",
+                        "signal-green": "#1E7B4D",
+                        "inverse-surface": "#2d312f",
+                        "secondary-fixed-dim": "#c0c7d6",
+                        "on-error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#404754",
+                        "primary-fixed": "#a0f3d4",
+                        "charcoal-ink": "#1A1D21",
+                        "background": "#f7faf6",
+                        "on-primary": "#ffffff",
+                        "pure-surface": "#FFFFFF",
+                        "primary-fixed-dim": "#84d6b9",
+                        "signal-red": "#B0322E",
+                        "outline": "#6f7a74",
+                        "signal-amber": "#B26B00",
+                        "surface-dim": "#d7dbd7",
+                        "surface": "#f7faf6",
+                        "surface-tint": "#086b53",
+                        "canvas": "#F7F8FA",
+                        "surface-variant": "#e0e3e0",
+                        "tertiary-fixed": "#ffdad4",
+                        "teal-tint": "#E1F5EE",
+                        "on-primary-container": "#9aedcf",
+                        "on-surface-variant": "#3f4944",
+                        "inverse-primary": "#84d6b9",
+                        "on-background": "#181d1a",
+                        "tertiary-container": "#954c41",
+                        "secondary-container": "#dce2f3",
+                        "error": "#ba1a1a",
+                        "primary": "#005440",
+                        "on-tertiary-container": "#ffd3cc",
+                        "primary-container": "#0f6e56",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#151c27",
+                        "surface-bright": "#f7faf6"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "max-width-dashboard": "1440px",
+                        "padding-card-mobile": "16px",
+                        "padding-card-web": "24px",
+                        "base": "8px",
+                        "safe": "env(safe-area-inset-bottom)"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Plus Jakarta Sans"],
+                        "headline-md": ["Plus Jakarta Sans"],
+                        "body-md": ["IBM Plex Sans"],
+                        "label-sm": ["IBM Plex Sans"],
+                        "body-lg": ["IBM Plex Sans"],
+                        "amount-display": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "26px", "fontWeight": "400" }],
+                        "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "amount-display": ["28px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "amount-display-sm": ["16px", { "lineHeight": "24px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'IBM Plex Sans', sans-serif; }
+        .font-headline { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-canvas text-on-surface min-h-[884px] flex flex-col pt-16 pb-20">
+<!-- TopAppBar (Small Variant based on JSON) -->
+<header class="fixed top-0 w-full z-50 bg-pure-surface border-b border-whisper-border shadow-sm flex flex-row-reverse justify-between items-center px-gutter h-16">
+<div class="flex items-center gap-3">
+<h1 class="font-headline-md text-headline-md text-primary font-bold">العمليات</h1>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#E5F5EC] text-signal-green font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px]">cloud_done</span>
+                الكل مُزامَن
+            </div>
+<!-- Alternative Amber State Example:
+            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FEF0D9] text-signal-amber font-label-sm text-label-sm">
+                <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
+                3 قيد المزامنة
+            </div>
+            -->
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors text-on-surface-variant active:scale-95 duration-150">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 w-full max-w-max-width-dashboard mx-auto flex flex-col">
+<!-- Segmented Control / Sub-header -->
+<div class="px-gutter py-4 sticky top-16 bg-canvas z-40">
+<div class="flex bg-surface-container-low rounded-lg p-1 w-full">
+<button class="flex-1 py-1.5 rounded-md bg-pure-surface shadow-[0_1px_3px_rgba(0,0,0,0.1)] text-primary font-label-sm text-label-sm font-bold text-center transition-all">الكل</button>
+<button class="flex-1 py-1.5 rounded-md text-secondary font-label-sm text-label-sm text-center transition-all hover:bg-surface-container-highest/50">اليوم</button>
+<button class="flex-1 py-1.5 rounded-md text-secondary font-label-sm text-label-sm text-center transition-all hover:bg-surface-container-highest/50">قيد المزامنة</button>
+</div>
+</div>
+<!-- The List -->
+<div class="px-gutter pb-6 flex flex-col gap-6">
+<!-- Group: اليوم -->
+<section class="flex flex-col gap-2">
+<h2 class="text-secondary font-label-sm text-label-sm font-bold sticky top-[120px] bg-canvas py-1 z-30">اليوم</h2>
+<div class="bg-pure-surface rounded-xl border border-whisper-border shadow-[0_2px_8px_rgba(17,24,39,0.02)] overflow-hidden">
+<!-- Item 1 -->
+<div class="p-padding-card-mobile flex flex-row items-center justify-between border-b border-whisper-border hover:bg-surface-container-lowest transition-colors relative overflow-hidden">
+<!-- Left Column (Amount & Status) -->
+<div class="flex flex-col items-end gap-1 flex-shrink-0 z-10">
+<span class="font-mono text-amount-display-sm text-on-surface">62,000 د.ع</span>
+<span class="px-2 py-0.5 rounded-full bg-[#E5F5EC] text-signal-green text-[11px] font-bold">مرتبطة</span>
+</div>
+<!-- Center (Invoice) -->
+<div class="flex-1 flex justify-center px-2 z-10">
+<span class="font-mono text-[13px] text-secondary">INV-20482</span>
+</div>
+<!-- Right Column (User & Time) -->
+<div class="flex items-center gap-3 flex-shrink-0 z-10">
+<div class="flex flex-col items-start gap-0.5">
+<span class="font-label-sm text-label-sm text-on-surface">زينب كاظم</span>
+<span class="text-[12px] text-secondary">10:45 ص</span>
+</div>
+<img alt="" class="w-10 h-10 rounded-full object-cover bg-surface-container" data-alt="A small, professional avatar portrait of a modern Iraqi woman wearing a subtle hijab, set against a clean, light off-white background (#f7faf6). Soft, high-key studio lighting emphasizes a calm, trustworthy expression suitable for a fintech or retail operations dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNcfNsY0wo8zVPM7JenynVX5FR4Os0sRh2-WAcJUg7bS7OVtEe2rOuMORt2qraHVu6a84DRIR0TGUm_zfB0X9xTPIEqPGm8fsbJjTv9Lro-SQREF7syioiWZgGVM_PhNcvLmrxvKxqKH_lBw3e2QxQ5JuMya67wkizcaXoJoxvp1Sfkb4z3PMnLI60shpLTmNyLpV61o3f8y-OUOEArq2R49pee5rjpbwuiULyWG6T2QPfcLh4ramV0A"/>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="p-padding-card-mobile flex flex-row items-center justify-between border-b border-whisper-border hover:bg-surface-container-lowest transition-colors relative overflow-hidden">
+<div class="flex flex-col items-end gap-1 flex-shrink-0 z-10">
+<span class="font-mono text-amount-display-sm text-on-surface">15,500 د.ع</span>
+<span class="px-2 py-0.5 rounded-full bg-teal-tint text-primary-container text-[11px] font-bold">خصم مُفعّل</span>
+</div>
+<div class="flex-1 flex justify-center px-2 z-10">
+<span class="font-mono text-[13px] text-secondary">INV-20481</span>
+</div>
+<div class="flex items-center gap-3 flex-shrink-0 z-10">
+<div class="flex flex-col items-start gap-0.5">
+<span class="font-label-sm text-label-sm text-on-surface">حسين علي</span>
+<span class="text-[12px] text-secondary">09:12 ص</span>
+</div>
+<img alt="" class="w-10 h-10 rounded-full object-cover bg-surface-container" data-alt="A small, professional avatar portrait of a modern Iraqi man with a neat beard, set against a clean, light off-white background (#f7faf6). Soft, high-key studio lighting emphasizes a calm, trustworthy expression suitable for a fintech or retail operations dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCc_zd4-G2kmS0wWPcTVASlqbsm9__VsLd8LF7iaLJciB3-B6U2lrdJw17OXPiofMSPoNkOV400vbgxe7o4ZoBNGJxRpVCSekpCCGGxrFu-m-TrhDN7uVMSUY8PSjxTKeOOB5zqX5u9w4BNbJ6cn8SVXDe3Ezm-h6C931HtUIccmWRCtWQ1QveCGHhw5dqLerU6gP1GvOO26a5168D_4zAqa4TuQJ0moUb2WdVhOW65Bg5DpW19rcZQ3g"/>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="p-padding-card-mobile flex flex-row items-center justify-between hover:bg-surface-container-lowest transition-colors relative overflow-hidden">
+<div class="flex flex-col items-end gap-1 flex-shrink-0 z-10">
+<span class="font-mono text-amount-display-sm text-on-surface">120,000 د.ع</span>
+<span class="px-2 py-0.5 rounded-full bg-[#FEF0D9] text-signal-amber text-[11px] font-bold">قيد المزامنة</span>
+</div>
+<div class="flex-1 flex justify-center px-2 z-10">
+<span class="font-mono text-[13px] text-secondary">INV-20480</span>
+</div>
+<div class="flex items-center gap-3 flex-shrink-0 z-10">
+<div class="flex flex-col items-start gap-0.5">
+<span class="font-label-sm text-label-sm text-on-surface">فاطمة محمد</span>
+<span class="text-[12px] text-secondary">08:30 ص</span>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-secondary font-bold text-[14px]">ف</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Group: أمس -->
+<section class="flex flex-col gap-2">
+<h2 class="text-secondary font-label-sm text-label-sm font-bold sticky top-[120px] bg-canvas py-1 z-30">أمس</h2>
+<div class="bg-pure-surface rounded-xl border border-whisper-border shadow-[0_2px_8px_rgba(17,24,39,0.02)] overflow-hidden">
+<!-- Item 4 -->
+<div class="p-padding-card-mobile flex flex-row items-center justify-between border-b border-whisper-border hover:bg-surface-container-lowest transition-colors relative overflow-hidden">
+<div class="flex flex-col items-end gap-1 flex-shrink-0 z-10">
+<span class="font-mono text-amount-display-sm text-on-surface">45,000 د.ع</span>
+<span class="px-2 py-0.5 rounded-full bg-[#E5F5EC] text-signal-green text-[11px] font-bold">مرتبطة</span>
+</div>
+<div class="flex-1 flex justify-center px-2 z-10">
+<span class="font-mono text-[13px] text-secondary">INV-20479</span>
+</div>
+<div class="flex items-center gap-3 flex-shrink-0 z-10">
+<div class="flex flex-col items-start gap-0.5">
+<span class="font-label-sm text-label-sm text-on-surface">عميل نقدي</span>
+<span class="text-[12px] text-secondary">06:15 م</span>
+</div>
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined">person</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar (Generated from JSON) -->
+<nav class="fixed bottom-0 w-full z-50 rounded-t-xl border-t border-whisper-border shadow-[0_-2px_10px_rgba(0,0,0,0.04)] bg-pure-surface flex flex-row-reverse justify-around items-center h-20 px-4 pb-safe md:hidden">
+<!-- Tab 1: الرئيسية -->
+<a class="flex flex-col items-center justify-center text-secondary hover:bg-surface-container-high active:scale-90 transition-transform w-16 h-full" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="font-label-sm text-label-sm text-[11px]">الرئيسية</span>
+</a>
+<!-- Tab 2: العمليات (Active) -->
+<a class="flex flex-col items-center justify-center text-primary font-bold bg-teal-tint rounded-xl py-1 px-4 active:scale-90 transition-transform h-14" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">barcode_scanner</span>
+<span class="font-label-sm text-label-sm text-[11px]">العمليات</span>
+</a>
+<!-- Tab 3: حسابي -->
+<a class="flex flex-col items-center justify-center text-secondary hover:bg-surface-container-high active:scale-90 transition-transform w-16 h-full" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">person</span>
+<span class="font-label-sm text-label-sm text-[11px]">حسابي</span>
+</a>
+</nav>
+</body></html>

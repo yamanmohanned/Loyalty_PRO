@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>البحث برقم الهاتف</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "primary-fixed-dim": "#84d6b9",
+                      "canvas": "#F7F8FA",
+                      "on-secondary-fixed": "#151c27",
+                      "on-primary-fixed-variant": "#00513e",
+                      "surface-container-lowest": "#ffffff",
+                      "tertiary-fixed-dim": "#ffb4a8",
+                      "on-background": "#181d1a",
+                      "on-tertiary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "primary": "#005440",
+                      "secondary-fixed-dim": "#c0c7d6",
+                      "on-surface-variant": "#3f4944",
+                      "on-secondary": "#ffffff",
+                      "inverse-surface": "#2d312f",
+                      "on-secondary-container": "#5e6572",
+                      "secondary-container": "#dce2f3",
+                      "on-primary-fixed": "#002117",
+                      "primary-container": "#0f6e56",
+                      "tertiary-container": "#954c41",
+                      "surface-container": "#ebefeb",
+                      "on-primary-container": "#9aedcf",
+                      "whisper-border": "rgba(17, 24, 39, 0.08)",
+                      "inverse-on-surface": "#eef2ee",
+                      "outline": "#6f7a74",
+                      "background": "#f7faf6",
+                      "outline-variant": "#bec9c3",
+                      "surface-tint": "#086b53",
+                      "primary-fixed": "#a0f3d4",
+                      "surface-dim": "#d7dbd7",
+                      "on-error-container": "#93000a",
+                      "teal-tint": "#E1F5EE",
+                      "signal-red": "#B0322E",
+                      "error": "#ba1a1a",
+                      "on-tertiary-container": "#ffd3cc",
+                      "signal-green": "#1E7B4D",
+                      "on-primary": "#ffffff",
+                      "surface": "#f7faf6",
+                      "surface-container-highest": "#e0e3e0",
+                      "surface-container-low": "#f1f4f1",
+                      "on-secondary-fixed-variant": "#404754",
+                      "tertiary-fixed": "#ffdad4",
+                      "surface-container-high": "#e5e9e5",
+                      "on-surface": "#181d1a",
+                      "tertiary": "#78352b",
+                      "surface-bright": "#f7faf6",
+                      "on-tertiary-fixed-variant": "#743329",
+                      "surface-variant": "#e0e3e0",
+                      "on-error": "#ffffff",
+                      "charcoal-ink": "#1A1D21",
+                      "secondary-fixed": "#dce2f3",
+                      "pure-surface": "#FFFFFF",
+                      "on-tertiary-fixed": "#3b0804",
+                      "secondary": "#585f6c",
+                      "inverse-primary": "#84d6b9",
+                      "signal-amber": "#B26B00"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "padding-card-mobile": "16px",
+                      "gutter": "16px",
+                      "padding-card-web": "24px",
+                      "max-width-dashboard": "1440px",
+                      "base": "8px"
+              },
+              "fontFamily": {
+                      "label-sm": [
+                              "IBM Plex Sans Arabic", "sans-serif"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans", "sans-serif"
+                      ],
+                      "amount-display": [
+                              "JetBrains Mono", "monospace"
+                      ],
+                      "body-lg": [
+                              "IBM Plex Sans Arabic", "sans-serif"
+                      ],
+                      "body-md": [
+                              "IBM Plex Sans Arabic", "sans-serif"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans", "sans-serif"
+                      ]
+              },
+              "fontSize": {
+                      "label-sm": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "amount-display": [
+                              "28px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        body { font-family: 'IBM Plex Sans Arabic', sans-serif; }
+        .amount-mono { font-family: 'JetBrains Mono', monospace; }
+        .headline-font { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-canvas text-on-surface min-h-[884px] flex flex-col antialiased selection:bg-teal-tint selection:text-primary">
+<!-- Top Navigation Anchor (Hidden on actual task requirement, using standard header instead) -->
+<!-- Header Section -->
+<header class="w-full flex items-center justify-between px-gutter py-4 bg-pure-surface border-b border-whisper-border shrink-0 fixed top-0 z-10 w-full h-16">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container-low transition-colors active:scale-95 text-primary">
+<span class="material-symbols-outlined text-2xl" data-icon="chevron_right" dir="ltr">chevron_right</span>
+</button>
+<h1 class="headline-font text-headline-md font-bold text-on-surface text-center flex-1 pr-10">البحث برقم الهاتف</h1>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col px-gutter pt-[88px] pb-[96px] overflow-y-auto">
+<!-- Step Indicator -->
+<div class="mb-6 flex justify-between items-center text-label-sm font-label-sm text-on-surface-variant">
+<span>الخطوة 1 من 2</span>
+<!-- Progress Bar Minimalistic -->
+<div class="flex-1 mr-4 h-1 bg-surface-container rounded-full overflow-hidden flex" dir="ltr">
+<div class="w-1/2 bg-primary h-full"></div>
+</div>
+</div>
+<!-- Phone Input Section -->
+<section class="mb-8 flex flex-col gap-base">
+<label class="text-body-md font-body-md text-on-surface font-semibold" for="phone-input">رقم هاتف الزبون</label>
+<div class="relative w-full">
+<input class="w-full h-[52px] bg-pure-surface border border-whisper-border rounded-lg px-4 text-left amount-mono text-[20px] font-medium text-on-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-on-surface-variant placeholder:opacity-50" dir="ltr" id="phone-input" placeholder="07xx xxx xxxx" type="tel" value="0770 123 4567"/>
+</div>
+<p class="text-label-sm font-label-sm text-secondary mt-1">أدخل الرقم كاملاً للعثور على الحساب</p>
+</section>
+<!-- Result Zone (Match Found State) -->
+<section class="mt-4 flex flex-col gap-4 animate-[fadeIn_0.3s_ease-out]">
+<h2 class="text-label-sm font-label-sm text-on-surface-variant mb-1">النتيجة المطابقة</h2>
+<div class="bg-pure-surface rounded-xl p-padding-card-mobile border border-teal-tint shadow-[0_2px_12px_rgba(0,84,64,0.04)] flex flex-col gap-4 relative overflow-hidden">
+<!-- Decorative Top Border -->
+<div class="absolute top-0 right-0 left-0 h-1 bg-primary"></div>
+<div class="flex items-center gap-4">
+<!-- Avatar Placeholder -->
+<div class="w-14 h-14 rounded-full bg-teal-tint flex items-center justify-center text-primary shrink-0 border-2 border-pure-surface shadow-sm relative overflow-hidden">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="A clean, minimalist 2D flat illustration of a female user profile avatar placeholder in light teal and dark teal colors, suited for a modern corporate application. The background is a solid soft teal (#E1F5EE) and the silhouette is sharp and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYv1lAg3p0NrSWT8joBkVEkINRT4e1uP4b7DkkR9FYxL9EnxB8V6fDZIU5yMI65ikE_6JosQeWHdAHM8rEMDeMhaG9dlKe-QaXDhdbHYpVVygmxiwmLAf-4VHv_5c5d-n90Eu8P3-jub4phjZLcEUDj5uLQxia28nlL8k0QSRPZvxxmscFue1jvDCOXn6OnEyjy60JWWGQE88PbKT3Rg2fMz47C7xxi2go-mcf7Le5GcGwyra-a1oy4w"/>
+<span class="material-symbols-outlined text-3xl z-10" data-icon="person">person</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<h3 class="text-body-lg font-body-lg font-bold text-on-surface">زينب كاظم</h3>
+<!-- Category Chip -->
+<span class="bg-teal-tint text-primary-container text-[12px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">فئة الجملة</span>
+</div>
+<p class="text-label-sm font-label-sm text-secondary amount-mono" dir="ltr">+964 770 123 4567</p>
+</div>
+</div>
+<hr class="border-whisper-border"/>
+<div class="flex flex-col">
+<span class="text-label-sm font-label-sm text-on-surface-variant mb-1">الرصيد التراكمي</span>
+<div class="flex items-end gap-1">
+<span class="amount-mono text-amount-display font-amount-display text-on-surface">210,000</span>
+<span class="text-body-md font-body-md text-secondary font-medium mb-1">د.ع</span>
+</div>
+</div>
+</div>
+<!-- Note for Developer / Edge Case Handling (Visualized as a hint, normally hidden) -->
+<div class="bg-surface-container-low border border-whisper-border rounded-lg p-3 flex gap-3 mt-4 opacity-75">
+<span class="material-symbols-outlined text-secondary shrink-0" data-icon="info">info</span>
+<p class="text-[12px] leading-relaxed text-secondary font-label-sm">
+<strong>في حالة عدم وجود تطابق:</strong> سيتم إخفاء البطاقة أعلاه وإظهار رسالة "لا يوجد حساب بهذا الرقم" مع زر ثانوي "تسجيل زبون جديد بهذا الرقم".
+                </p>
+</div>
+</section>
+</main>
+<!-- Bottom Action Bar (Thumb Zone Pinned) -->
+<div class="fixed bottom-0 w-full px-gutter py-padding-card-mobile bg-pure-surface border-t border-whisper-border z-20 pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+<button class="w-full h-[52px] bg-primary text-on-primary rounded-lg flex items-center justify-center gap-2 font-body-lg font-bold hover:bg-primary-container transition-colors active:scale-[0.98] duration-150">
+<span>متابعة</span>
+<span class="material-symbols-outlined text-[20px]" data-icon="arrow_back" dir="ltr">arrow_back</span>
+</button>
+</div>
+<!-- Added Custom CSS for simple animations -->
+<style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</body></html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Walaa Assistant - Camera Scanner</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-dim": "#d7dbd7",
+              "canvas": "#F7F8FA",
+              "secondary-fixed-dim": "#c0c7d6",
+              "surface-container-lowest": "#ffffff",
+              "surface-variant": "#e0e3e0",
+              "on-error": "#ffffff",
+              "signal-amber": "#B26B00",
+              "primary-container": "#0f6e56",
+              "surface-container": "#ebefeb",
+              "on-background": "#181d1a",
+              "on-primary-fixed": "#002117",
+              "primary-fixed-dim": "#84d6b9",
+              "on-tertiary-fixed": "#3b0804",
+              "signal-green": "#1E7B4D",
+              "primary": "#005440",
+              "background": "#f7faf6",
+              "signal-red": "#B0322E",
+              "inverse-surface": "#2d312f",
+              "on-tertiary": "#ffffff",
+              "outline": "#6f7a74",
+              "inverse-on-surface": "#eef2ee",
+              "charcoal-ink": "#1A1D21",
+              "error": "#ba1a1a",
+              "secondary": "#585f6c",
+              "surface-container-low": "#f1f4f1",
+              "on-secondary": "#ffffff",
+              "on-primary-container": "#9aedcf",
+              "surface-container-high": "#e5e9e5",
+              "surface-container-highest": "#e0e3e0",
+              "tertiary-container": "#954c41",
+              "inverse-primary": "#84d6b9",
+              "secondary-container": "#dce2f3",
+              "pure-surface": "#FFFFFF",
+              "on-secondary-fixed": "#151c27",
+              "on-secondary-fixed-variant": "#404754",
+              "surface": "#f7faf6",
+              "outline-variant": "#bec9c3",
+              "on-tertiary-fixed-variant": "#743329",
+              "tertiary-fixed": "#ffdad4",
+              "on-primary-fixed-variant": "#00513e",
+              "secondary-fixed": "#dce2f3",
+              "on-error-container": "#93000a",
+              "on-tertiary-container": "#ffd3cc",
+              "error-container": "#ffdad6",
+              "surface-tint": "#086b53",
+              "on-surface": "#181d1a",
+              "on-surface-variant": "#3f4944",
+              "teal-tint": "#E1F5EE",
+              "surface-bright": "#f7faf6",
+              "tertiary-fixed-dim": "#ffb4a8",
+              "on-secondary-container": "#5e6572",
+              "whisper-border": "rgba(17, 24, 39, 0.08)",
+              "primary-fixed": "#a0f3d4",
+              "on-primary": "#ffffff",
+              "tertiary": "#78352b"
+            },
+            borderRadius: {
+              "DEFAULT": "0.25rem",
+              "lg": "0.5rem",
+              "xl": "0.75rem",
+              "full": "9999px"
+            },
+            spacing: {
+              "padding-card-mobile": "16px",
+              "gutter": "16px",
+              "max-width-dashboard": "1440px",
+              "base": "8px",
+              "padding-card-web": "24px"
+            },
+            fontFamily: {
+              "headline-md": ["Plus Jakarta Sans", "sans-serif"],
+              "headline-lg": ["Plus Jakarta Sans", "sans-serif"],
+              "body-md": ["IBM Plex Sans Arabic", "sans-serif"],
+              "label-sm": ["IBM Plex Sans Arabic", "sans-serif"],
+              "body-lg": ["IBM Plex Sans Arabic", "sans-serif"],
+              "amount-display": ["JetBrains Mono", "monospace"]
+            },
+            fontSize: {
+              "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
+              "headline-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
+              "body-md": ["16px", { lineHeight: "26px", fontWeight: "400" }],
+              "label-sm": ["14px", { lineHeight: "20px", fontWeight: "500" }],
+              "body-lg": ["18px", { lineHeight: "28px", fontWeight: "400" }],
+              "amount-display": ["28px", { lineHeight: "32px", fontWeight: "600" }]
+            },
+            keyframes: {
+              scan: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(240px)' }, // Adjust based on frame size
+              }
+            },
+            animation: {
+              'scan-line': 'scan 3s ease-in-out infinite',
+            }
+          }
+        }
+      }
+    </script>
+<style>
+      /* Utility for text shadows in bright environments */
+      .text-shadow-scrim {
+        text-shadow: 0px 1px 3px rgba(0,0,0,0.8);
+      }
+      
+      /* Camera scanning frame corners */
+      .scan-frame::before, .scan-frame::after,
+      .scan-frame-inner::before, .scan-frame-inner::after {
+        content: '';
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        border-color: #0F6E56; /* Deep Teal */
+        border-style: solid;
+      }
+      
+      .scan-frame::before {
+        top: 0;
+        right: 0;
+        border-width: 4px 4px 0 0;
+      }
+      .scan-frame::after {
+        top: 0;
+        left: 0;
+        border-width: 4px 0 0 4px;
+      }
+      .scan-frame-inner::before {
+        bottom: 0;
+        right: 0;
+        border-width: 0 4px 4px 0;
+      }
+      .scan-frame-inner::after {
+        bottom: 0;
+        left: 0;
+        border-width: 0 0 4px 4px;
+      }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-md text-on-surface bg-charcoal-ink antialiased min-h-[884px] flex flex-col relative overflow-hidden">
+<!-- Simulated Camera Feed Background -->
+<div class="absolute inset-0 z-0 bg-cover bg-center" data-alt="A blurry, realistic, dark background simulating a mobile phone camera feed scanning a checkout counter in a high-pressure retail environment. The lighting is slightly low-key but crisp, suitable for a professional corporate app. Colors are muted with a subtle cool tint. No distinct objects, just abstract shapes and soft focus suggesting a physical store interior." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDeVfd_OBtNxrRgKNuyq4YMHb2Ea6cNU3WL4Wk4VBrBrHfdnYdcca83GziGHQGN64HYFEY-HvC-7IUfjl9tvLa717T1cQfWDBOZNELraMv2jrXpcoNkh9lqwzRhrULcPGW64WbTFIyfpk-QI_hPY_J9kCg4wICirlN-qn8kbLZwdeBWT26uWEfz-Hl-PS_ZJ42qlICLss5ybL6rrghqN9RgvI-Ar9nnSbI0z4v3fpVJkTB3Xoa1llqpjw')">
+<!-- Dark overlay to ensure contrast for UI elements -->
+<div class="absolute inset-0 bg-charcoal-ink/60"></div>
+</div>
+<!-- Main Content Container (z-10 to sit above camera feed) -->
+<main class="relative z-10 flex flex-col min-h-[884px] w-full">
+<!-- Top App Bar (Translucent Scrim) -->
+<header class="w-full h-16 flex flex-row items-center justify-between px-gutter bg-charcoal-ink/80 backdrop-blur-sm border-b border-surface-variant/20 sticky top-0">
+<!-- Back Button (RTL pointing right) -->
+<button aria-label="العودة" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-variant/20 transition-colors">
+<span class="material-symbols-outlined text-pure-surface" style="font-variation-settings: 'FILL' 0;">chevron_right</span>
+</button>
+<!-- Title Cluster -->
+<div class="flex flex-col items-center justify-center flex-1">
+<h1 class="font-headline-md text-headline-md font-bold text-pure-surface text-shadow-scrim">مسح كود الزبون</h1>
+<span class="font-label-sm text-label-sm text-surface-variant text-shadow-scrim">الخطوة 1 من 2</span>
+</div>
+<!-- Placeholder for symmetry -->
+<div class="w-10"></div>
+</header>
+<!-- Scanning Area -->
+<div class="flex-1 flex flex-col items-center justify-center px-gutter">
+<!-- Scanner Frame -->
+<div class="relative w-64 h-64 sm:w-72 sm:h-72 mb-8 scan-frame">
+<div class="absolute inset-0 scan-frame-inner"></div>
+<!-- Animated Scan Line -->
+<div class="absolute top-0 left-4 right-4 h-0.5 bg-primary-container shadow-[0_0_8px_#0F6E56] animate-scan-line z-20"></div>
+<!-- Darkened area outside the frame is handled by the fullscreen overlay, 
+                     this box just visually defines the active area -->
+<div class="absolute inset-0 bg-transparent"></div>
+</div>
+<!-- Guidance Text -->
+<p class="font-body-md text-body-md text-pure-surface text-center max-w-[280px] text-shadow-scrim">
+                وجّه الكاميرا نحو كود الزبون
+            </p>
+</div>
+<!-- Bottom Action Zone -->
+<div class="w-full px-gutter pb-8 pt-4 flex flex-col gap-4 mt-auto bg-gradient-to-t from-charcoal-ink/90 to-transparent">
+<!-- Hint Chip -->
+<div class="flex justify-center mb-2">
+<div class="bg-charcoal-ink/70 backdrop-blur-md rounded-full px-4 py-2 border border-surface-variant/30 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed text-sm" style="font-variation-settings: 'FILL' 0;">info</span>
+<span class="font-label-sm text-label-sm text-pure-surface">اطلب من الزبون عرض الكود من واتساب</span>
+</div>
+</div>
+<!-- Manual Entry Button (Ghost Style) -->
+<button class="w-full h-[52px] rounded-lg border border-pure-surface text-pure-surface font-label-sm text-label-sm flex items-center justify-center hover:bg-pure-surface/10 transition-colors active:scale-[0.98]">
+                إدخال رقم الهاتف بدلاً من ذلك
+            </button>
+</div>
+</main>
+</body></html>

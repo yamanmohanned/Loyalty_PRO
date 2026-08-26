@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>تسجيل الدخول - ولاء</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&amp;family=IBM+Plex+Sans+Arabic:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-lowest": "#ffffff",
+                        "inverse-primary": "#84d6b9",
+                        "on-primary-container": "#9aedcf",
+                        "on-secondary-container": "#5e6572",
+                        "secondary-fixed": "#dce2f3",
+                        "signal-red": "#B0322E",
+                        "on-secondary": "#ffffff",
+                        "surface-bright": "#f7faf6",
+                        "inverse-on-surface": "#eef2ee",
+                        "surface-tint": "#086b53",
+                        "canvas": "#F7F8FA",
+                        "surface-container-highest": "#e0e3e0",
+                        "primary-fixed-dim": "#84d6b9",
+                        "on-surface-variant": "#3f4944",
+                        "on-error": "#ffffff",
+                        "surface": "#f7faf6",
+                        "on-error-container": "#93000a",
+                        "background": "#f7faf6",
+                        "surface-dim": "#d7dbd7",
+                        "on-secondary-fixed-variant": "#404754",
+                        "pure-surface": "#FFFFFF",
+                        "charcoal-ink": "#1A1D21",
+                        "secondary-fixed-dim": "#c0c7d6",
+                        "on-tertiary": "#ffffff",
+                        "secondary": "#585f6c",
+                        "outline-variant": "#bec9c3",
+                        "surface-container-high": "#e5e9e5",
+                        "tertiary-container": "#954c41",
+                        "surface-container": "#ebefeb",
+                        "tertiary": "#78352b",
+                        "on-primary-fixed-variant": "#00513e",
+                        "whisper-border": "rgba(17, 24, 39, 0.08)",
+                        "inverse-surface": "#2d312f",
+                        "surface-variant": "#e0e3e0",
+                        "tertiary-fixed": "#ffdad4",
+                        "primary-container": "#0f6e56",
+                        "on-primary-fixed": "#002117",
+                        "primary": "#005440",
+                        "secondary-container": "#dce2f3",
+                        "on-surface": "#181d1a",
+                        "on-tertiary-fixed": "#3b0804",
+                        "on-tertiary-fixed-variant": "#743329",
+                        "on-secondary-fixed": "#151c27",
+                        "surface-container-low": "#f1f4f1",
+                        "on-primary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-background": "#181d1a",
+                        "signal-amber": "#B26B00",
+                        "tertiary-fixed-dim": "#ffb4a8",
+                        "primary-fixed": "#a0f3d4",
+                        "signal-green": "#1E7B4D",
+                        "teal-tint": "#E1F5EE",
+                        "error-container": "#ffdad6",
+                        "outline": "#6f7a74",
+                        "on-tertiary-container": "#ffd3cc",
+                        "muted-steel": "#6B7280"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "padding-card-web": "24px",
+                        "gutter": "16px",
+                        "max-width-dashboard": "1440px",
+                        "padding-card-mobile": "16px",
+                        "base": "8px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["IBM Plex Sans Arabic", "sans-serif"],
+                        "headline-lg": ["Cairo", "sans-serif"],
+                        "label-sm": ["IBM Plex Sans Arabic", "sans-serif"],
+                        "body-lg": ["IBM Plex Sans Arabic", "sans-serif"],
+                        "headline-md": ["Cairo", "sans-serif"],
+                        "amount-display": ["jetbrainsMono", "monospace"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "amount-display": ["28px", {"lineHeight": "32px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.canvas');
+            font-family: 'IBM Plex Sans Arabic', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+        
+        .cairo-font {
+            font-family: 'Cairo', sans-serif;
+        }
+
+        .auth-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        @media (min-width: 768px) {
+            .auth-container {
+                flex-direction: row;
+            }
+        }
+    </style>
+</head>
+<body class="bg-canvas text-on-surface antialiased">
+<div class="auth-container">
+<!-- Right Panel (Authentication) - Takes up 55% on desktop -->
+<main class="w-full md:w-[55%] bg-pure-surface flex flex-col justify-center px-6 py-12 md:px-16 lg:px-24 flex-grow shrink-0 order-2 md:order-1 relative z-10 md:shadow-[0_0_40px_rgba(0,0,0,0.03)]">
+<div class="max-w-md w-full mx-auto md:mx-0">
+<!-- Brand Lockup -->
+<div class="flex items-center gap-3 mb-12">
+<div class="w-10 h-10 bg-primary-container text-on-primary-container rounded-lg flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="storefront" style="font-variation-settings: 'FILL' 1;">storefront</span>
+</div>
+<h1 class="cairo-font text-3xl font-bold text-primary">ولاء</h1>
+</div>
+<!-- Header -->
+<div class="mb-8">
+<h2 class="cairo-font text-headline-lg font-bold text-charcoal-ink mb-2">تسجيل الدخول</h2>
+<p class="font-body-md text-body-md text-muted-steel">لوحة تحكم المدير</p>
+</div>
+<!-- Form -->
+<form class="space-y-6" onsubmit="event.preventDefault();">
+<!-- Field 1: Phone / Email -->
+<div>
+<label class="block font-label-sm text-label-sm text-charcoal-ink mb-2" for="identifier">رقم الهاتف أو البريد الإلكتروني</label>
+<input class="w-full h-12 px-4 border border-whisper-border rounded-lg bg-canvas text-on-surface focus:ring-1 focus:ring-primary focus:border-primary transition-colors font-body-md outline-none" id="identifier" name="identifier" placeholder="أدخل بريدك الإلكتروني أو رقم الهاتف" required="" type="text"/>
+</div>
+<!-- Field 2: Password -->
+<div>
+<div class="flex justify-between items-center mb-2">
+<label class="block font-label-sm text-label-sm text-charcoal-ink" for="password">كلمة المرور</label>
+</div>
+<div class="relative">
+<input class="w-full h-12 pl-12 pr-4 border border-whisper-border rounded-lg bg-canvas text-on-surface focus:ring-1 focus:ring-primary focus:border-primary transition-colors font-body-md outline-none" id="password" name="password" placeholder="••••••••" required="" type="password"/>
+<!-- Toggle Password Visibility (Left side in RTL) -->
+<button class="absolute left-0 top-0 h-12 w-12 flex items-center justify-center text-secondary hover:text-primary transition-colors focus:outline-none rounded-l-lg" onclick="togglePassword()" type="button">
+<span class="material-symbols-outlined" data-icon="visibility" id="visibility-icon">visibility</span>
+</button>
+</div>
+</div>
+<!-- Forgot Password Link -->
+<div class="flex justify-start pt-1">
+<a class="font-label-sm text-label-sm text-primary hover:text-primary-container transition-colors" href="#">نسيت كلمة المرور؟</a>
+</div>
+<!-- Submit Button -->
+<div class="pt-4">
+<button class="w-full h-12 bg-primary text-on-primary rounded-lg cairo-font font-bold text-lg flex items-center justify-center hover:bg-primary-container active:scale-[0.98] transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" type="submit">
+                            دخول
+                        </button>
+</div>
+</form>
+</div>
+</main>
+<!-- Left Panel (Branded Zone) - Takes up 45% on desktop -->
+<aside class="w-full md:w-[45%] h-64 md:h-auto bg-primary-container relative overflow-hidden order-1 md:order-2 shrink-0 flex items-center justify-center">
+<!-- Background Animation Shader -->
+<!-- STITCH_SHADER_START:ANIMATION_4 class="absolute inset-0 w-full h-full mix-blend-overlay opacity-80 pointer-events-none" -->
+<div class="absolute inset-0 w-full h-full mix-blend-overlay opacity-80 pointer-events-none" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_4" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_4');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+    // Center coordinates and adjust for aspect ratio
+    vec2 uv = (v_texCoord - 0.5) * 2.0;
+    uv.x *= u_resolution.x / u_resolution.y;
+
+    // Deep Teal background (#0F6E56)
+    vec3 color = vec3(0.0588, 0.4314, 0.3373);
+    
+    // Create a subtle geometric pattern with thin lines
+    float pattern = 0.0;
+    
+    // Rotate uv for diagonal lines
+    float angle = 0.7854; // 45 degrees
+    mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+    vec2 rotatedUv = rot * uv;
+    
+    // Grid of lines
+    float lineThickness = 0.002;
+    float lineSpacing = 0.15;
+    
+    float lines1 = smoothstep(lineThickness, 0.0, abs(mod(rotatedUv.x + u_time * 0.01, lineSpacing) - lineSpacing * 0.5));
+    float lines2 = smoothstep(lineThickness, 0.0, abs(mod(rotatedUv.y - u_time * 0.01, lineSpacing) - lineSpacing * 0.5));
+    
+    pattern = max(lines1, lines2) * 0.15; // Muted intensity
+    
+    // Add some variation to the pattern
+    pattern *= 0.8 + 0.2 * sin(rotatedUv.x * 5.0 + u_time * 0.2);
+    
+    color += pattern;
+
+    gl_FragColor = vec4(color, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_4 -->
+<!-- Optional Overlay Content for the Branded Zone (Hidden on mobile for a cleaner banner look) -->
+<div class="hidden md:flex flex-col items-center justify-center relative z-10 p-8 text-center max-w-sm">
+<div class="w-20 h-20 bg-pure-surface/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6 border border-pure-surface/20">
+<span class="material-symbols-outlined text-4xl text-on-primary-container" data-icon="analytics" style="font-variation-settings: 'FILL' 1;">analytics</span>
+</div>
+<h3 class="cairo-font text-2xl font-bold text-on-primary-container mb-3">إدارة العمليات بذكاء</h3>
+<p class="font-body-md text-on-primary-container/80 leading-relaxed">
+                    نظام متكامل لإدارة ولاء العملاء، تحليل البيانات، ومتابعة أداء الفروع بدقة وكفاءة عالية.
+                </p>
+</div>
+</aside>
+</div>
+<script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const icon = document.getElementById('visibility-icon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.textContent = 'visibility_off';
+                icon.setAttribute('data-icon', 'visibility_off');
+            } else {
+                passwordInput.type = 'password';
+                icon.textContent = 'visibility';
+                icon.setAttribute('data-icon', 'visibility');
+            }
+        }
+    </script>
+</body></html>
