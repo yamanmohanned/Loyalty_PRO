@@ -1,0 +1,401 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Walaa — Supermarket Loyalty Platform data model (CLAUDE.md §4)
+//
+//  Two rules govern this file:
+//   1. Every core table carries `merchantId`. Single merchant today; the isolation
+//      seam is here from day one so multi-tenancy is not a rewrite (§2.5).
+//   2. Money is a whole-dinar Int. Never Float, never Decimal — see §4.2 and the
+//      bound documented in packages/shared-types/src/money.ts.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+// These mirror packages/shared-types/src/enums.ts. That module owns the mapping
+// between these persisted values and the lowercase wire form of §2.3.
+
+enum Role {
+  OWNER
+  MANAGER
+  ASSISTANT
+}
+
+enum CustomerCategory {
+  REGULAR
+  WHOLESALE
+  VIP
+}
+
+enum PeriodType {
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum OverrideTargetType {
+  CUSTOMER
+  CATEGORY
+}
+
+enum InvoiceSource {
+  SCAN
+  API
+  DB_AGENT
+}
+
+enum AmountCapture {
+  AUTO
+  MANUAL
+}
+
+enum CouponStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  // Replaced by a higher tier earned in the same period. Distinct from EXPIRED so
+  // the audit trail records why it stopped being usable (see §4.1 addendum).
+  SUPERSEDED
+}
+
+enum NotificationChannel {
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  STUBBED
+}
+
+// ── Tenancy ───────────────────────────────────────────────────────────────────
+
+model Merchant {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  /// IANA zone the merchant trades in. Loyalty period boundaries are computed here,
+  /// not in UTC — a 01:00 Baghdad purchase must not be filed under the previous day.
+  timezone String @default("Asia/Baghdad")
+  currency String @default("IQD")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  branches Branch[]
+  users User[]
+  customers Customer[]
+  ruleSets LoyaltyRuleSet[]
+  overrideRules CustomerOverrideRule[]
+  transactions Transaction[]
+  coupons Coupon[]
+  balanceSnapshots BalanceSnapshot[]
+  notificationLogs NotificationLog[]
+  auditLogs AuditLog[]
+
+  @@map("merchant")
+}
+
+model Branch {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  name String
+  /// Printed on receipts, e.g. "BAG-01". Unique within the merchant.
+  code String
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  users User[]
+  transactions Transaction[]
+
+  @@unique([merchantId, code])
+  @@index([merchantId])
+  @@map("branch")
+}
+
+// ── Staff ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  /// Null for OWNER, who is not bound to a single branch.
+  branchId String? @map("branch_id") @db.Uuid
+  name String
+  username String
+  /// Argon2id. Never a plaintext or reversible value (CLAUDE.md §7.1).
+  passwordHash String @map("password_hash")
+  role Role
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  refreshTokens RefreshToken[]
+  linkedTransactions Transaction[] @relation("TransactionLinkedBy")
+  redeemedCoupons Coupon[] @relation("CouponRedeemedBy")
+  auditLogs AuditLog[]
+
+  @@unique([merchantId, username])
+  @@index([merchantId, role])
+  @@map("user")
+}
+
+/// Refresh tokens are revocable, so only their hash is stored (CLAUDE.md §7.1).
+/// Rotation chains via replacedById: reuse of a rotated token is a theft signal.
+model RefreshToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  tokenHash String @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  replacedById String? @map("replaced_by_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_token")
+}
+
+// ── Customers ─────────────────────────────────────────────────────────────────
+
+model Customer {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  name String
+  /// E.164, normalised on write (packages/shared-types/src/phone.ts). The unique
+  /// constraint below only means anything because every write goes through that.
+  phone String
+  category CustomerCategory @default(REGULAR)
+  /// Signed, opaque token encoded in the customer QR. NEVER contains PII (§3.6, §7.9).
+  qrToken String @unique @map("qr_token")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+  coupons Coupon[]
+  balanceSnapshots BalanceSnapshot[]
+  notificationLogs NotificationLog[]
+  overrideRules CustomerOverrideRule[]
+
+  @@unique([merchantId, phone])
+  @@index([merchantId, category])
+  // Hot path: phone-number fallback lookup at the register (CLAUDE.md §8).
+  @@index([phone])
+  @@map("customer")
+}
+
+// ── Loyalty rules ─────────────────────────────────────────────────────────────
+
+model LoyaltyRuleSet {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  periodType PeriodType @default(MONTHLY)
+  /// Only meaningful when periodType is CUSTOM.
+  periodStart DateTime? @map("period_start")
+  periodEnd DateTime? @map("period_end")
+  isActive Boolean @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  tiers LoyaltyTier[]
+
+  @@index([merchantId, isActive])
+  @@map("loyalty_rule_set")
+}
+
+model LoyaltyTier {
+  id String @id @default(uuid()) @db.Uuid
+  ruleSetId String @map("rule_set_id") @db.Uuid
+  /// Cumulative spend within the period that earns this tier. Whole IQD.
+  thresholdAmount Int @map("threshold_amount")
+  discountPct Int @map("discount_pct")
+  couponValidityDays Int @map("coupon_validity_days")
+  sortOrder Int @map("sort_order")
+
+  ruleSet LoyaltyRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+
+  /// A repeated threshold would make "the next tier" ambiguous.
+  @@unique([ruleSetId, thresholdAmount])
+  @@index([ruleSetId, sortOrder])
+  @@map("loyalty_tier")
+}
+
+/// Supersedes the default ladder for one customer or one category.
+/// Resolution order: CUSTOMER override > CATEGORY override > default rule set.
+model CustomerOverrideRule {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  targetType OverrideTargetType @map("target_type")
+  targetCustomerId String? @map("target_customer_id") @db.Uuid
+  targetCategory CustomerCategory? @map("target_category")
+  thresholdAmount Int @map("threshold_amount")
+  discountPct Int @map("discount_pct")
+  couponValidityDays Int @map("coupon_validity_days")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  targetCustomer Customer? @relation(fields: [targetCustomerId], references: [id], onDelete: Cascade)
+
+  /// At most one override per customer, and one per category, per merchant.
+  @@unique([merchantId, targetCustomerId])
+  @@unique([merchantId, targetCategory])
+  @@index([merchantId, targetType])
+  @@map("customer_override_rule")
+}
+
+// ── The core loop ─────────────────────────────────────────────────────────────
+
+model Transaction {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  branchId String @map("branch_id") @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  /// The merchant printed invoice number.
+  invoiceId String @map("invoice_id")
+  /// Whole Iraqi Dinars. Int, never Float (CLAUDE.md §4.2).
+  amount Int
+  currency String @default("IQD")
+  occurredAt DateTime @map("occurred_at")
+  source InvoiceSource @default(SCAN)
+  amountCapture AmountCapture @map("amount_capture")
+  /// The period this spend counts toward, computed in the merchant timezone.
+  periodKey String @map("period_key")
+  linkedByUserId String @map("linked_by_user_id") @db.Uuid
+  deviceId String? @map("device_id")
+  /// Client-generated id for the link attempt, so a retried request after a dropped
+  /// response is recognised as the same attempt rather than a new one.
+  idempotencyKey String? @unique @map("idempotency_key") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  linkedBy User @relation("TransactionLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+  coupons Coupon[]
+
+  /// ═══ THE IDEMPOTENCY / FRAUD GUARD (CLAUDE.md §0.2, §4.1, §7.5) ═══
+  /// The same invoice can NEVER be linked twice. This constraint is the last line
+  /// of defence behind the API check — if the API check is ever bypassed, the
+  /// database still refuses. Do not remove it.
+  @@unique([merchantId, branchId, invoiceId])
+  @@index([branchId, invoiceId])
+  @@index([customerId])
+  // Hot path: cumulative balance for a customer within the active period.
+  @@index([customerId, periodKey])
+  @@index([merchantId, occurredAt])
+  @@map("transaction")
+}
+
+model Coupon {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  discountPct Int @map("discount_pct")
+  /// The threshold that earned it — shown to the customer as the reason.
+  sourceThresholdAmount Int @map("source_threshold_amount")
+  /// The period whose spend earned it. With the unique constraint below this is what
+  /// stops one tier issuing twice in a period.
+  periodKey String @map("period_key")
+  /// The transaction whose commit crossed the threshold.
+  sourceTransactionId String? @map("source_transaction_id") @db.Uuid
+  issuedAt DateTime @default(now()) @map("issued_at")
+  expiresAt DateTime @map("expires_at")
+  status CouponStatus @default(ACTIVE)
+  redeemedAt DateTime? @map("redeemed_at")
+  redeemedByUserId String? @map("redeemed_by_user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  sourceTransaction Transaction? @relation(fields: [sourceTransactionId], references: [id], onDelete: SetNull)
+  redeemedBy User? @relation("CouponRedeemedBy", fields: [redeemedByUserId], references: [id], onDelete: SetNull)
+
+  /// Each tier fires at most once per customer per period. A concurrent double-link
+  /// cannot mint two identical coupons — the database refuses the second.
+  @@unique([customerId, periodKey, sourceThresholdAmount])
+  @@index([customerId])
+  @@index([status])
+  @@index([merchantId, status, expiresAt])
+  @@map("coupon")
+}
+
+/// Derived cache of cumulative spend per customer per period (CLAUDE.md §4.1, §8).
+/// The value computed from transaction rows stays authoritative; this exists so the
+/// dashboard list does not aggregate on every render. Never treat it as the source.
+model BalanceSnapshot {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  periodKey String @map("period_key")
+  cumulativeAmount Int @map("cumulative_amount")
+  transactionCount Int @default(0) @map("transaction_count")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, periodKey])
+  @@index([merchantId, periodKey])
+  @@map("balance_snapshot")
+}
+
+// ── Observability ─────────────────────────────────────────────────────────────
+
+model NotificationLog {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  customerId String @map("customer_id") @db.Uuid
+  channel NotificationChannel @default(WHATSAPP)
+  /// Name of the pre-approved template used. Business-initiated WhatsApp messages
+  /// cannot be free-form (CLAUDE.md §3.5).
+  template String
+  /// Template variables only. Never tokens, never credentials (§7.6).
+  payload Json
+  status NotificationStatus @default(PENDING)
+  sentAt DateTime? @map("sent_at")
+  error String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, status])
+  @@index([customerId])
+  @@map("notification_log")
+}
+
+/// Append-only. Rows are never updated or deleted (CLAUDE.md §7.10).
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  merchantId String @map("merchant_id") @db.Uuid
+  /// Null for system actions such as scheduled coupon expiry.
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  action String
+  entityType String @map("entity_type")
+  entityId String @map("entity_id")
+  beforeJson Json? @map("before_json")
+  afterJson Json? @map("after_json")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_log")
+}

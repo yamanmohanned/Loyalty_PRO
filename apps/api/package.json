@@ -1,0 +1,39 @@
+{
+  "name": "@walaa/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Walaa loyalty backend — Fastify service, Prisma data layer.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "db:generate": "prisma generate",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:verify": "tsx prisma/verify.ts",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint ."
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "@prisma/client": "^6.2.1",
+    "@walaa/shared-types": "workspace:*",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@walaa/config": "workspace:*",
+    "dotenv-cli": "^8.0.0",
+    "eslint": "^9.18.0",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
