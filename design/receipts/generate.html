@@ -1,0 +1,343 @@
+<meta charset="utf-8" />
+<title>Walaa — receipt fixture generator</title>
+<style>
+  body { margin: 0; background: #6B7280; font-family: Tahoma, sans-serif; }
+  canvas { display: block; margin: 16px auto; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.3); }
+</style>
+<div id="out"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   Walaa — thermal receipt fixture generator.
+
+   Renders a plausible Iraqi supermarket receipt at true POS geometry so the
+   invoice barcode parser has something concrete to be written against.
+
+   THIS IS A RECONSTRUCTION, NOT A REAL RECEIPT. See README.md in this folder.
+
+   Geometry (industry standard, Epson TM-T88 / Bixolon SRP-350 class):
+     roll width      80 mm
+     printable width 72 mm
+     head resolution 203 dpi  = 8 dots/mm
+     printable dots  72 × 8   = 576
+   Length is continuous on a roll, so height follows content.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const DPMM = 8;              // dots per mm at 203 dpi
+const WIDTH = 72 * DPMM;     // 576 printable dots
+const MARGIN = 3 * DPMM;     // 24 dots of side margin inside the print area
+
+/* ── Code 128 ─────────────────────────────────────────────────────────────
+   Bar/space width patterns for values 0–106. Index 106 is the 13-module stop.
+   Encoding here is Code 128 Set B (alphanumeric), which is what retail POS
+   software overwhelmingly uses for an alphanumeric document number.        */
+const CODE128_PATTERNS = [
+  '212222','222122','222221','121223','121322','131222','122213','122312','132212','221213',
+  '221312','231212','112232','122132','122231','113222','123122','123221','223211','221132',
+  '221231','213212','223112','312131','311222','321122','321221','312212','322112','322211',
+  '212123','212321','232121','111323','131123','131321','112313','132113','132311','211313',
+  '231113','231311','112133','112331','132131','113123','113321','133121','313121','211331',
+  '231131','213113','213311','213131','311123','311321','331121','312113','312311','332111',
+  '314111','221411','431111','111224','111422','121124','121421','141122','141221','112214',
+  '112412','122114','122411','142112','142211','241211','221114','413111','241112','134111',
+  '111242','121142','121241','114212','124112','124211','411212','421112','421211','212141',
+  '214121','412121','111143','111341','131141','114113','114311','411113','411311','113141',
+  '114131','311141','411131','211412','211214','211232','2331112',
+];
+
+const START_B = 104;
+const STOP = 106;
+
+/** Encodes a string to Code 128B element widths, checksum included. */
+function code128b(text) {
+  const values = [START_B];
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code > 126) throw new Error('Code 128B cannot encode: ' + ch);
+    values.push(code - 32);
+  }
+  // Checksum: start value plus each data value weighted by its 1-based position.
+  let sum = START_B;
+  for (let i = 1; i < values.length; i += 1) sum += values[i] * i;
+  values.push(sum % 103);
+  values.push(STOP);
+
+  const widths = [];
+  for (const v of values) for (const d of CODE128_PATTERNS[v]) widths.push(Number(d));
+  return widths;
+}
+
+/**
+ * Draws a Code 128 symbol centred at `cx`. Elements alternate bar/space
+ * starting with a bar. Module width is in printer dots.
+ */
+function drawBarcode(ctx, text, cx, top, height, moduleDots) {
+  const widths = code128b(text);
+  const totalModules = widths.reduce((a, b) => a + b, 0);
+  const totalWidth = totalModules * moduleDots;
+  let x = Math.round(cx - totalWidth / 2);
+
+  ctx.fillStyle = '#000';
+  widths.forEach((w, i) => {
+    const w0 = w * moduleDots;
+    if (i % 2 === 0) ctx.fillRect(x, top, w0, height); // even index = bar
+    x += w0;
+  });
+  return { width: totalWidth, modules: totalModules };
+}
+
+/* ── Receipt content ──────────────────────────────────────────────────────
+   Arithmetic is internally consistent: the line totals sum to the subtotal,
+   the discount yields the stated total, and tender minus total is the change.
+   The 85,000 IQD total and INV-9824 deliberately match the worked example in
+   CLAUDE.md §2.3.                                                          */
+const RECEIPT = {
+  store: 'سوبرماركت الرشيد',
+  branch: 'فرع الكرادة',
+  address: 'بغداد — الكرادة الداخلية، شارع 62',
+  phone: '٠٧٧٠ ١٢٣ ٤٥٦٧',
+  invoiceId: 'INV-9824',
+  branchCode: 'BAG-01',
+  date: '2026/08/25',
+  time: '13:42',
+  cashier: 'حيدر الموسوي',
+  register: '02',
+  items: [
+    { name: 'رز عنبر 5 كغم',          qty: 1,  price: 12500 },
+    { name: 'زيت دوار الشمس 1.8 لتر', qty: 2,  price: 6750  },
+    { name: 'دجاج مجمد 1 كغم',        qty: 3,  price: 7000  },
+    { name: 'حليب طازج 1 لتر',        qty: 4,  price: 1750  },
+    { name: 'خبز صمون',               qty: 10, price: 250   },
+    { name: 'معجون طماطم 650 غم',     qty: 2,  price: 2250  },
+    { name: 'شاي سيلاني 500 غم',      qty: 1,  price: 8500  },
+    { name: 'سكر 5 كغم',              qty: 1,  price: 7500  },
+    { name: 'جبن أبيض 500 غم',        qty: 2,  price: 4500  },
+  ],
+  discount: 1000,
+  tendered: 100000,
+};
+
+const money = (n) => n.toLocaleString('en-US');
+
+function render(barcodePayload, filename) {
+  const c = document.createElement('canvas');
+  const lineH = 26;
+  // Height is measured after layout; start generous and crop at the end.
+  c.width = WIDTH;
+  c.height = 1600;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.fillStyle = '#000';
+  ctx.textBaseline = 'top';
+  ctx.direction = 'rtl';
+
+  let y = 20;
+  const right = WIDTH - MARGIN;
+  const left = MARGIN;
+  const centre = WIDTH / 2;
+
+  const text = (s, x, align, font) => {
+    ctx.font = font || '18px Tahoma';
+    ctx.textAlign = align;
+    ctx.fillText(s, x, y);
+  };
+  const rule = (dashed) => {
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash(dashed ? [4, 4] : []);
+    ctx.beginPath();
+    ctx.moveTo(left, y + 8);
+    ctx.lineTo(right, y + 8);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    y += 20;
+  };
+
+  // ── Header ──────────────────────────────────────────────────────────────
+  text(RECEIPT.store, centre, 'center', 'bold 30px Tahoma');    y += 38;
+  text(RECEIPT.branch, centre, 'center', '20px Tahoma');        y += 26;
+  text(RECEIPT.address, centre, 'center', '16px Tahoma');       y += 22;
+  text('هاتف: ' + RECEIPT.phone, centre, 'center', '16px Tahoma'); y += 26;
+  rule();
+
+  text('فاتورة مبيعات', centre, 'center', 'bold 20px Tahoma');  y += 30;
+
+  // ── Meta ────────────────────────────────────────────────────────────────
+  // The invoice number is printed LTR because it is an ASCII document code.
+  ctx.direction = 'ltr';
+  ctx.font = 'bold 19px Tahoma';
+  ctx.textAlign = 'left';
+  ctx.fillText(RECEIPT.invoiceId, left, y);
+  ctx.direction = 'rtl';
+  text('رقم الفاتورة', right, 'right', '18px Tahoma');
+  y += lineH;
+
+  ctx.direction = 'ltr'; ctx.textAlign = 'left';
+  ctx.font = '17px Tahoma';
+  ctx.fillText(RECEIPT.date + '  ' + RECEIPT.time, left, y);
+  ctx.direction = 'rtl';
+  text('التاريخ', right, 'right', '17px Tahoma');
+  y += lineH;
+
+  ctx.direction = 'ltr'; ctx.textAlign = 'left';
+  ctx.font = '17px Tahoma';
+  ctx.fillText(RECEIPT.branchCode + ' / ' + RECEIPT.register, left, y);
+  ctx.direction = 'rtl';
+  text('الفرع / الصندوق', right, 'right', '17px Tahoma');
+  y += lineH;
+
+  text('الكاشير: ' + RECEIPT.cashier, right, 'right', '17px Tahoma');
+  y += lineH;
+  rule();
+
+  // ── Column headings ─────────────────────────────────────────────────────
+  ctx.font = 'bold 16px Tahoma';
+  ctx.direction = 'rtl'; ctx.textAlign = 'right';
+  ctx.fillText('الصنف', right, y);
+  ctx.textAlign = 'center';
+  ctx.fillText('الكمية', WIDTH * 0.42, y);
+  ctx.fillText('السعر', WIDTH * 0.26, y);
+  ctx.textAlign = 'left';
+  ctx.fillText('المجموع', left, y);
+  y += 24;
+  rule(true);
+
+  // ── Line items ──────────────────────────────────────────────────────────
+  let subtotal = 0;
+  let pieces = 0;
+  for (const item of RECEIPT.items) {
+    const lineTotal = item.qty * item.price;
+    subtotal += lineTotal;
+    pieces += item.qty;
+
+    ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.font = '17px Tahoma';
+    ctx.fillText(item.name, right, y);
+
+    ctx.direction = 'ltr';
+    ctx.font = '17px Tahoma';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(item.qty), WIDTH * 0.42, y);
+    ctx.fillText(money(item.price), WIDTH * 0.26, y);
+    ctx.textAlign = 'left';
+    ctx.fillText(money(lineTotal), left, y);
+    y += lineH;
+  }
+  rule(true);
+
+  // ── Totals ──────────────────────────────────────────────────────────────
+  const total = subtotal - RECEIPT.discount;
+  const change = RECEIPT.tendered - total;
+
+  const totalRow = (label, value, bold) => {
+    ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.font = (bold ? 'bold ' : '') + (bold ? '22px' : '18px') + ' Tahoma';
+    ctx.fillText(label, right, y);
+    ctx.direction = 'ltr'; ctx.textAlign = 'left';
+    ctx.font = (bold ? 'bold ' : '') + (bold ? '22px' : '18px') + ' Tahoma';
+    ctx.fillText(value, left, y);
+    y += bold ? 32 : lineH;
+  };
+
+  ctx.direction = 'rtl'; ctx.textAlign = 'right';
+  ctx.font = '16px Tahoma';
+  ctx.fillText('عدد الأصناف: ' + RECEIPT.items.length + '    عدد القطع: ' + pieces, right, y);
+  y += 24;
+
+  totalRow('المجموع الفرعي', money(subtotal));
+  totalRow('الخصم', '-' + money(RECEIPT.discount));
+  rule();
+  totalRow('الإجمالي', money(total) + ' د.ع', true);
+  rule();
+  totalRow('نقداً', money(RECEIPT.tendered));
+  totalRow('الباقي', money(change));
+  y += 10;
+
+  // ── Footer ──────────────────────────────────────────────────────────────
+  text('شكراً لتسوقكم معنا', centre, 'center', '18px Tahoma'); y += 26;
+  text('احتفظ بالفاتورة لبرنامج الولاء', centre, 'center', '16px Tahoma'); y += 34;
+
+  // ── Barcode ─────────────────────────────────────────────────────────────
+  // 2 dots per module = 0.25 mm narrow bar, the usual retail setting.
+  // Height 70 dots ≈ 8.75 mm, typical for a receipt footer symbol.
+  const bc = drawBarcode(ctx, barcodePayload, centre, y, 70, 2);
+  y += 78;
+
+  // Human-readable interpretation under the symbol, as printers emit it.
+  ctx.direction = 'ltr';
+  ctx.textAlign = 'center';
+  ctx.font = '17px Tahoma';
+  ctx.fillStyle = '#000';
+  ctx.fillText(barcodePayload, centre, y);
+  y += 30;
+
+  // Crop to actual content height, preserving the trailing feed margin.
+  const finalH = y + 20;
+  const cropped = document.createElement('canvas');
+  cropped.width = WIDTH;
+  cropped.height = finalH;
+  const cctx = cropped.getContext('2d');
+  cctx.fillStyle = '#fff';
+  cctx.fillRect(0, 0, WIDTH, finalH);
+  cctx.drawImage(c, 0, 0);
+
+  cropped.dataset.filename = filename;
+  cropped.dataset.payload = barcodePayload;
+  cropped.dataset.modules = String(bc.modules);
+  document.getElementById('out').appendChild(cropped);
+  return cropped;
+}
+
+/**
+ * Thermal print heads are binary — a dot is either burned or it is not, with no
+ * grey levels. Thresholding the antialiased canvas is therefore a more faithful
+ * simulation of a real receipt than leaving the smoothing in.
+ */
+function thresholdToThermal(canvas) {
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const v = lum < 170 ? 0 : 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+const VARIANTS = [
+  // A — the realistic default: the document number alone, so amount is manual.
+  { payload: 'INV-9824', filename: 'walaa-receipt-invoice-only.png' },
+  // B — a POS configured to append the total, exercising the auto-capture path.
+  { payload: 'INV-9824|85000', filename: 'walaa-receipt-with-amount.png' },
+];
+
+/* `?export=N` renders a single receipt full-bleed with no page chrome, so a
+   headless screenshot at --window-size=576,<height> is pixel-exact. */
+const exportIndex = new URLSearchParams(location.search).get('export');
+
+if (exportIndex !== null) {
+  const v = VARIANTS[Number(exportIndex)];
+  document.body.style.cssText = 'margin:0;padding:0;background:#fff;';
+  const c = render(v.payload, v.filename);
+  c.style.cssText = 'margin:0;display:block;box-shadow:none;';
+  thresholdToThermal(c);
+  window.__exportSize = { width: c.width, height: c.height };
+  document.title = v.filename;
+} else {
+  for (const v of VARIANTS) thresholdToThermal(render(v.payload, v.filename));
+}
+
+window.__receipts = [...document.querySelectorAll('canvas')].map((c) => ({
+  filename: c.dataset.filename,
+  payload: c.dataset.payload,
+  modules: Number(c.dataset.modules),
+  width: c.width,
+  height: c.height,
+  widthMm: c.width / DPMM,
+  heightMm: +(c.height / DPMM).toFixed(1),
+}));
+</script>

@@ -11,6 +11,7 @@ export * from './customer';
 export * from './enums';
 export * from './errors';
 export * from './invoice';
+export * from './invoice-parsers';
 export * from './money';
 export * from './period';
 export * from './phone';

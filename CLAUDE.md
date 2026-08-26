@@ -520,8 +520,8 @@ loop.
 *not* bounded. Those aggregates MUST cast to `BIGINT` in SQL before summing. Any report
 added in Phase 2 or 5 has to honour this.
 
-### 13.6 Invoice barcode parsing is pluggable, pending a real receipt
-*(open — needs a sample from the merchant)*
+### 13.6 Invoice barcode parsing is pluggable, built against a reconstructed receipt
+*(open — still needs a real sample from the merchant)*
 
 The register's barcode encoding is unknown (no sample receipt as of 2026-08-25), so
 parsing goes through an `InvoiceBarcodeParser` interface
@@ -529,8 +529,28 @@ parsing goes through an `InvoiceBarcodeParser` interface
 returns the amount **only** when the symbology actually carries it; `amount: null` forces
 manual entry. This is why the invoice screen must render both states (§6.7 #2).
 
-**Still needed:** one real receipt photo, to implement the auto-capture path for real.
-Until then the default parser treats scans as invoice-number-only.
+**Reference fixtures** live in `design/receipts/` — reconstructed 80 mm thermal receipts
+at true POS geometry (72 mm printable, 203 dpi, 576 dots, 1-bit) carrying real,
+checksummed Code 128 symbols. `verify-barcode.mjs` decodes them back out of the rendered
+pixels, so the fixtures are proven scannable rather than merely decorative.
+
+Two parsers ship, tried most-specific first
+(`packages/shared-types/src/invoice-parsers.ts`):
+
+| Parser | Payload | Amount |
+|---|---|---|
+| `pipe-delimited` | `INV-9824\|85000` | auto-captured |
+| `invoice-number-only` *(default)* | `INV-9824` | `null` → manual entry |
+
+Two rules bind every parser, now and later:
+
+1. **The invoice number is mandatory; the amount is not.** `amount: null` is a normal
+   result, not a failure.
+2. **A doubtful amount is worse than no amount.** A wrong amount silently corrupts a
+   customer's balance; a null one merely costs four keystrokes. Never guess.
+
+**Still needed:** one real receipt photo. The likely outcome is that one of the two
+parsers already matches; if not, the real format is one more parser and no other change.
 
 ### 13.7 Toolchain choices
 *(all reversible; noted 2026-08-25)*
