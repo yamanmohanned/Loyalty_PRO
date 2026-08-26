@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# secrets — never commit real env files
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# expo
+.expo/
+.expo-shared/
+apps/assistant/android/
+apps/assistant/ios/
+
+# prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# test / coverage
+coverage/

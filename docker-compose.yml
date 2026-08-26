@@ -1,0 +1,27 @@
+# Local development infrastructure for the Walaa loyalty platform.
+# Postgres is pinned to a major version so migrations behave identically everywhere.
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: walaa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: walaa
+      POSTGRES_PASSWORD: walaa_dev_only
+      POSTGRES_DB: walaa
+      # Deterministic collation so ORDER BY on Arabic text is stable across machines.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    # Host port 5433, not 5432: another project's Postgres already owns 5432 on this
+    # machine. The container-side port is unchanged, so nothing inside Docker cares.
+    ports:
+      - '5433:5432'
+    volumes:
+      - walaa-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U walaa -d walaa']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  walaa-pgdata:
