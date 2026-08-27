@@ -485,6 +485,13 @@ Enforced in the database, not only in service code: `@@unique([customerId, perio
 sourceThresholdAmount])` on `coupon`. Two concurrent links that both cross the same
 threshold cannot mint two identical coupons.
 
+**Clarification (Phase 1):** superseding is scoped to **one period**. A still-valid
+coupon earned in a previous period is never retired by this period's crossing — that
+spend was different spend, and confiscating a reward already given would read to the
+customer as the shop taking something back. So a customer may briefly hold last
+period's unexpired coupon alongside this period's new one. Within a single period they
+hold at most one earned coupon, which is what stops discounts stacking.
+
 ### 13.3 Override rules — most specific wins, and an override replaces the whole ladder
 *(reversible call, noted 2026-08-24)*
 
@@ -575,3 +582,67 @@ parsers already matches; if not, the real format is one more parser and no other
 - **`apps/assistant` bundles no font files yet.** Phase 3 must bundle Cairo, IBM Plex Sans
   Arabic and IBM Plex Mono; until then RN falls back to the system Arabic face and money
   uses `fontVariant: ['tabular-nums']` for digit alignment.
+
+### 13.9 Backend engineering decisions (Phase 1)
+*(all reversible unless noted; recorded 2026-08-26)*
+
+**The core loop runs at SERIALIZABLE isolation.** Read Committed would let two
+concurrent links for the same customer each compute a cumulative sum missing the
+other's uncommitted row. A duplicate coupon is already impossible (unique
+constraint), but a *missed* threshold crossing is not — and a customer silently not
+receiving the discount they earned is the worst failure this system has. Register
+volume makes the isolation cost negligible; `withSerializableRetry` absorbs the
+occasional 40001 conflict.
+
+**Auth is opt-OUT, not opt-in.** A global `onRequest` hook authenticates every
+request; only an explicit `config.public` marker skips it. A route added later
+without thinking about auth is therefore protected by default. The failure mode of
+the opposite arrangement is a silently public endpoint — the bug nobody notices
+until it matters. A side effect: an unknown path returns 401 rather than 404 to an
+unauthenticated caller, which also denies route enumeration.
+
+**Refresh tokens are opaque randoms, not JWTs**, stored only as SHA-256 hashes, and
+they rotate on every use. Reuse of an already-rotated token revokes the entire chain:
+a replay is indistinguishable from a theft, and losing a session is a nuisance while
+leaving a stolen token live is not. SHA-256 rather than Argon2 is deliberate — the
+input is 48 bytes of full-entropy random, so there is no low-entropy secret to slow a
+guesser down for.
+
+**Coupon redemption is one atomic conditional UPDATE**, with every precondition in
+the WHERE clause (`status = ACTIVE AND expiresAt > now`). A read-then-write would let
+two cashiers both apply the same discount. Folding expiry into the same statement
+matters too: the expiry sweep may not have run, and a lapsed coupon must not be
+redeemable in that window.
+
+**Notifications use a database-backed queue, not BullMQ + Redis** (§3.2 permits
+this). The deciding reason is not avoided infrastructure but atomicity: the enqueue
+joins the same transaction as the link it belongs to, so a committed transaction can
+never be missing its notification, and a rolled-back one can never have sent a
+phantom message. Cost: delivery needs a poller rather than a blocking pop. Revisit if
+this becomes multi-merchant with real throughput.
+
+**Rate limiting is in-process memory**, so limits are per-instance. Correct for a
+single-instance deployment, wrong the moment it scales horizontally — switch to the
+Redis store when a second instance appears. The limiter's `errorResponseBuilder` MUST
+carry `statusCode: 429`: @fastify/rate-limit *throws* that object, and without the
+status the error handler cannot distinguish a throttle from an unknown failure and
+answers 500, which tells the client to retry exactly when it should back off.
+
+**A duplicate is detected before insert, not only by catching the constraint.**
+Postgres aborts an entire transaction when any statement in it fails, so after a
+unique violation nothing further can be queried on that connection — including the
+lookup naming who already holds the invoice. The common case is therefore a
+pre-check inside the transaction; the genuine race throws a sentinel that the caller
+re-queries after the transaction unwinds.
+
+**Branch is verified, not trusted.** The Normalized Invoice Schema carries
+`branch_id` because a future API-tier source legitimately declares its own, but a
+bound user must match it. Otherwise an assistant at one branch could attribute sales
+to another — both a fraud vector and a reporting mess. An OWNER is unbound and may
+link anywhere.
+
+**Tests run against a separate `walaa_test` database** and TRUNCATE between cases.
+Pointing that at the dev database would destroy it, so the isolation is a safety
+property rather than a convenience. Rate limiting is disabled in the general HTTP
+suite (it would otherwise exhaust one shared login bucket mid-file) and covered by
+its own suite with limiting left on.

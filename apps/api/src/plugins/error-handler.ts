@@ -1,0 +1,115 @@
+import type { FastifyInstance } from 'fastify';
+import { ZodError } from 'zod';
+import { AppError } from '../lib/errors';
+import { isUniqueViolation } from '../lib/prisma';
+
+/**
+ * The single exit point for every failure (CLAUDE.md §9).
+ *
+ * Two rules govern this file:
+ *
+ * 1. **Every response is the shared error envelope.** Clients branch on `code`,
+ *    never on a parsed message string.
+ * 2. **Unrecognised errors never leak their internals.** A stack trace, a SQL
+ *    fragment or a Prisma message can disclose schema and file paths, so unknown
+ *    failures log in full server-side and return a flat 500 to the caller.
+ */
+/** Reads a numeric statusCode off an unknown thrown value, without asserting its shape. */
+function statusCodeOf(error: unknown): number | null {
+  if (!error || typeof error !== 'object') return null;
+  const value = (error as { statusCode?: unknown }).statusCode;
+  return typeof value === 'number' ? value : null;
+}
+
+export function registerErrorHandler(app: FastifyInstance): void {
+  app.setNotFoundHandler((request, reply) => {
+    reply.status(404).send({
+      error: {
+        code: 'NOT_FOUND',
+        message: 'المسار غير موجود',
+        requestId: request.id,
+      },
+    });
+  });
+
+  app.setErrorHandler((error, request, reply) => {
+    // Deliberate failures: already carry a code, a status and a safe message.
+    if (error instanceof AppError) {
+      // 5xx means we broke something; anything else is an expected outcome.
+      if (error.statusCode >= 500) {
+        request.log.error({ err: error, code: error.code }, 'request failed');
+      } else {
+        request.log.info({ code: error.code }, 'request rejected');
+      }
+      reply.status(error.statusCode).send(error.toEnvelope(request.id));
+      return;
+    }
+
+    // Zod failures that escaped the validator compiler (e.g. thrown inside a service).
+    if (error instanceof ZodError) {
+      reply.status(400).send({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'البيانات المُرسلة غير صحيحة',
+          fields: error.issues.map((issue) => ({
+            path: issue.path.join('.'),
+            message: issue.message,
+          })),
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // @fastify/rate-limit throws its built payload rather than replying directly,
+    // so a throttle arrives here and must be recognised by its statusCode.
+    const status = statusCodeOf(error);
+    if (status === 429) {
+      reply.status(429).send({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'عدد كبير من المحاولات — انتظر قليلاً ثم أعد المحاولة',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // A unique violation reaching here is a constraint we did not anticipate.
+    // Report it as a conflict rather than a 500, but log loudly: it means some
+    // write path is missing its idempotency handling.
+    if (isUniqueViolation(error)) {
+      request.log.error({ err: error }, 'unhandled unique constraint violation');
+      reply.status(409).send({
+        error: {
+          code: 'DUPLICATE_INVOICE',
+          message: 'هذه العملية مسجّلة مسبقاً',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // Fastify's own 4xx (malformed JSON, unsupported media type, …).
+    if (status !== null && status >= 400 && status < 500) {
+      reply.status(status).send({
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'الطلب غير صالح',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // Anything left is a bug. Full detail to the log, nothing to the client.
+    request.log.error({ err: error }, 'unhandled error');
+    reply.status(500).send({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'حدث خطأ غير متوقع',
+        requestId: request.id,
+      },
+    });
+  });
+}
