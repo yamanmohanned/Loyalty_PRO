@@ -37,16 +37,17 @@ the answer.
 
 ## How it is put together
 
-| Path                       | What it does                                                  |
-| -------------------------- | ------------------------------------------------------------- |
-| `screens/Scan.tsx`         | the main screen — one focused field, four outcomes            |
-| `screens/Register.tsx`     | name and phone only, then prints the card                     |
-| `screens/Reprint.tsx`      | find a customer who lost their card; reissues the same number |
-| `components/Printable.tsx` | what the thermal printer actually receives                    |
-| `components/Barcode.tsx`   | the card's Code 128C symbol, as SVG                           |
-| `lib/queue.ts`             | the offline queue and the connection indicator                |
-| `lib/print.tsx`            | mounts a job into `#print-root` and calls `window.print()`    |
-| `lib/locale.ts`            | every string in the app                                       |
+| Path                       | What it does                                                   |
+| -------------------------- | -------------------------------------------------------------- |
+| `screens/Scan.tsx`         | the main screen — one focused field, four outcomes             |
+| `screens/Register.tsx`     | name and phone only, then prints the card                      |
+| `screens/Reprint.tsx`      | find a customer who lost their card; reissues the same number  |
+| `components/Printable.tsx` | what the thermal printer actually receives                     |
+| `components/Barcode.tsx`   | the card's Code 128C symbol, as SVG                            |
+| `lib/queue.ts`             | the offline queue and the connection indicator                 |
+| `lib/realtime.ts`          | the persistent link, and the honest answer to "are we online?" |
+| `lib/print.tsx`            | mounts a job into `#print-root` and calls `window.print()`     |
+| `lib/locale.ts`            | every string in the app                                        |
 
 ---
 
@@ -72,6 +73,12 @@ shop. **In the field, enable kiosk printing** so slips print without a dialog:
 ```
 chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4000
 ```
+
+**The connection indicator is driven by a socket, not by `navigator.onLine`.** That
+flag reports whether the OS has _a_ network, which stays true while the manager PC is
+asleep or behind a router that has started isolating clients. The station holds a
+WebSocket and trusts the server's greeting — an authenticated round trip — as its
+definition of "connected". Reconnection backs off and flushes the queue on success.
 
 **Fonts are bundled, never fetched.** A shop LAN has no outbound internet (§7.1). The
 clean-room packaging test asserts the served page requests nothing from a font CDN.

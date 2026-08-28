@@ -7,6 +7,7 @@ import { resolveApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { PrintProvider } from './lib/print';
 import { startQueue, subscribe, type QueueSnapshot } from './lib/queue';
+import { startRealtime } from './lib/realtime';
 import { LoginScreen } from './screens/Login';
 import { RegisterScreen } from './screens/Register';
 import { ReprintScreen } from './screens/Reprint';
@@ -60,6 +61,13 @@ export function App(): JSX.Element {
   }, []);
 
   useEffect(() => startQueue(), []);
+
+  // Only once there is a session: the handshake carries the access token, and a
+  // socket opened before login would just be refused and retried on a backoff.
+  useEffect(() => {
+    if (boot.kind !== 'ready') return undefined;
+    return startRealtime();
+  }, [boot.kind]);
 
   if (boot.kind === 'loading') {
     return <BootSkeleton />;

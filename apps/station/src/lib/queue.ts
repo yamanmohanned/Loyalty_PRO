@@ -39,6 +39,19 @@ export interface QueueSnapshot {
 let listeners: Listener[] = [];
 let flushing = false;
 let lastFailed = false;
+/**
+ * Whether the persistent socket is open (see `realtime.ts`).
+ *
+ * `null` before the first connection attempt settles, so a station that has just
+ * started does not claim to be offline before it has tried.
+ */
+let linkUp: boolean | null = null;
+
+/** Called by the realtime connection as it opens and drops. */
+export function setLinkUp(up: boolean): void {
+  linkUp = up;
+  notify();
+}
 
 /** A stable id for this station, so the server can attribute a flush to a device. */
 export function deviceId(): string {
@@ -73,6 +86,10 @@ export function pendingCount(): number {
 
 function currentState(): SyncState {
   if (flushing) return 'SYNCING';
+  // The socket is the strongest signal available: it says the manager machine is
+  // reachable, where `navigator.onLine` only says the OS has *a* network — which
+  // stays true while the manager PC is asleep or behind an isolating router.
+  if (linkUp === false) return 'OFFLINE';
   if (!navigator.onLine || lastFailed) return 'OFFLINE';
   return 'ONLINE';
 }
