@@ -32,6 +32,22 @@ const check = (ok, description, detail = '') => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Any access entry that would let an ordinary local account read the data. */
+/**
+ * Does this icacls output grant access to an ordinary local account?
+ *
+ * Checked with plain string containment rather than a pattern: the entries of
+ * interest read `BUILTIN\\Users:(I)(RX)`, and a regex for them needs escaped
+ * backslashes, which is exactly the kind of literal that has silently lost a level of
+ * escaping in this repository before now.
+ */
+function grantsGroupWideAccess(acl) {
+  const upper = acl.toUpperCase();
+  return (
+    upper.includes('USERS:') || upper.includes('EVERYONE') || upper.includes('AUTHENTICATED USERS')
+  );
+}
+
 /** icacls, best effort — used both by the assertions and by the cleanup. */
 function icacls(args) {
   try {
@@ -106,13 +122,22 @@ check(
   installOutput.split('\n').filter(Boolean).pop()?.trim().slice(0, 100),
 );
 
-const envFile = join(DATA, 'walaa.env');
-check(existsSync(envFile), 'a configuration file was generated for this installation');
+// The data directory as a whole, not only the configuration file. Files created under
+// `%PROGRAMDATA%` inherit `BUILTIN\\Users:(RX)` — measured on this machine, not
+// assumed — so without the lockdown the database of customer names and phone numbers
+// is readable by every local account.
+const dataAcl = icacls([DATA]);
+check(
+  !grantsGroupWideAccess(dataAcl),
+  'the data directory is locked to SYSTEM and Administrators',
+  dataAcl.split('\n').filter(Boolean).slice(1, 4).join(' | ').slice(0, 160),
+);
 
-// The hardening is proven by being inconvenient: this process created the file and
-// can no longer read it, because `install` stripped inherited access down to SYSTEM
-// (the service account) and Administrators. Ownership survives, so the test re-grants
-// itself access to inspect the contents — which a plain user account could not do.
+const envFile = join(DATA, 'walaa.env');
+
+// Unreadable, and not merely absent: `existsSync` cannot be used as the gate here,
+// because the directory lockdown removes traverse rights and a stat of the file fails
+// the same way a missing file does.
 let readBlocked = false;
 try {
   readFileSync(envFile, 'utf8');
@@ -121,16 +146,22 @@ try {
 }
 check(readBlocked, 'the signing keys are unreadable to a user who is neither SYSTEM nor an admin');
 
-const aclBefore = icacls([envFile]);
+// In production the service runs as SYSTEM and the installer runs elevated, so both
+// keep Full control. This test is neither, so it uses the one right an owner always
+// retains — rewriting the ACL — to inspect what the installer left behind.
+const regrant = icacls([DATA, '/grant', `${USER}:(OI)(CI)(F)`, '/T', '/C', '/Q']);
+// The configuration file needs its own re-grant: `install` disabled inheritance on it,
+// so it does not pick up anything granted on the directory — belt and braces working as
+// designed, and worth knowing before someone tries to fix a permissions problem by
+// changing the folder alone.
+icacls([envFile, '/grant', `${USER}:(R,W)`]);
 check(
-  !/BUILTIN\\Users|\bEveryone\b|Authenticated Users/i.test(aclBefore),
-  'no group-wide access is left on the configuration file',
-  aclBefore.split('\n').filter(Boolean).slice(1, 4).join(' | ').slice(0, 160),
+  existsSync(envFile),
+  'the directory owner can re-grant itself access, and the configuration is there',
+  regrant.split('\n').filter(Boolean).pop()?.trim().slice(0, 80),
 );
 
-icacls([envFile, '/grant', `${USER}:(R,W)`]);
 const envText = existsSync(envFile) ? readFileSync(envFile, 'utf8') : '';
-
 const secrets = [
   ...envText.matchAll(/^(JWT_ACCESS_SECRET|JWT_REFRESH_SECRET|QR_TOKEN_SECRET)=(.+)$/gm),
 ];
@@ -220,6 +251,15 @@ try {
     'the API shut down gracefully rather than being terminated',
   );
   check(!(await waitForHealth(2_000)), 'nothing is left listening on the port');
+
+  // The database the service actually created, rather than the directory it was told
+  // to create it in. The only non-inherited entry here is this test's own re-grant.
+  const databaseAcl = icacls([join(DATA, 'walaa.db')]);
+  check(
+    existsSync(join(DATA, 'walaa.db')) && !grantsGroupWideAccess(databaseAcl),
+    'the customer database is not readable by ordinary local accounts',
+    databaseAcl.split('\n').filter(Boolean).slice(1, 4).join(' | ').slice(0, 160),
+  );
 } catch (error) {
   check(false, 'console mode ran', error instanceof Error ? error.message : String(error));
   console.log(`\n--- host output ---\n${hostOutput.join('')}\n-------------------`);

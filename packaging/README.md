@@ -41,11 +41,11 @@ of the Tauri app, and a stale one ships silently.
 
 ## What ships, and where it goes
 
-| Path                           | Contents                                                                                                    |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `%PROGRAMFILES%\ولاء\`         | the Tauri dashboard executable                                                                              |
-| `%PROGRAMFILES%\ولاء\runtime\` | `node.exe`, `walaa-api.cjs`, `walaa-service.exe`, the Prisma query engine, the Argon2 addon, the migrations |
-| `%PROGRAMDATA%\Walaa\`         | `walaa.db`, `walaa.env`, `logs\`                                                                            |
+| Path                           | Contents                                                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `%PROGRAMFILES%\ولاء\`         | the Tauri dashboard executable                                                                                                    |
+| `%PROGRAMFILES%\ولاء\runtime\` | `node.exe`, `walaa-api.cjs`, `walaa-service.exe`, `verify-install.ps1`, the Prisma query engine, the Argon2 addon, the migrations |
+| `%PROGRAMDATA%\Walaa\`         | `walaa.db`, `walaa.env`, `logs\` — locked to SYSTEM and Administrators                                                            |
 
 The split is the point. `Program Files` is read-only to the service account;
 everything that changes lives in the data directory, which is also the only thing a
@@ -65,11 +65,16 @@ cannot. It also supervises: restarts the API if it dies, captures its output, an
 stops it cleanly.
 
 ```
-walaa-service.exe install [--data-dir <path>] [--port <n>]
+walaa-service.exe install [--data-dir <path>] [--port <n>] [--delayed]
 walaa-service.exe uninstall
 walaa-service.exe start | stop | status
 walaa-service.exe console        # foreground, for diagnostics
 ```
+
+`--delayed` registers it as Automatic (Delayed Start). It is not the default: the
+service depends on nothing that arrives late in boot, and delaying it means a shop
+that has just had a power cut waits two minutes for a working till. Use it only on a
+machine that demonstrably needs it.
 
 `install` is what the NSIS post-install hook runs. It generates `walaa.env` with
 **secrets unique to that installation** and strips the file's inherited permissions
@@ -87,32 +92,94 @@ address the Station tablet browses to.
 
 ---
 
-## Verifying the parts that need Administrator
+## Installing, and the five checks that close the packaging phase
 
-`verify-service.mjs` covers everything else; SCM registration needs
-`SeCreateServicePrivilege`. From an **elevated** prompt:
+`verify` and `verify:service` cover everything that runs unelevated. What is left needs
+the Service Control Manager, a real reboot, and a second device — and it is not
+ceremony. **Check (b) is what validates CLAUDE_v3.md §3's choice of a Windows Service
+over a Tauri sidecar.** If the API is not up after a reboot with nobody logged in, that
+decision is wrong and the Loyalty Station must not be built on it.
+
+### Before installing
+
+Stop anything already using the API port — a `pnpm dev` API on 4000 will make the
+service fail to bind, and the failure will look like the installer's fault:
+
+```bash
+netstat -ano | findstr :4000
+```
+
+### Install
+
+Run the setup file (it elevates itself), or from an **elevated** prompt:
 
 ```bat
 cd "%PROGRAMFILES%\ولاء\runtime"
 walaa-service.exe install
 walaa-service.exe status
-sc qc WalaaApi
-curl http://localhost:4000/health
 ```
 
-Expected: `status` reports `Running`; `sc qc` shows `START_TYPE : 2 AUTO_START` and a
-`BINARY_PATH_NAME` ending in `run --data-dir C:\ProgramData\Walaa`; `/health` answers
-`{"status":"ok","service":"walaa-api"}`.
+Expected:
 
-Then the one that matters most — reboot the machine and call `/health` again without
-logging in. The Loyalty Station and the capture agent depend on the API being up
-before anybody touches the manager PC.
+```
+  configuration: C:\ProgramData\Walaa\walaa.env (created)
+  permissions:   C:\ProgramData\Walaa locked to SYSTEM and Administrators
+  service:       WalaaApi registered (automatic start)
+  firewall:      inbound TCP 4000 allowed on private networks
+  data:          C:\ProgramData\Walaa
+  logs:          C:\ProgramData\Walaa\logs
+```
 
-To remove:
+### Then reboot, and run the checks
+
+**Reboot fully. Do not open the dashboard afterwards** — the point is that the API does
+not need it. From an elevated prompt:
+
+```bat
+powershell -ExecutionPolicy Bypass -File "%PROGRAMFILES%\ولاء\runtime\verify-install.ps1"
+```
+
+|       | What it proves                                                           | Expected                                                     |
+| ----- | ------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| **a** | registered, `Automatic`, `LocalSystem`                                   | `StartMode=Auto`, `StartName=LocalSystem`                    |
+| **b** | up after reboot, no login, dashboard closed                              | service start time **earlier than** `explorer.exe`'s         |
+| **c** | `LocalSystem` can read _and_ write the database, nobody else can read it | `/health` answers, `SYSTEM:(I)(F)`, no `Users:` entry        |
+| **d** | answers on the LAN address, not just localhost                           | listener on `0.0.0.0`, `200` from the machine's own LAN IP   |
+| **e** | inbound rule on Private networks                                         | rule enabled, port matches, active profile Private or Domain |
+
+The script prints PASS/FAIL with the evidence for each and exits non-zero on any
+failure. One line will read **MANUAL**: open the printed URL on the tablet. Nothing on
+the manager machine can prove reachability from another device.
+
+### Two failures worth expecting
+
+**The network profile is Public.** The firewall rule covers Private and Domain only, so
+a shop network classified Public silently blocks the Station while everything looks
+perfect on the manager PC. The script checks this explicitly. Fix:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -NetworkCategory Private
+```
+
+**The service starts before something it needs.** Nothing in the design suggests it
+will — it binds a socket and opens a file — and the supervisor retries a child that
+fails early. If a particular merchant PC disagrees, move it after the boot rush:
+
+```bat
+sc config WalaaApi start= delayed-auto
+```
+
+That costs the shop roughly two minutes of downtime after a power cut, which is why it
+is not the default.
+
+### Removing it
 
 ```bat
 walaa-service.exe uninstall
 ```
+
+Stops and deregisters the service and drops the firewall rule. **The data directory
+stays** — deleting a shop's customers is a decision for a human with a backup in hand.
 
 ---
 

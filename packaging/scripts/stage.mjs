@@ -187,6 +187,13 @@ if (existsSync(serviceExe)) {
   console.warn('           The staged runtime will not install as a Windows Service without it.');
 }
 
+// ── 6c. Post-reboot verification script ─────────────────────────────────────────
+// Shipped with the runtime rather than kept in the repo: it is run on the merchant's
+// machine, after a reboot, by whoever installed the software — who will not have a
+// checkout in front of them.
+cpSync(join(REPO, 'packaging', 'scripts', 'verify-install.ps1'), join(STAGE, 'verify-install.ps1'));
+note('verify-install.ps1 (the five post-reboot checks)');
+
 // ── 7. Configuration template ───────────────────────────────────────────────────
 // Not a working configuration: the secrets are generated per installation by
 // `walaa-service.exe install`, so no two shops share a JWT signing key and no secret

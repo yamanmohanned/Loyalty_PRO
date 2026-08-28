@@ -215,6 +215,31 @@ sufficient for one supermarket's volume. Keep Prisma as the ORM — only the pro
 **Honest risk to mitigate:** all data on one machine means a disk failure, theft, or malware
 loses everything. §7 backup requirements are therefore **mandatory, not optional**.
 
+**Where the file lives, and who may read it** *(settled by the packaging spike, 2026-08-28)*:
+
+| | |
+|---|---|
+| Path | `%PROGRAMDATA%\Walaa\walaa.db` — machine-scoped, alongside `walaa.env` and `logs\` |
+| Service account | `LocalSystem` |
+| Permissions | inheritance removed; `SYSTEM` and `Administrators` only |
+
+**Machine-scoped, never a user profile.** The API runs as a Windows Service under
+`LocalSystem`, not as the manager's login. A database under the manager's `AppData` would
+be reachable by the service only by accident, and not at all before that profile has been
+loaded — the service would start cleanly and then fail to open its database, which is the
+worst shape of failure: running, reporting healthy to the SCM, and useless. Nothing else
+touches the file: the dashboard and the Station reach their data over HTTP, so no second
+account needs access.
+
+**The directory is locked down at install time, and this is not optional.**
+`%PROGRAMDATA%` grants `BUILTIN\Users:(OI)(CI)(RX)` by default and every file created
+underneath inherits it — measured on the build machine, not assumed. Left alone, the
+customer list, with the phone numbers §7.11 calls the one identifier worth protecting,
+would be readable by every local account on the shop's PC. `walaa-service.exe install`
+therefore strips inheritance from the data directory and grants `SYSTEM` and
+`Administrators` only. **Consequence:** reading the logs or the database during support
+needs an elevated prompt.
+
 ### 5.2 Schema changes from v1 §4
 
 **Removed:** `coupon`, `balance_snapshot` (as previously modeled), `loyalty_tier` (reshaped).
@@ -672,6 +697,15 @@ during a support call. It fails closed: a changed migration file, or one left
 half-applied, stops the boot rather than serving a schema the code was not built
 against. Each migration runs in one transaction, so a failure leaves nothing behind.
 
+**The data directory is locked to SYSTEM and Administrators.** Found while checking
+whether the service account could reach the database at all: `%PROGRAMDATA%` grants
+`BUILTIN\Users:(OI)(CI)(RX)` and children inherit it, so the customer list would have
+been readable by every local account on the shop's PC. `install` now strips inheritance
+from the data directory *after* writing the configuration — after, so that the running
+installer does not lock out its own next write; the configuration file carries its own
+explicit ACL from the moment it is created, so the order costs nothing. Recorded in
+§5.1, asserted in `verify:service`.
+
 **Program files and data are separated, and uninstall never touches the data.**
 Everything writable — `walaa.db`, `walaa.env`, `logs/` — lives in
 `%PROGRAMDATA%\Walaa`; `Program Files` is read-only to the service account. An
@@ -716,12 +750,41 @@ setup guide must include that check.
 **What is verified, and what is not.** Two clean-room suites run unelevated and pass:
 `verify` boots the staged runtime from outside the repository with a constructed
 environment, proving it provisions its own database with no Prisma CLI, no repo and
-no global Node; `verify:service` proves secret generation, ACL hardening,
-supervision, crash recovery and graceful shutdown. **SCM registration needs
-Administrator and was not exercised here** — the elevated command sequence and its
-expected output are in `packaging/README.md`, including the reboot test that matters
-most.
+no global Node; `verify:service` proves secret generation, directory and file
+lockdown, supervision, crash recovery and graceful shutdown. **Anything needing the
+Service Control Manager needs Administrator and was not exercised here.**
 
-**Open: the installer is unsigned.** SmartScreen will warn at every merchant on first
-run. Code signing is a purchasing decision, not a technical one, and is not part of
-this spike.
+**The packaging phase stays open until the reboot test passes** *(operator directive,
+2026-08-28)*. It is not a formality: it is what validates §3's choice of a Windows
+Service over a Tauri sidecar. If the API is not up after a reboot with nobody logged
+in, that decision is wrong and the Loyalty Station would be built on a broken
+foundation. Five checks, run by `packaging/scripts/verify-install.ps1` from an
+elevated prompt after a full reboot:
+
+| | Check | Why it can fail even though the dev machine works |
+|---|---|---|
+| a | registered, `Automatic`, `LocalSystem` | — |
+| b | running after reboot, **no login, dashboard closed** | the sidecar argument stands or falls here |
+| c | `LocalSystem` can read *and write* the database | a per-user path, or an ACL the service account is not in |
+| d | answers on the LAN address, not only localhost | bound to loopback, or to the wrong interface |
+| e | inbound firewall rule on Private networks | Windows blocks the port by default; the Station just never connects |
+
+Check (b) rests on the one piece of evidence that settles it: the service process's
+start time against `explorer.exe`'s. A service that was already running before any
+interactive shell existed did not need a login.
+
+**Start type is plain `Automatic`, not delayed.** The service binds a socket and opens
+a file, depending on nothing that arrives late in boot, and it reports RUNNING to the
+SCM before spawning anything — so it cannot trip the 30-second start timeout, and an
+early child failure is retried by the supervisor rather than left dead. A shop opening
+in the morning wants the till working at boot, not two minutes later. `--delayed` (and
+`sc config WalaaApi start= delayed-auto` on an installed machine) is there for the
+merchant PC that turns out to disagree.
+
+**Deferred: code signing** *(operator decision, 2026-08-28)*. The installer is
+unsigned and SmartScreen will warn on first run. Accepted: the developer hand-installs
+on merchant machines, so a one-time "Run anyway" is a cost paid once, by the person who
+wrote the software (CLAUDE_v2.md §7.2). **Revisit only if distribution changes to
+merchants self-installing** — the warning would then land on someone with no reason to
+trust it, and a certificate becomes the price of being installable at all. No further
+effort until then.

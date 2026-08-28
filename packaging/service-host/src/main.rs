@@ -406,6 +406,46 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
     Ok(true)
 }
 
+/// Locks the whole data directory to SYSTEM and Administrators.
+///
+/// **This is not optional.** `%PROGRAMDATA%` grants `BUILTIN\\Users:(OI)(CI)(RX)` and
+/// every file created underneath inherits it — measured on this machine, not assumed.
+/// The database holds customer names and phone numbers, so without this any account
+/// on the shop's PC could copy the entire customer list. §7 calls the phone number the
+/// one identifier the system stores; a file the whole machine can read is not storing
+/// it carefully.
+///
+/// Removing inheritance on the directory re-propagates to existing children, so this
+/// covers `walaa.db`, its WAL sidecars, and the logs — which can carry a request
+/// payload in an error. The service account is SYSTEM and the dashboard reaches its
+/// data over HTTP, so no other identity needs access. Reading the logs during support
+/// therefore needs an elevated prompt, which whoever installed the software has.
+fn restrict_directory(path: &Path) {
+    let result = Command::new("icacls")
+        .arg(path)
+        .args([
+            "/inheritance:r",
+            "/grant:r",
+            "*S-1-5-18:(OI)(CI)(F)", // LocalSystem — the service account
+            "/grant:r",
+            "*S-1-5-32-544:(OI)(CI)(F)", // BUILTIN\\Administrators
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => {
+            println!("  permissions:   {} locked to SYSTEM and Administrators", path.display());
+        }
+        Ok(output) => eprintln!(
+            "warning: could not restrict {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+        Err(error) => eprintln!("warning: could not run icacls: {error}"),
+    }
+}
+
 /// Strips inherited access from the configuration file so only SYSTEM and
 /// Administrators can read it.
 ///
@@ -499,7 +539,7 @@ fn remove_firewall_rule() {
         .output();
 }
 
-fn install(paths: &Paths, port: Option<u16>) -> Result<(), String> {
+fn install(paths: &Paths, port: Option<u16>, delayed: bool) -> Result<(), String> {
     paths.ensure_directories()?;
 
     let created = ensure_env_file(paths, port)?;
@@ -508,6 +548,16 @@ fn install(paths: &Paths, port: Option<u16>) -> Result<(), String> {
         paths.env_file.display(),
         if created { "created" } else { "kept existing" }
     );
+
+    // After the configuration is written, not before. Locking the directory first would
+    // strip the running installer's own access along with everyone else's, which is
+    // survivable for an elevated process (Administrators keep Full control) but depends
+    // on the caller's token for no benefit — the configuration file carries its own
+    // explicit ACL from the moment it is created, so nothing is exposed by this order.
+    //
+    // Everything created here afterwards inherits the lockdown: the database, its WAL
+    // sidecars, and the logs.
+    restrict_directory(&paths.data);
 
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CREATE_SERVICE)
         .map_err(|e| format!("open service manager (run as Administrator): {e}"))?;
@@ -546,6 +596,24 @@ fn install(paths: &Paths, port: Option<u16>) -> Result<(), String> {
         .set_description(DESCRIPTION)
         .map_err(|e| format!("set description: {e}"))?;
 
+    // Plain automatic start is the default, and the reasoning is worth keeping: the
+    // service binds a socket and opens a file, depending on nothing that arrives late
+    // in boot, and it reports RUNNING to the SCM before it spawns anything — so it
+    // cannot trip the 30-second start timeout, and a child that fails early is retried
+    // by the supervisor rather than left dead. A shop opening in the morning wants the
+    // API up at boot, not two minutes later, which is what delayed start costs.
+    //
+    // `--delayed` exists for the machine that disagrees. If a merchant's PC turns out
+    // to start the service before something it needs (an antivirus filter driver
+    // holding the disk, a domain profile that has not applied), this moves it after
+    // the boot rush without a rebuild. `sc config WalaaApi start= delayed-auto` does
+    // the same thing on an already-installed machine.
+    if delayed {
+        service
+            .set_delayed_auto_start(true)
+            .map_err(|e| format!("set delayed auto-start: {e}"))?;
+    }
+
     // Restart on failure. Without this a crash loop ends after the first crash and
     // the shop discovers it when a customer is already at the till.
     service
@@ -573,7 +641,10 @@ fn install(paths: &Paths, port: Option<u16>) -> Result<(), String> {
         .set_failure_actions_on_non_crash_failures(true)
         .map_err(|e| format!("set failure action flag: {e}"))?;
 
-    println!("  service:       {SERVICE_NAME} registered (automatic start)");
+    println!(
+        "  service:       {SERVICE_NAME} registered ({})",
+        if delayed { "automatic — delayed start" } else { "automatic start" }
+    );
     ensure_firewall_rule(configured_port(paths, port));
     println!("  data:          {}", paths.data.display());
     println!("  logs:          {}", paths.logs.display());
@@ -662,7 +733,8 @@ fn usage() {
     println!(
         "\nwalaa-service — Windows Service host for the Walaa API\n\n\
          USAGE:\n  \
-         walaa-service install [--data-dir <path>] [--port <n>]   register and configure (Administrator)\n  \
+         walaa-service install [--data-dir <path>] [--port <n>] [--delayed]
+                                                                  register and configure (Administrator)\n  \
          walaa-service uninstall [--data-dir <path>]              stop and deregister; keeps the data\n  \
          walaa-service start | stop | status                      control the registered service\n  \
          walaa-service console [--data-dir <path>]                run in the foreground (diagnostics)\n  \
@@ -675,6 +747,7 @@ fn main() {
 
     let mut data_dir: Option<PathBuf> = None;
     let mut port: Option<u16> = None;
+    let mut delayed = false;
     let mut index = 1;
     while index < arguments.len() {
         match arguments[index].as_str() {
@@ -685,6 +758,10 @@ fn main() {
             "--port" if index + 1 < arguments.len() => {
                 port = arguments[index + 1].parse().ok();
                 index += 2;
+            }
+            "--delayed" => {
+                delayed = true;
+                index += 1;
             }
             _ => index += 1,
         }
@@ -705,7 +782,7 @@ fn main() {
     let result = match command {
         "run" => service_dispatcher::start(SERVICE_NAME, ffi_service_main)
             .map_err(|e| format!("service dispatcher: {e} (use `console` to run in a terminal)")),
-        "install" => install(&paths, port),
+        "install" => install(&paths, port, delayed),
         "uninstall" => uninstall(&paths),
         "start" | "stop" | "status" => control(command),
         "console" => {
