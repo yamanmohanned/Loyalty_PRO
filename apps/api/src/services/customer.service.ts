@@ -1,9 +1,16 @@
 import type { Customer } from '@prisma/client';
 import {
   CustomerCategorySchema,
+  formatCardNumber,
+  formatPhoneLocal,
+  maskPhoneLocal,
   normalizePhone,
   type CreateCustomerRequest,
   type Customer as CustomerDto,
+  type CustomerCard,
+  type CustomerSearchMatch,
+  type CustomerSearchResponse,
+  type PhoneE164,
   type UpdateCustomerRequest,
 } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
@@ -231,4 +238,95 @@ export async function updateCustomer(
     if (isUniqueViolation(error)) throw customerAlreadyExists();
     throw error;
   }
+}
+
+/** How many disambiguation candidates a name search returns before asking for more. */
+const SEARCH_LIMIT = 8;
+
+/**
+ * Finds a customer who has lost their card (§6.2 #5).
+ *
+ * One input, three shapes, most specific first:
+ *
+ *  1. **Card number** — sixteen digits. Signature-checked, so a mistyped one fails
+ *     without a query, exactly as at the scan screen.
+ *  2. **Phone number** — unique per merchant, so it resolves to one person.
+ *  3. **Name** — the fallback, and the only one that can return several people.
+ *
+ * The name branch returns masked phone numbers and a bounded list. That is the whole
+ * mitigation for the tension with CLAUDE.md §1.4: the operator can confirm "the one
+ * ending 4567?" with the customer present, and cannot read the shop's phone list off
+ * the screen.
+ */
+export async function searchCustomers(
+  merchantId: string,
+  query: string,
+): Promise<CustomerSearchResponse> {
+  const trimmed = query.trim();
+
+  const toMatch = (customer: Customer): CustomerSearchMatch => ({
+    id: customer.id,
+    name: customer.name,
+    phoneMasked: maskPhoneLocal(customer.phone as PhoneE164),
+    createdAt: customer.createdAt.toISOString(),
+  });
+
+  if (looksLikeBarcodeToken(trimmed)) {
+    if (!verifyBarcodeToken(trimmed, env.QR_TOKEN_SECRET)) return { matches: [], truncated: false };
+    const byToken = await prisma.customer.findFirst({
+      where: { barcodeToken: canonicalizeBarcodeToken(trimmed), merchantId, isActive: true },
+    });
+    return { matches: byToken ? [toMatch(byToken)] : [], truncated: false };
+  }
+
+  const phone = normalizePhone(trimmed);
+  if (phone) {
+    const byPhone = await prisma.customer.findUnique({
+      where: { merchantId_phone: { merchantId, phone } },
+    });
+    return {
+      matches: byPhone && byPhone.isActive ? [toMatch(byPhone)] : [],
+      truncated: false,
+    };
+  }
+
+  // Name. One extra row is fetched purely to answer "is there more?" — the operator
+  // needs to know their list is incomplete, or they will confidently pick the wrong
+  // person from a truncated one.
+  const byName = await prisma.customer.findMany({
+    where: { merchantId, isActive: true, name: { contains: trimmed } },
+    orderBy: { createdAt: 'desc' },
+    take: SEARCH_LIMIT + 1,
+  });
+
+  return {
+    matches: byName.slice(0, SEARCH_LIMIT).map(toMatch),
+    truncated: byName.length > SEARCH_LIMIT,
+  };
+}
+
+/**
+ * The card details for a reprint.
+ *
+ * Reissues the SAME number (§6.2 #5). A new one would sever the customer from their
+ * own purchase history, which is the one thing a loyalty programme may never do.
+ */
+export async function getCustomerCard(
+  merchantId: string,
+  customerId: string,
+): Promise<CustomerCard> {
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, merchantId, isActive: true },
+  });
+  if (!customer) throw notFound('الزبون غير موجود');
+
+  return {
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone,
+    phoneLocal: formatPhoneLocal(customer.phone as PhoneE164),
+    barcodeToken: customer.barcodeToken,
+    cardNumberFormatted: formatCardNumber(customer.barcodeToken),
+    createdAt: customer.createdAt.toISOString(),
+  };
 }

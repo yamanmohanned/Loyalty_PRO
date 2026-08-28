@@ -171,3 +171,43 @@ export function ensureSqliteDirectory(databaseUrl: string): void {
   if (!path || !isAbsolute(path)) return;
   mkdirSync(dirname(path), { recursive: true });
 }
+
+/** Explicit path to the built Loyalty Station bundle. */
+const STATION_DIR_VAR = 'WALAA_STATION_DIR';
+
+/**
+ * Where the built Loyalty Station lives, if it is built at all.
+ *
+ * The API serves the Station itself, on the same port, so the tablet browses to
+ * `http://<manager-lan-ip>:<port>` and there is no second web server to install or
+ * keep running (§12.3).
+ *
+ * Resolution mirrors the migrations directory:
+ *
+ *  1. `WALAA_STATION_DIR` — set by the service host.
+ *  2. `<cwd>/station` — the installed layout, where the staged runtime is the
+ *     working directory.
+ *  3. `<repo>/apps/station/dist` — a development build, found by walking up.
+ *
+ * Returns `null` when nothing is built. That is a normal state, not an error: during
+ * development the Station runs on its own Vite server with hot reload, and the API
+ * has no business serving a stale copy of it.
+ */
+export function resolveStationDir(startDir: string = process.cwd()): string | null {
+  const explicit = process.env[STATION_DIR_VAR];
+  if (explicit && explicit.trim()) {
+    const path = resolve(explicit.trim());
+    return existsSync(join(path, 'index.html')) ? path : null;
+  }
+
+  let current = resolve(startDir);
+  const { root } = parse(current);
+
+  for (;;) {
+    for (const candidate of [join(current, 'station'), join(current, 'apps', 'station', 'dist')]) {
+      if (existsSync(join(candidate, 'index.html'))) return candidate;
+    }
+    if (current === root) return null;
+    current = dirname(current);
+  }
+}

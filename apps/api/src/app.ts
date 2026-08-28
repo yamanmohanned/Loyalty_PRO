@@ -8,6 +8,7 @@ import { auth } from './plugins/auth';
 import { registerErrorHandler } from './plugins/error-handler';
 import { registerZodValidation } from './plugins/zod-validation';
 import { registerRealtime } from './plugins/realtime';
+import { registerStation } from './plugins/station';
 import { authRoutes } from './routes/auth.routes';
 import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
@@ -114,6 +115,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // and authenticates its own handshake token (browsers cannot set headers on a
   // WebSocket upgrade).
   await registerRealtime(app);
+
+  // The Loyalty Station's own files, when a build exists (§12.3). Also after auth,
+  // for the same reason: its routes opt out explicitly rather than by accident.
+  await registerStation(app);
 
   // Liveness/readiness. Public by necessity — a probe carries no token.
   app.get('/health', { config: { public: true } }, async () => {

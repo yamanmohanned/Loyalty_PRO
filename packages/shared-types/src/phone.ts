@@ -84,3 +84,17 @@ export function formatPhoneLocal(phone: PhoneE164): string {
   if (national.length !== 10) return phone;
   return `0${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}`;
 }
+
+/**
+ * Hides the middle of a phone number for a disambiguation list: `0770 ••• 4567`.
+ *
+ * Used where the station shows several possible matches for a name search (§6.2 #5).
+ * The operator needs enough to ask "is it the one ending 4567?" with the customer
+ * standing in front of them — and no more than that, so a name search cannot be
+ * turned into a way to harvest the shop's phone list.
+ */
+export function maskPhoneLocal(phone: PhoneE164): string {
+  const national = phone.replace(`+${DEFAULT_COUNTRY_CALLING_CODE}`, '');
+  if (national.length !== 10) return '••••';
+  return `0${national.slice(0, 3)} ••• ${national.slice(6)}`;
+}

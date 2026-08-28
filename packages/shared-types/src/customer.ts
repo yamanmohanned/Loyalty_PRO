@@ -74,3 +74,68 @@ export const CustomerListQuerySchema = z
   .strict();
 
 export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
+
+/* ── Reprint lookup (§6.2 #5) ──────────────────────────────────────────────── */
+
+/**
+ * Finding a customer who has lost their card.
+ *
+ * One field takes all three identifiers: a card number (16 digits), a phone number,
+ * or a name. The station operator should not have to classify the input before
+ * typing it — the shapes are distinguishable, so the server classifies it.
+ *
+ * **On name search.** CLAUDE.md §1.4 forbids name lookup as an *identification*
+ * method, and that ban stands where it was aimed: the scan hot path, where a queue
+ * is waiting and only a unique identifier will do. §6.2 #5 asks for it here, in the
+ * reprint flow, and this is a different problem — the customer is standing at the
+ * counter without the card that would identify them, and the alternative to a name
+ * search is turning them away. It returns masked phone numbers and a short list, so
+ * it disambiguates without becoming a way to read out the shop's customer list.
+ */
+export const CustomerSearchQuerySchema = z
+  .object({
+    query: z.string().trim().min(2, 'أدخل حرفين على الأقل').max(120),
+  })
+  .strict();
+
+export type CustomerSearchQuery = z.infer<typeof CustomerSearchQuerySchema>;
+
+export const CustomerSearchMatchSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  /** `0770 ••• 4567` — enough to confirm with the person, not enough to harvest. */
+  phoneMasked: z.string(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export type CustomerSearchMatch = z.infer<typeof CustomerSearchMatchSchema>;
+
+export const CustomerSearchResponseSchema = z.object({
+  matches: z.array(CustomerSearchMatchSchema),
+  /** True when more customers matched than were returned — narrow the search. */
+  truncated: z.boolean(),
+});
+
+export type CustomerSearchResponse = z.infer<typeof CustomerSearchResponseSchema>;
+
+/**
+ * What the station needs to reprint a card.
+ *
+ * A separate call from the search on purpose: a name search returns a list without
+ * card numbers in it, and the number is fetched one customer at a time, after the
+ * operator has confirmed which person is in front of them.
+ */
+export const CustomerCardSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  phone: z.string(),
+  /** `0770 123 4567` — the form printed on the card and read back by a person. */
+  phoneLocal: z.string(),
+  /** The 16 digits, bare, for the barcode. */
+  barcodeToken: z.string(),
+  /** `4821 0093 7746 1152` — the same digits, grouped for printing and reading. */
+  cardNumberFormatted: z.string(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export type CustomerCard = z.infer<typeof CustomerCardSchema>;
