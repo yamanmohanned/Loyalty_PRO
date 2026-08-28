@@ -1,6 +1,6 @@
-import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
+import { resolveEnvFile } from './paths';
 
 /**
  * Validated configuration (CLAUDE.md §7.6).
@@ -10,11 +10,18 @@ import { z } from 'zod';
  * `process.env` directly — that is how a typo becomes a production outage.
  */
 
-// Load the repo-root .env when running from apps/api, then any local override.
-// fileURLToPath, not URL.pathname: on Windows the latter yields "/E:/loyalty/.env",
-// which dotenv cannot open.
-loadDotenv({ path: fileURLToPath(new URL('../../../../.env', import.meta.url)) });
+// Configuration comes from one file, chosen by `resolveEnvFile()` — `WALAA_ENV_FILE`
+// when the service host sets it, otherwise the repository `.env`, otherwise the
+// installed `walaa.env` in the data directory (§12.11 spells out why the repository
+// outranks the installed file). Real environment variables always win: dotenv never
+// overwrites what is already set, which is how the test runner and the service host
+// inject their own values.
+const envFile = resolveEnvFile();
+if (envFile) loadDotenv({ path: envFile });
 loadDotenv();
+
+/** The file configuration was read from, for the boot log. `null` when the process was handed a fully populated environment. */
+export const configSource = envFile;
 
 /** Secrets must be long enough to be worth having. Rejects the .env.example placeholders. */
 const SecretSchema = z
@@ -35,8 +42,15 @@ const EnvSchema = z.object({
     .string()
     // Defaults cover the Tauri webview and the Vite dev server. A deployment on a
     // LAN may need the manager machine's own address added.
-    .default('http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://localhost:4000')
-    .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean)),
+    .default(
+      'http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://localhost:4000',
+    )
+    .transform((v) =>
+      v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   JWT_ACCESS_SECRET: SecretSchema,

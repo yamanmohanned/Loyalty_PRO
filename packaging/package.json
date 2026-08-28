@@ -1,0 +1,16 @@
+{
+  "name": "@walaa/packaging",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Windows distribution — staged API runtime, service host, NSIS installer wiring.",
+  "scripts": {
+    "stage": "node scripts/stage.mjs",
+    "verify": "node scripts/verify-runtime.mjs",
+    "service:build": "cargo build --release --manifest-path service-host/Cargo.toml",
+    "verify:service": "node scripts/verify-service.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "walaa-service"
+version = "1.0.0"
+edition = "2021"
+description = "Windows Service host for the Walaa API (ولاء)"
+publish = false
+
+[[bin]]
+name = "walaa-service"
+path = "src/main.rs"
+
+[dependencies]
+windows-service = "0.7"
+rand = "0.8"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

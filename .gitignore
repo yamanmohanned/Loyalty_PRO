@@ -44,3 +44,6 @@ coverage/
 apps/api/prisma/*.db
 apps/api/prisma/*.db-wal
 apps/api/prisma/*.db-shm
+
+# rust build output (tauri app shell, service host)
+target/

@@ -29,7 +29,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -50,8 +50,12 @@
         "languages": ["Arabic", "English"],
         "displayLanguageSelector": false,
         "installMode": "perMachine",
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "./nsis/hooks.nsh"
       }
+    },
+    "resources": {
+      "../../../packaging/dist/runtime": "runtime"
     }
   },
   "plugins": {

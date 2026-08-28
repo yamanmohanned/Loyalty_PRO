@@ -627,3 +627,101 @@ so it is checked rather than assumed.
 lands in V3-5 and the Drive integration in V3-6, so those screens show "not
 installed" and "not connected" rather than a reassuring placeholder. A backup screen
 that looks healthy while backing nothing up is worse than no screen.
+
+### 12.11 Packaging and distribution — 2026-08-28
+*(packaging spike, run before V3-4; refines §12.3, which stated the intent)*
+
+The spike answered one question: can §12.3's "one NSIS installer covering Tauri app
++ API service + SQLite" actually be built? It can. The machinery is in
+`packaging/`, and `packaging/README.md` carries the operator-facing detail. What
+follows is what the answer cost and what it changed.
+
+**"A single binary" was the wrong target. One installer is the right one.** §12.3
+asked for the API "compiled to a single binary". Node's SEA can embed the bundle
+into a copy of `node.exe`, but the Prisma query engine (21 MB) and the Argon2 addon
+are native `.node` files that must sit beside the executable either way — so SEA
+yields a single *file* in a directory that is still a directory, with no size saving
+and an experimental-feature warning on every boot. Rejected. The property the
+merchant cares about is **one setup file and no second installer**, and the NSIS
+bundle delivers that. `node.exe` (86 MB, MIT, redistributable) is staged alongside a
+plain CJS bundle.
+
+**The installer is 30.1 MB.** 109 MB staged compresses to 30.1 MB of NSIS payload,
+against 2.1 MB for a control build with the runtime resource removed — the
+measurement that confirms the payload is really in there, since a solidly compressed
+NSIS archive gives up no filenames to inspection. 30 MB travels over WhatsApp, which
+is the constraint CLAUDE_v2.md §1 set.
+
+**The production bundle is CommonJS, not ESM.** The Prisma client is CJS and its
+entry point spreads a `require()`, which Node's named-export detection cannot see
+through — `import { PrismaClient }` from a pure-ESM bundle is a coin flip. CJS also
+removes `import.meta.url` from the equation, which mattered: the old config loader
+resolved the `.env` four directories up from its own source file, and in a bundle
+that path points nowhere. Configuration discovery now goes through
+`apps/api/src/config/paths.ts` and uses `process.cwd()` plus explicit environment
+variables, which behave identically in both worlds.
+
+**The Prisma CLI does not ship; the service migrates itself.** Shipping
+`prisma migrate deploy` would put tens of megabytes of developer tooling on a shop's
+PC to run once, and would make first boot depend on a subprocess whose failures the
+installer cannot report. `apps/api/src/lib/migrate.ts` applies the committed
+migration SQL directly and records it in **Prisma's own** `_prisma_migrations` table
+using **Prisma's own** checksum algorithm — a test asserts our checksum equals the
+one the CLI wrote, so a merchant's database stays legible to `prisma migrate status`
+during a support call. It fails closed: a changed migration file, or one left
+half-applied, stops the boot rather than serving a schema the code was not built
+against. Each migration runs in one transaction, so a failure leaves nothing behind.
+
+**Program files and data are separated, and uninstall never touches the data.**
+Everything writable — `walaa.db`, `walaa.env`, `logs/` — lives in
+`%PROGRAMDATA%\Walaa`; `Program Files` is read-only to the service account. An
+upgrade runs an uninstall first, so an uninstall that deleted data would eventually
+delete a shop's customers on a routine update.
+
+**Configuration file precedence puts the repository first.** `WALAA_ENV_FILE` (set
+by the service host) wins, then the repository `.env`, then
+`%PROGRAMDATA%\Walaa\walaa.env`. Preferring the checkout is deliberate: a developer
+who also has the product installed would otherwise find `pnpm dev` quietly reading
+the shop's configuration and writing to the shop's database. An installed service can
+never reach that branch — there is no workspace marker above `Program Files`.
+
+**Secrets are generated per installation and the file is locked down.**
+`walaa-service.exe install` writes `walaa.env` with three fresh 32-byte secrets, then
+strips inherited ACLs to SYSTEM and Administrators. A signing key baked into the
+installer would be identical in every shop, so a token minted on one merchant's
+machine would authenticate on every other. `%PROGRAMDATA%` grants read to all local
+users by default, and that file holds the JWT keys. **Consequence:** post-install
+`console` diagnostics must be run elevated. An existing file is never overwritten —
+rotating `QR_TOKEN_SECRET` would invalidate every loyalty card already printed.
+
+**Stopping the API needed a mechanism, not a signal.** Windows has no SIGTERM, and
+`GenerateConsoleCtrlEvent` requires a console that a service does not have. The
+remaining options were a control port on localhost — a new authenticated surface on a
+machine whose security model is "no inbound network" — or closing a pipe the child
+already holds. The host closes the child's stdin; the API treats that as a stop
+request when `WALAA_SUPERVISED=1`. Termination is the fallback after a 15-second
+grace period, which WAL makes survivable.
+
+**The service supervises, and Windows supervises the service.** The host restarts a
+dead API with exponential backoff (2s → 30s, reset after 60s of health), and the SCM
+failure actions restart the host itself. Verified by killing the API mid-run and
+watching it come back — `packaging/scripts/verify-service.mjs`.
+
+**The firewall rule is part of installation.** Windows blocks inbound 4000 by
+default, so without it the Loyalty Station never connects and the failure presents as
+a broken app rather than a closed port. The rule covers the **private and domain**
+profiles only; a shop network classified "Public" will not match it, and the V3-6
+setup guide must include that check.
+
+**What is verified, and what is not.** Two clean-room suites run unelevated and pass:
+`verify` boots the staged runtime from outside the repository with a constructed
+environment, proving it provisions its own database with no Prisma CLI, no repo and
+no global Node; `verify:service` proves secret generation, ACL hardening,
+supervision, crash recovery and graceful shutdown. **SCM registration needs
+Administrator and was not exercised here** — the elevated command sequence and its
+expected output are in `packaging/README.md`, including the reboot test that matters
+most.
+
+**Open: the installer is unsigned.** SmartScreen will warn at every merchant on first
+run. Code signing is a purchasing decision, not a technical one, and is not part of
+this spike.
