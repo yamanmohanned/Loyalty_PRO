@@ -1,0 +1,40 @@
+{
+  "name": "@walaa/station",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walaa Loyalty Station — the customer-facing scan point beside the register (CLAUDE_v3.md §6).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fontsource/cairo": "^5.1.1",
+    "@fontsource/ibm-plex-mono": "^5.1.1",
+    "@fontsource/ibm-plex-sans-arabic": "^5.1.1",
+    "@tanstack/react-query": "^5.64.1",
+    "@walaa/shared-types": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.474.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@walaa/config": "workspace:*",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  }
+}

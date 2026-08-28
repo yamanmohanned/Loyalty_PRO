@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* An appliance beside a till, not a web page: no accidental text selection when
+       a sleeve brushes the screen, and no rubber-banding on a tablet. */
+    -webkit-user-select: none;
+    user-select: none;
+    /* iOS Safari and older Android browsers otherwise show a grey flash on tap. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    overscroll-behavior: none;
+  }
+
+  input {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+    letter-spacing: -0.01em;
+  }
+
+  /* Money and card numbers render monospace so digits align and cannot be misread
+     across a counter. */
+  .amount {
+    @apply font-mono font-bold tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/**
+ * Thermal printing (CLAUDE_v3.md §6.3).
+ *
+ * The station has its own small thermal printer, separate from the cashier's. The
+ * browser's print pipeline drives it, so what matters here is that the printed page
+ * is 80 mm wide, has no margins the printer will silently crop, and carries nothing
+ * from the screen.
+ *
+ * `visibility` rather than `display: none` on the rest of the page: hiding by
+ * display collapses the layout and some engines then mis-measure the print root's
+ * width, which on thermal paper shows up as a barcode cropped down one side.
+ *
+ * Colours are forced to pure black on white. A thermal head has one ink and no
+ * greys; a "steel" caption that looks subtle on screen dithers into something
+ * unreadable at 203 dpi.
+ */
+@media print {
+  @page {
+    /* `auto` height: a receipt is a continuous roll, not a sheet. */
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 80mm;
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #print-root,
+  #print-root * {
+    visibility: visible;
+    color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  #print-root {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    width: 80mm;
+    padding: 4mm 3mm 8mm;
+  }
+
+  /* Never split a slip's figures or a card's barcode across a tear. */
+  .print-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

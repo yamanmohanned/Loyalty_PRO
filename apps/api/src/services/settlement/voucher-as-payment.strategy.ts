@@ -3,6 +3,7 @@ import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
   type SettlementContext,
+  type SettlementNarrative,
   type SettlementOutcome,
 } from './strategy';
 
@@ -26,11 +27,8 @@ export const voucherAsPaymentStrategy: DiscountSettlementStrategy = {
   label: 'قسيمة كوسيلة دفع',
   requiresSplitPayment: true,
 
-  settle(context: SettlementContext): SettlementOutcome {
+  describe(context: SettlementContext): SettlementNarrative {
     return {
-      code: generateVoucherCode(),
-      value: context.discountValue,
-      strategy: 'VOUCHER_AS_PAYMENT',
       // The cashier keys the invoice at full value and takes this slip as part of
       // the payment. Phrased as an action, with both numbers present, so nothing
       // has to be calculated at the till.
@@ -41,6 +39,15 @@ export const voucherAsPaymentStrategy: DiscountSettlementStrategy = {
       accountingNote:
         'الفاتورة مسجّلة بقيمتها الكاملة في نظام نقاط البيع. القسيمة تُحتسب كوسيلة دفع، ' +
         'فيتطابق النقد المُحصّل + القسائم المُستلمة مع إجمالي المبيعات المسجّل.',
+    };
+  },
+
+  settle(context: SettlementContext): SettlementOutcome {
+    return {
+      code: generateVoucherCode(),
+      value: context.discountValue,
+      strategy: 'VOUCHER_AS_PAYMENT',
+      ...this.describe(context),
     };
   },
 };

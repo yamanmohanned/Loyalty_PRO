@@ -63,12 +63,27 @@ export interface SettlementOutcome {
   accountingNote: string;
 }
 
+/** The words, without minting anything. */
+export type SettlementNarrative = Pick<SettlementOutcome, 'cashierInstruction' | 'accountingNote'>;
+
 export interface DiscountSettlementStrategy {
   readonly name: SettlementStrategyName;
   /** Arabic label for the settings UI. */
   readonly label: string;
   /** Whether this strategy needs the POS to support split payment. */
   readonly requiresSplitPayment: boolean;
+
+  /**
+   * The instruction and the accounting note for a given settlement.
+   *
+   * Separate from `settle` because a slip can need reprinting long after the
+   * voucher was issued — a station that lost the response and scanned again, or a
+   * customer whose paper jammed. Regenerating the words is safe; regenerating a
+   * voucher code would put a second code on a discount that already has one, and
+   * the end-of-day reconciliation would then be short a slip it is looking for.
+   */
+  describe(context: SettlementContext): SettlementNarrative;
+
   settle(context: SettlementContext): SettlementOutcome;
 }
 

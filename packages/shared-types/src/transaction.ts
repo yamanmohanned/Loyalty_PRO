@@ -3,7 +3,7 @@ import { CaptureModeSchema, DiscountTypeSchema } from './enums';
 import { CapturedInvoiceSchema } from './invoice';
 import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
 import { PeriodKeySchema } from './period';
-import { VoucherSchema } from './voucher';
+import { DiscountSlipSchema, VoucherSchema } from './voucher';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -113,7 +113,20 @@ export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
  * a discount" is a sales prompt, and telling a paying customer they failed at the
  * till is the opposite of a loyalty programme.
  */
-export const ScanOutcomeSchema = z.enum(['QUALIFIED', 'NOT_QUALIFIED', 'UNKNOWN_CARD', 'NO_PENDING_INVOICE']);
+export const ScanOutcomeSchema = z.enum([
+  'QUALIFIED',
+  'NOT_QUALIFIED',
+  'UNKNOWN_CARD',
+  'NO_PENDING_INVOICE',
+  /**
+   * The spend was credited but no discount was issued, because the scan reached the
+   * server after the sale had already been settled — a station's offline queue
+   * flushing. Distinct from NOT_QUALIFIED on purpose: the customer *did* qualify,
+   * and a report that conflated the two would understate how often the network cost
+   * someone their discount.
+   */
+  'LINKED_WITHOUT_DISCOUNT',
+]);
 export type ScanOutcome = z.infer<typeof ScanOutcomeSchema>;
 
 export const ScanCardResponseSchema = z.object({
@@ -128,8 +141,19 @@ export const ScanCardResponseSchema = z.object({
     .nullable(),
   transaction: TransactionSchema.nullable(),
   balance: CustomerBalanceSchema.nullable(),
-  /** Present only on QUALIFIED — the slip to print. */
+  /** Present only on QUALIFIED — the issued voucher record. */
   voucher: VoucherSchema.nullable(),
+  /**
+   * Present only on QUALIFIED — everything printed on the paper slip, composed
+   * server-side (§6.3).
+   *
+   * Composed there rather than in the station because the cashier instruction comes
+   * from the settlement strategy, and which strategy is active is a merchant setting
+   * with accounting consequences (§9). A station that phrased its own instruction
+   * would be business logic in the UI (§11), and the failure mode is a cashier told
+   * to take short payment with no voucher behind it.
+   */
+  slip: DiscountSlipSchema.nullable(),
   /** The progress sentence shown on NOT_QUALIFIED. */
   progressMessage: z.string().nullable(),
 });

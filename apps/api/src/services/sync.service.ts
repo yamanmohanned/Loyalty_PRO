@@ -91,7 +91,10 @@ async function applyOperation(
         branchId: context.branchId,
         stationId: operation.payload.stationId ?? context.deviceId,
       };
-      const response = await scanCard(scanContext, operation.payload);
+      // No discount on a replayed scan: the customer has already paid and left, so a
+      // voucher issued now would be one the drawer cannot produce at closing time.
+      // The spend is still credited — see ScanOptions.issueDiscount.
+      const response = await scanCard(scanContext, operation.payload, { issueDiscount: false });
       return { entityId: response.transaction?.id ?? null, status: 'APPLIED' };
     }
 

@@ -191,7 +191,11 @@ describe('voucher lifecycle', () => {
 
   it('refuses a second redemption', async () => {
     const voucherId = await issue();
-    await redeemVoucher({ merchantId: world.merchantId, voucherId, actorUserId: world.stationUserId });
+    await redeemVoucher({
+      merchantId: world.merchantId,
+      voucherId,
+      actorUserId: world.stationUserId,
+    });
 
     await expect(
       redeemVoucher({ merchantId: world.merchantId, voucherId, actorUserId: world.stationUserId }),
@@ -204,7 +208,11 @@ describe('voucher lifecycle', () => {
 
     const attempts = await Promise.allSettled(
       Array.from({ length: 6 }, () =>
-        redeemVoucher({ merchantId: world.merchantId, voucherId, actorUserId: world.stationUserId }),
+        redeemVoucher({
+          merchantId: world.merchantId,
+          voucherId,
+          actorUserId: world.stationUserId,
+        }),
       ),
     );
 
@@ -240,7 +248,11 @@ describe('voucher lifecycle', () => {
 
   it('audits every redemption', async () => {
     const voucherId = await issue();
-    await redeemVoucher({ merchantId: world.merchantId, voucherId, actorUserId: world.stationUserId });
+    await redeemVoucher({
+      merchantId: world.merchantId,
+      voucherId,
+      actorUserId: world.stationUserId,
+    });
 
     const audit = await prisma.auditLog.findFirst({
       where: { action: 'voucher.redeemed', entityId: voucherId },
@@ -453,5 +465,134 @@ describe('offline sync reconciliation (§7.2)', () => {
       operations: [ingestOp('OFF-1', 10_000)],
     });
     expect(() => new Date(response.serverTime).toISOString()).not.toThrow();
+  });
+});
+
+describe('the printed slip (§6.3)', () => {
+  it('carries every figure the cashier needs, so nothing is calculated at the till', async () => {
+    await capture('INV-SLIP-1', 90_000);
+    const outcome = await scan('INV-SLIP-1');
+
+    expect(outcome.outcome).toBe('QUALIFIED');
+    const slip = outcome.slip;
+    expect(slip).not.toBeNull();
+    if (!slip) return;
+
+    expect(slip.invoiceId).toBe('INV-SLIP-1');
+    expect(slip.customerName).toBe('حسين علي');
+    expect(slip.voucherCode).toBe(outcome.voucher?.code);
+    expect(slip.amountBefore).toBe(90_000);
+    expect(slip.discountValue).toBe(outcome.voucher?.value);
+    // The arithmetic the cashier must never have to do themselves.
+    expect(slip.amountBefore - slip.discountValue).toBe(slip.amountAfter);
+    expect(slip.discountLabel).toMatch(/٪|د\.ع/);
+    expect(slip.cashierInstruction.length).toBeGreaterThan(20);
+  });
+
+  it('is absent when no discount was earned', async () => {
+    // A slip with nothing on it is a slip a cashier might still act on.
+    await capture('INV-SLIP-2', 1_000);
+    const outcome = await scan('INV-SLIP-2');
+
+    expect(outcome.outcome).toBe('NOT_QUALIFIED');
+    expect(outcome.slip).toBeNull();
+    expect(outcome.voucher).toBeNull();
+  });
+
+  it('reprints identically when a station retries a scan it lost the answer to', async () => {
+    await capture('INV-SLIP-3', 120_000);
+    const first = await scan('INV-SLIP-3');
+    const retry = await scan('INV-SLIP-3');
+
+    expect(first.slip).not.toBeNull();
+    expect(retry.slip).not.toBeNull();
+    // The same paper, not a second discount and not a second voucher code — the
+    // end-of-day reconciliation is looking for exactly one slip per discount.
+    expect(retry.slip?.voucherCode).toBe(first.slip?.voucherCode);
+    expect(retry.slip?.amountAfter).toBe(first.slip?.amountAfter);
+    expect(retry.slip?.cashierInstruction).toBe(first.slip?.cashierInstruction);
+  });
+
+  it('words the slip with the strategy recorded on the voucher, not today setting', async () => {
+    await capture('INV-SLIP-4', 100_000);
+    const issued = await scan('INV-SLIP-4');
+    expect(issued.voucher?.settlementStrategy).toBe('VOUCHER_AS_PAYMENT');
+    expect(issued.slip?.cashierInstruction).toContain('لا تعدّل الفاتورة');
+
+    // The merchant switches strategy after the slip is already in the drawer.
+    await prisma.discountSettings.updateMany({
+      where: { merchantId: world.merchantId },
+      data: { settlementStrategy: 'DAILY_PROMOTIONAL_EXPENSE' },
+    });
+
+    const reprint = await scan('INV-SLIP-4');
+    // Still the original wording: a cashier holding that slip was told to do one
+    // thing, and re-reading it must not tell them to do the opposite.
+    expect(reprint.slip?.cashierInstruction).toBe(issued.slip?.cashierInstruction);
+    expect(reprint.slip?.cashierInstruction).toContain('لا تعدّل الفاتورة');
+  });
+});
+
+describe('a scan that arrives after the sale was settled (§7.2 offline queue)', () => {
+  it('credits the spend but issues no discount and no voucher', async () => {
+    await capture('INV-OFF-1', 150_000);
+
+    // What the sync route does with a queued scan: the customer paid full price at
+    // the till hours ago, so a voucher issued now would be one the cash drawer
+    // cannot produce at closing time.
+    const outcome = await scanCard(
+      station,
+      { barcodeToken: world.customerBarcode, invoiceId: 'INV-OFF-1' },
+      { issueDiscount: false },
+    );
+
+    expect(outcome.outcome).toBe('LINKED_WITHOUT_DISCOUNT');
+    expect(outcome.voucher).toBeNull();
+    expect(outcome.slip).toBeNull();
+
+    const stored = await prisma.transaction.findFirstOrThrow({
+      where: { merchantId: world.merchantId, invoiceId: 'INV-OFF-1' },
+    });
+    // Attributed to the customer…
+    expect(stored.customerId).toBe(world.customerId);
+    // …recorded at what they actually paid.
+    expect(stored.discountValue).toBe(0);
+    expect(stored.amountNet).toBe(150_000);
+    expect(stored.discountType).toBe('NONE');
+
+    const vouchers = await prisma.voucher.count({ where: { transactionId: stored.id } });
+    expect(vouchers).toBe(0);
+  });
+
+  it('still moves the customer toward their next discount', async () => {
+    // Losing the discount on one basket is the cost of the network being down.
+    // Losing the progress as well would penalise the customer twice for it.
+    await capture('INV-OFF-2', 150_000);
+    const outcome = await scanCard(
+      station,
+      { barcodeToken: world.customerBarcode, invoiceId: 'INV-OFF-2' },
+      { issueDiscount: false },
+    );
+
+    expect(outcome.balance?.cumulativeAmount).toBe(150_000);
+  });
+
+  it('is distinguishable from a customer who simply did not qualify', async () => {
+    await capture('INV-OFF-3', 1_000);
+    const small = await scanCard(station, {
+      barcodeToken: world.customerBarcode,
+      invoiceId: 'INV-OFF-3',
+    });
+    expect(small.outcome).toBe('NOT_QUALIFIED');
+
+    await capture('INV-OFF-4', 150_000);
+    const deferred = await scanCard(
+      station,
+      { barcodeToken: world.customerBarcode, invoiceId: 'INV-OFF-4' },
+      { issueDiscount: false },
+    );
+    // A report that conflated these two would understate how often the network cost
+    // a customer a discount they had earned.
+    expect(deferred.outcome).toBe('LINKED_WITHOUT_DISCOUNT');
   });
 });

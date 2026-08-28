@@ -3,6 +3,7 @@ import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
   type SettlementContext,
+  type SettlementNarrative,
   type SettlementOutcome,
 } from './strategy';
 
@@ -29,11 +30,8 @@ export const dailyPromotionalExpenseStrategy: DiscountSettlementStrategy = {
   label: 'مصروف ترويجي يومي',
   requiresSplitPayment: false,
 
-  settle(context: SettlementContext): SettlementOutcome {
+  describe(context: SettlementContext): SettlementNarrative {
     return {
-      code: generateVoucherCode(),
-      value: context.discountValue,
-      strategy: 'DAILY_PROMOTIONAL_EXPENSE',
       // Full cash is collected. The slip is the customer's proof and the store's
       // record; the value is returned to the customer per the merchant's chosen
       // mechanism (immediate refund from the drawer against the slip, or credit).
@@ -44,6 +42,15 @@ export const dailyPromotionalExpenseStrategy: DiscountSettlementStrategy = {
       accountingNote:
         'الفاتورة مُحصّلة بالكامل نقداً. تُجمع القسائم في نهاية اليوم وتُقيَّد كمصروف ' +
         'ترويجي واحد، فلا يظهر أي عجز في الصندوق.',
+    };
+  },
+
+  settle(context: SettlementContext): SettlementOutcome {
+    return {
+      code: generateVoucherCode(),
+      value: context.discountValue,
+      strategy: 'DAILY_PROMOTIONAL_EXPENSE',
+      ...this.describe(context),
     };
   },
 };

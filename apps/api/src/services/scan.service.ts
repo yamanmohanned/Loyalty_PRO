@@ -14,7 +14,13 @@ import {
 import { forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
-import { computeCumulativeAmount, getActiveRules, getPeriodContext, nextThreshold, periodKeyFor } from './balance.service';
+import {
+  computeCumulativeAmount,
+  getActiveRules,
+  getPeriodContext,
+  nextThreshold,
+  periodKeyFor,
+} from './balance.service';
 import { findPendingInvoice } from './ingestion.service';
 import { publish } from './realtime.service';
 import { getSettlementStrategy } from './settlement';
@@ -78,10 +84,30 @@ function serializeVoucher(voucher: {
   };
 }
 
+export interface ScanOptions {
+  /**
+   * Whether this scan may issue a discount and a voucher. Default true.
+   *
+   * The offline queue sets it false, and the reason is an accounting one. A scan
+   * queued while the station was unreachable replays *after* the customer has paid
+   * and left. Issuing a discount then would create a voucher the books expect to
+   * find in the drawer and a slip that was never printed — precisely the cash-vs-POS
+   * discrepancy §0 rule 3 forbids, arriving hours later with nobody able to explain
+   * it.
+   *
+   * The spend is still credited to the customer, because they did buy the goods and
+   * the shop's network is not their fault. They lose the discount on that one
+   * basket, not their progress toward the next.
+   */
+  issueDiscount?: boolean;
+}
+
 export async function scanCard(
   context: ScanContext,
   request: ScanCardRequest,
+  options: ScanOptions = {},
 ): Promise<ScanCardResponse> {
+  const issueDiscount = options.issueDiscount ?? true;
   const branchId = context.branchId;
   if (!branchId) throw forbidden('هذه المحطة غير مرتبطة بفرع');
 
@@ -114,6 +140,7 @@ export async function scanCard(
       transaction: null,
       balance: null,
       voucher: null,
+      slip: null,
       progressMessage: null,
     };
   }
@@ -154,8 +181,42 @@ export async function scanCard(
         transaction: serializeTransaction(alreadyAttributed, alreadyAttributed.branch.code),
         balance,
         voucher: voucher ? serializeVoucher(voucher) : null,
-        progressMessage:
-          alreadyAttributed.discountValue > 0 ? null : progressMessage(balance),
+        // The slip is rebuilt so a station that lost the first response can still
+        // print the paper the customer is waiting for. The words come from the
+        // strategy recorded ON THE VOUCHER, not from today's setting: a merchant who
+        // switches strategy must not retroactively reword slips already in the
+        // drawer (§5.2).
+        slip: voucher
+          ? buildDiscountSlip({
+              voucherCode: voucher.code,
+              invoiceId: alreadyAttributed.invoiceId,
+              customerName: customer.name,
+              amountGross: alreadyAttributed.amountGross,
+              discountLabel: formatDiscountLabel(
+                alreadyAttributed.discountType,
+                alreadyAttributed.discountRate,
+              ),
+              discountValue: alreadyAttributed.discountValue,
+              amountNet: alreadyAttributed.amountNet,
+              issuedAt: voucher.issuedAt,
+              cashierInstruction: getSettlementStrategy(voucher.settlementStrategy).describe({
+                merchantId: context.merchantId,
+                transactionId: alreadyAttributed.id,
+                customerId: customer.id,
+                customerName: customer.name,
+                invoiceId: alreadyAttributed.invoiceId,
+                amountGross: alreadyAttributed.amountGross,
+                discountValue: alreadyAttributed.discountValue,
+                amountNet: alreadyAttributed.amountNet,
+                discountLabel: formatDiscountLabel(
+                  alreadyAttributed.discountType,
+                  alreadyAttributed.discountRate,
+                ),
+                issuedAt: voucher.issuedAt,
+              }).cashierInstruction,
+            })
+          : null,
+        progressMessage: alreadyAttributed.discountValue > 0 ? null : progressMessage(balance),
       };
     }
 
@@ -171,6 +232,7 @@ export async function scanCard(
       transaction: null,
       balance,
       voucher: null,
+      slip: null,
       progressMessage: null,
     };
   }
@@ -188,7 +250,7 @@ export async function scanCard(
   const priorTotals = await computeCumulativeAmount(customer.id, pending.periodKey);
   const cumulativeWithThis = priorTotals.cumulativeAmount + pending.amountGross;
 
-  const computation = computeDiscount({
+  const computed = computeDiscount({
     amountGross: pending.amountGross,
     cumulativeAmount: cumulativeWithThis,
     rules,
@@ -196,11 +258,21 @@ export async function scanCard(
     discountTypeSetting: settings.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE',
   });
 
+  // A deferred scan records what the customer actually paid: full price. Anything
+  // else would put a discount in the ledger that never reached the till.
+  const computation = issueDiscount
+    ? computed
+    : {
+        ...computed,
+        discountType: 'NONE' as const,
+        discountRate: 0,
+        discountValue: 0,
+        amountNet: pending.amountGross,
+        wasCapped: false,
+      };
+
   const now = new Date();
-  const discountLabel =
-    computation.discountType === 'PERCENTAGE'
-      ? `${computation.discountRate}٪`
-      : formatIqd(computation.discountRate);
+  const discountLabel = formatDiscountLabel(computation.discountType, computation.discountRate);
 
   const result = await prisma.$transaction(async (db) => {
     // Claim the invoice conditionally: `customerId: null` in the WHERE means two
@@ -223,6 +295,7 @@ export async function scanCard(
     if (claimed.count === 0) return null;
 
     let voucherRow = null;
+    let settlementNarrative: { cashierInstruction: string } | null = null;
 
     if (computation.discountValue > 0) {
       const strategy = getSettlementStrategy(settings.settlementStrategy);
@@ -242,6 +315,8 @@ export async function scanCard(
       // Written in the SAME transaction as the discount above. If this fails, the
       // discount rolls back with it — there is no state where a customer paid less
       // than the POS recorded with nothing in the books to explain it (§0 rule 3).
+      settlementNarrative = { cashierInstruction: outcome.cashierInstruction };
+
       voucherRow = await db.voucher.create({
         data: {
           merchantId: context.merchantId,
@@ -299,7 +374,7 @@ export async function scanCard(
       include: { branch: { select: { code: true } } },
     });
 
-    return { transaction: updated, voucher: voucherRow };
+    return { transaction: updated, voucher: voucherRow, narrative: settlementNarrative };
   });
 
   // Another station claimed the invoice first. Report it as nothing pending
@@ -317,6 +392,7 @@ export async function scanCard(
       transaction: null,
       balance,
       voucher: null,
+      slip: null,
       progressMessage: null,
     };
   }
@@ -341,7 +417,11 @@ export async function scanCard(
   }
 
   return {
-    outcome: computation.discountValue > 0 ? 'QUALIFIED' : 'NOT_QUALIFIED',
+    outcome: !issueDiscount
+      ? 'LINKED_WITHOUT_DISCOUNT'
+      : computation.discountValue > 0
+        ? 'QUALIFIED'
+        : 'NOT_QUALIFIED',
     customer: {
       id: customer.id,
       name: customer.name,
@@ -351,6 +431,20 @@ export async function scanCard(
     transaction: serializeTransaction(result.transaction, result.transaction.branch.code),
     balance,
     voucher: result.voucher ? serializeVoucher(result.voucher) : null,
+    slip:
+      result.voucher && result.narrative
+        ? buildDiscountSlip({
+            voucherCode: result.voucher.code,
+            invoiceId: result.transaction.invoiceId,
+            customerName: customer.name,
+            amountGross: result.transaction.amountGross,
+            discountLabel,
+            discountValue: computation.discountValue,
+            amountNet: computation.amountNet,
+            issuedAt: result.voucher.issuedAt,
+            cashierInstruction: result.narrative.cashierInstruction,
+          })
+        : null,
     progressMessage: computation.discountValue > 0 ? null : progressMessage(balance),
   };
 }
@@ -423,13 +517,19 @@ export function serializeTransaction(
     discountValue: t.discountValue,
     amountNet: t.amountNet,
     currency: 'IQD' as const,
-    captureMode: t.captureMode as 'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'SERIAL_BRIDGE' | 'NETWORK_PROXY' | 'MANUAL',
+    captureMode: t.captureMode as
+      'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'SERIAL_BRIDGE' | 'NETWORK_PROXY' | 'MANUAL',
     periodKey: t.periodKey,
     occurredAt: t.occurredAt.toISOString(),
     capturedAt: t.capturedAt.toISOString(),
     linkedAt: t.linkedAt ? t.linkedAt.toISOString() : null,
     createdAt: t.createdAt.toISOString(),
   };
+}
+
+/** `3٪` or `7,500 د.ع`, however the rule was configured. */
+function formatDiscountLabel(discountType: string, discountRate: number): string {
+  return discountType === 'PERCENTAGE' ? `${discountRate}٪` : formatIqd(discountRate);
 }
 
 /** Everything the station needs to print the discount slip (§6.3). */
