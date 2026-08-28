@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Search, Users } from 'lucide-react';
+import { formatCardNumber } from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
 import {
@@ -199,9 +200,12 @@ export function CustomerDetailScreen() {
             <p className="amount mt-2 text-2xl text-ink">{balance.transactionCount}</p>
           </Card>
           <Card className="p-6">
-            <p className="text-sm text-steel">رمز البطاقة</p>
-            <p className="mt-2 break-all font-mono text-xs text-steel selectable">
-              {customer.barcodeToken}
+            <p className="text-sm text-steel">رقم البطاقة</p>
+            {/* Grouped in fours and set at a readable size: since §12.12 this is a
+                16-digit number a manager reads down the phone to a customer who has
+                lost their card, not an opaque token nobody was ever meant to say. */}
+            <p className="selectable mt-2 font-mono text-lg tabular-nums tracking-[0.15em]">
+              {formatCardNumber(customer.barcodeToken)}
             </p>
           </Card>
         </div>
