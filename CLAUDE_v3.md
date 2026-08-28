@@ -781,6 +781,36 @@ in the morning wants the till working at boot, not two minutes later. `--delayed
 `sc config WalaaApi start= delayed-auto` on an installed machine) is there for the
 merchant PC that turns out to disagree.
 
+**The reboot test passed — 22/22 automated checks, 2026-08-28.** The evidence that
+matters: the service auto-started **10.7 seconds after boot and two seconds before the
+user logged in**, with the dashboard closed. §3's choice of a Windows Service over a
+Tauri sidecar is therefore validated, not assumed — the API is up before anyone touches
+the manager PC, which is what the Station and the capture agent depend on. Also
+confirmed on the real installation: the database at `C:\ProgramData\Walaa\walaa.db` with
+`SYSTEM:(I)(F)` and no `Users` entry, written to since boot; the listener on
+`0.0.0.0:4000` answering on the machine's LAN address; the firewall rule enabled on
+Domain and Private with the active profile Private.
+
+**Open: (d) from a second device, pending a network without client isolation.** A
+tablet on the same Wi-Fi could not reach `192.168.0.106:4000`. The operator's reading —
+AP/client isolation on the test router, not a packaging defect — is supported by what
+is already proven: the socket is bound to `0.0.0.0`, the machine answers on that same
+address itself, and the firewall rule is active on the profile in use. **Do not
+'fix' this by changing the binding or loosening the firewall.** Broadening a rule to
+chase a symptom the evidence does not point at would weaken the shop's posture and
+hide the real cause. To be confirmed on a network that permits device-to-device traffic.
+
+**Deferred: ASCII install path and installer filename** *(operator directive,
+2026-08-28; fix before final release, not now)*. The product name is Arabic, so the
+installer is `ولاء_1.0.0_x64-setup.exe` installing to `%PROGRAMFILES%\ولاء`, and that
+path does not survive the tools used to support it — the reboot test's own transcript
+shows PowerShell rendering it as `E:\????\runtime`. A path a support engineer cannot
+type or paste is a field-deployment risk, not a cosmetic one. Move to
+`Walaa_1.0.0_x64-setup.exe` installing to an ASCII directory (`productName` in
+`tauri.conf.json` drives both), and **keep the app's display name, window title, and
+every screen in Arabic** — §6.1 is about what the merchant reads, not what the
+filesystem stores.
+
 **Deferred: code signing** *(operator decision, 2026-08-28)*. The installer is
 unsigned and SmartScreen will warn on first run. Accepted: the developer hand-installs
 on merchant machines, so a one-time "Run anyway" is a cost paid once, by the person who

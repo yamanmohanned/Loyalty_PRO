@@ -183,6 +183,49 @@ stays** — deleting a shop's customers is a decision for a human with a backup 
 
 ---
 
+## Field setup checklist
+
+**Fold this into the V3-6 setup guide.** Each item is something that is correct on a
+bench and wrong in a shop, and each one presents as "the Station is broken" rather than
+as itself.
+
+After installing at a store, before leaving:
+
+1. **The network profile must be Private or Domain.** The firewall rule does not apply
+   on a Public network, so the Station silently cannot connect while the manager PC
+   looks perfect.
+
+   ```powershell
+   Get-NetConnectionProfile
+   Set-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -NetworkCategory Private
+   ```
+
+2. **The router must not enforce AP/client isolation.** Many consumer and guest
+   networks block device-to-device traffic entirely: every device reaches the internet
+   and none reaches each other. The Station is device-to-device by definition — a
+   tablet talking to the manager PC — so isolation breaks it completely while every
+   check on the manager machine still passes. Confirm from the tablet itself:
+
+   ```
+   http://<manager-lan-ip>:4000/health   ->   {"status":"ok","service":"walaa-api"}
+   ```
+
+   If that fails while the same URL works on the manager PC, look at the router's
+   wireless settings ("AP isolation", "client isolation", "guest network") before
+   looking at anything in this repository.
+
+3. **The manager machine needs a stable address.** A DHCP lease that moves changes the
+   URL the Station is configured with. Reserve it on the router, or set it statically.
+
+4. **Nothing else may hold the API port.** A second install, or a developer's `pnpm dev`,
+   takes 4000 and the service cannot bind.
+
+   ```
+   netstat -ano | findstr :4000
+   ```
+
+---
+
 ## Findings from the packaging spike
 
 **"A single binary" is the wrong target; a single installer is the right one.**
