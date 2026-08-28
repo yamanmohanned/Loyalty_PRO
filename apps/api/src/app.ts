@@ -10,6 +10,7 @@ import { registerZodValidation } from './plugins/zod-validation';
 import { authRoutes } from './routes/auth.routes';
 import { couponRoutes } from './routes/coupons.routes';
 import { customerRoutes } from './routes/customers.routes';
+import { reportRoutes } from './routes/reports.routes';
 import { ruleRoutes } from './routes/rules.routes';
 import { syncRoutes } from './routes/sync.routes';
 import { transactionRoutes } from './routes/transactions.routes';
@@ -119,6 +120,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(transactionRoutes, { prefix: '/transactions' });
       await api.register(couponRoutes, { prefix: '/coupons' });
       await api.register(ruleRoutes, { prefix: '/rules' });
+      await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
     },
     { prefix: API_PREFIX },

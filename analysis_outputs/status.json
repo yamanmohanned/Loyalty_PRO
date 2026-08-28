@@ -1,0 +1,48 @@
+{
+  "skill": "analyze-project",
+  "phase": "V3-0",
+  "mode": "read-only",
+  "generated": "2026-08-27",
+  "repository": "E:/loyalty",
+  "code_modified": false,
+  "measured": {
+    "source_lines_ts_prisma": 8993,
+    "tests_passing": 108,
+    "tests_api": 80,
+    "tests_shared_types": 28,
+    "packages_typecheck_clean": 4,
+    "packages_typecheck_total": 5,
+    "packages_failing": ["@walaa/dashboard"],
+    "lint_clean": true,
+    "git_commits": 9,
+    "uncommitted_files": 14
+  },
+  "phase_completion": {
+    "phase_0_foundation": "complete",
+    "phase_1_backend": "complete",
+    "phase_2_dashboard": "partial_15pct_broken",
+    "phase_2_screens_built": 0,
+    "phase_2_screens_specified": 8
+  },
+  "toolchain": {
+    "dotnet_sdk": ["9.0.311", "10.0.102"],
+    "visual_studio": "2022",
+    "rust": null,
+    "node": "24.13.0",
+    "pnpm": "10.34.4",
+    "c_drive_free_mb": 146
+  },
+  "blockers": [
+    "c_drive_full_146mb",
+    "rust_not_installed",
+    "runtime_topology_ambiguous_v2_vs_v3",
+    "no_real_albayan_capture_sample"
+  ],
+  "open_by_design": ["discount_settlement_mechanism_v3_section_9"],
+  "disagreements_with_spec_section_1": [
+    "apps/manager-desktop classified KEEP but does not exist",
+    "dashboard customers/rules/reports screens classified KEEP/REVISE/REWRITE but were never built",
+    "PostgreSQL to SQLite is broader than provider swap (enums, isolation, raw SQL)"
+  ],
+  "next_action": "await_user_confirmation_of_plan"
+}
