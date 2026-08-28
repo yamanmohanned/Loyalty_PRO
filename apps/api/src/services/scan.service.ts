@@ -6,7 +6,11 @@ import {
   type Voucher as VoucherDto,
 } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
-import { verifyBarcodeToken, looksLikeBarcodeToken } from '../lib/barcode-token';
+import {
+  canonicalizeBarcodeToken,
+  looksLikeBarcodeToken,
+  verifyBarcodeToken,
+} from '../lib/barcode-token';
 import { forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
@@ -91,7 +95,13 @@ export async function scanCard(
 
   const customer = plausible
     ? await prisma.customer.findFirst({
-        where: { barcodeToken: token, merchantId: context.merchantId, isActive: true },
+        where: {
+          // Bare digits are the storage form, so a number typed back with the
+          // grouping printed on the card finds the same row the scanner does.
+          barcodeToken: canonicalizeBarcodeToken(token),
+          merchantId: context.merchantId,
+          isActive: true,
+        },
       })
     : null;
 

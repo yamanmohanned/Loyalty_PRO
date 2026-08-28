@@ -19,7 +19,7 @@ import { hash as argon2Hash } from '@node-rs/argon2';
 import { computePeriodKey, DEFAULT_FEATURE_FLAGS, type FeatureFlagKey } from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
 import { applySqlitePragmas } from '../src/lib/prisma';
-import { generateBarcodeToken } from '../src/lib/barcode-token';
+import { generateBarcodeToken, verifyBarcodeToken } from '../src/lib/barcode-token';
 
 const prisma = new PrismaClient();
 const env = loadEnv();
@@ -308,6 +308,8 @@ async function seed(db: PrismaClientType): Promise<void> {
     });
   };
 
+  let remintedCards = 0;
+
   for (const fixture of CUSTOMERS) {
     const phone = toE164(fixture.phone);
 
@@ -315,7 +317,7 @@ async function seed(db: PrismaClientType): Promise<void> {
       where: { merchantId_phone: { merchantId: merchant.id, phone } },
     });
 
-    const customer =
+    let customer =
       existing ??
       (await db.customer.create({
         data: {
@@ -323,10 +325,21 @@ async function seed(db: PrismaClientType): Promise<void> {
           name: fixture.name,
           phone,
           category: fixture.category,
-          // Opaque signed token — never the phone number (§6.2).
+          // Opaque signed card number — never the phone number (§6.2, §12.12).
           barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
         },
       }));
+
+    // Re-mint a card number this server can no longer verify. A developer's database
+    // outlives a change to the signing scheme, and a seeded card that cannot be
+    // scanned is worse than useless — it looks like a bug in the station.
+    if (!verifyBarcodeToken(customer.barcodeToken, env.QR_TOKEN_SECRET)) {
+      customer = await db.customer.update({
+        where: { id: customer.id },
+        data: { barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET) },
+      });
+      remintedCards += 1;
+    }
 
     for (const tx of fixture.transactions) {
       await writeTransaction(tx, customer.id);
@@ -349,6 +362,9 @@ async function seed(db: PrismaClientType): Promise<void> {
       `    المستخدمون      ${staff.map((s) => `${s.username}:${s.role}`).join(' · ')}`,
       `    كلمة المرور     ${DEV_PASSWORD}   ← بيئة التطوير فقط`,
       `    الزبائن         ${CUSTOMERS.length}`,
+      ...(remintedCards > 0
+        ? [`    أرقام بطاقات جُدّدت ${remintedCards}   ← بصيغة رقمية جديدة (§12.12)`]
+        : []),
       `    فواتير مرتبطة   ${attributedCount}`,
       `    فواتير غير مرتبطة ${UNATTRIBUTED.length}   ← طبيعي: أغلب المتسوقين غير مسجّلين`,
       `    قواعد الخصم     ${DISCOUNT_RULES.map((r) => r.discountType === 'PERCENTAGE' ? `${r.thresholdAmount / 1000}k→${r.discountRate}٪` : `${r.thresholdAmount / 1000}k→${r.discountRate} د.ع`).join(' · ')}`,

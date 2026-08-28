@@ -74,6 +74,25 @@ export function prismaErrorCode(error: unknown): string | null {
 export const isUniqueViolation = (error: unknown): boolean =>
   prismaErrorCode(error) === PRISMA_UNIQUE_VIOLATION;
 
+/**
+ * Which column a unique violation was actually about.
+ *
+ * A table with two unique constraints produces the same P2002 for both, and
+ * treating them alike turns one failure into the other's error message. Prisma
+ * reports the offending field(s) in `meta.target`; on SQLite that arrives as a
+ * string like `customer.barcode_token`, so this matches on substring rather than
+ * equality and accepts either the column or the field name.
+ */
+export function uniqueViolationTargets(error: unknown, column: string): boolean {
+  if (!isUniqueViolation(error)) return false;
+  const meta = (error as PrismaLikeError).meta;
+  if (!meta || typeof meta !== 'object') return false;
+
+  const target = (meta as { target?: unknown }).target;
+  const haystack = Array.isArray(target) ? target.join(',') : String(target ?? '');
+  return haystack.toLowerCase().includes(column.toLowerCase());
+}
+
 export const isBusyError = (error: unknown): boolean => {
   if (prismaErrorCode(error) === SQLITE_BUSY) return true;
   return error instanceof Error && error.message.includes('SQLITE_BUSY');

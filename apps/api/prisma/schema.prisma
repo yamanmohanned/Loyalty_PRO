@@ -138,9 +138,13 @@ model Customer {
   phone String
   /// REGULAR | WHOLESALE | VIP
   category String @default("REGULAR")
-  /// The permanent code printed on the customer's loyalty card and scanned at the
-  /// station. Opaque and signed — never PII, never derived from the phone number.
-  /// A reprint reissues THIS code; a customer must never lose their history to a
+  /// The permanent card number printed on the customer's loyalty card and scanned
+  /// at the station: 16 digits, stored bare, displayed and read aloud in fours.
+  /// Ten random digits plus a six-digit truncated HMAC — opaque and signed, never
+  /// PII, never derived from the phone number. Numeric because Code 128C encodes
+  /// two digits per symbol, which is what makes it narrow enough to print on
+  /// thermal paper at all (§12.12).
+  /// A reprint reissues THIS number; a customer must never lose their history to a
   /// new one (§6.2 #5).
   barcodeToken String @unique @map("barcode_token")
   isActive Boolean @default(true) @map("is_active")

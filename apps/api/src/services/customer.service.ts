@@ -8,8 +8,13 @@ import {
 } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
 import { customerAlreadyExists, notFound, validationFailed } from '../lib/errors';
-import { generateBarcodeToken, looksLikeBarcodeToken, verifyBarcodeToken } from '../lib/barcode-token';
-import { isUniqueViolation, prisma } from '../lib/prisma';
+import {
+  canonicalizeBarcodeToken,
+  generateBarcodeToken,
+  looksLikeBarcodeToken,
+  verifyBarcodeToken,
+} from '../lib/barcode-token';
+import { isUniqueViolation, prisma, uniqueViolationTargets } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { enqueueNotification, NOTIFICATION_TEMPLATES } from './notification';
 
@@ -36,7 +41,53 @@ export function serializeCustomer(customer: Customer): CustomerDto {
  * request boundary, which is what makes the per-merchant unique constraint mean
  * anything — otherwise one person becomes two accounts.
  */
+/**
+ * A minted card number that was already taken.
+ *
+ * Internal to this module: `createCustomer` retries and the caller never sees it.
+ * It exists so a collision cannot be mistaken for "this phone is already
+ * registered", which is what the shared unique-violation handler would otherwise
+ * report — a message that would send an operator looking for a customer who is not
+ * there.
+ */
+class CardNumberCollision extends Error {
+  constructor() {
+    super('card number collision');
+    this.name = 'CardNumberCollision';
+  }
+}
+
+/** How many fresh numbers to try before giving up. */
+const CARD_NUMBER_ATTEMPTS = 5;
+
+/**
+ * Registers a customer, retrying if a minted card number is already in use.
+ *
+ * Ten random digits give ten billion numbers, so for one supermarket a collision is
+ * a curiosity rather than a risk — but "unlikely" is not "impossible", and the
+ * failure it would otherwise produce (a spurious "already registered" at the
+ * counter) is the kind that gets blamed on the customer.
+ */
 export async function createCustomer(
+  params: { merchantId: string; actorUserId: string },
+  request: CreateCustomerRequest,
+): Promise<CustomerDto> {
+  for (let attempt = 1; attempt <= CARD_NUMBER_ATTEMPTS; attempt += 1) {
+    try {
+      return await createCustomerOnce(params, request);
+    } catch (error) {
+      if (error instanceof CardNumberCollision && attempt < CARD_NUMBER_ATTEMPTS) continue;
+      if (error instanceof CardNumberCollision) {
+        throw validationFailed('تعذّر إنشاء رقم بطاقة فريد — أعد المحاولة');
+      }
+      throw error;
+    }
+  }
+  // Unreachable: the loop either returns or throws.
+  throw validationFailed('تعذّر إنشاء رقم بطاقة فريد — أعد المحاولة');
+}
+
+async function createCustomerOnce(
   params: { merchantId: string; actorUserId: string },
   request: CreateCustomerRequest,
 ): Promise<CustomerDto> {
@@ -81,7 +132,14 @@ export async function createCustomer(
 
     return serializeCustomer(customer);
   } catch (error) {
-    if (isUniqueViolation(error)) throw customerAlreadyExists();
+    if (isUniqueViolation(error)) {
+      // Which unique constraint fired matters. The phone is the one a person can
+      // collide with by re-registering, and it is the message the operator needs.
+      // A card-number collision is a coincidence in a ten-billion space, not a
+      // duplicate customer, and it must not be reported as one — the caller retries.
+      if (uniqueViolationTargets(error, 'barcode_token')) throw new CardNumberCollision();
+      throw customerAlreadyExists();
+    }
     throw error;
   }
 }
@@ -104,10 +162,13 @@ export async function resolveCustomer(
     // Signature first: a forged or mis-scanned code is rejected without touching
     // the database, which keeps the station fast and denies an enumeration oracle.
     if (!verifyBarcodeToken(trimmed, env.QR_TOKEN_SECRET)) {
-      throw notFound('رمز البطاقة غير صالح');
+      throw notFound('رقم البطاقة غير صالح');
     }
+    // Bare digits are the storage form. A number read aloud and typed back with the
+    // grouping printed on the card — or on an Arabic keypad — must find the same row
+    // the scanner does.
     const byToken = await prisma.customer.findFirst({
-      where: { barcodeToken: trimmed, merchantId },
+      where: { barcodeToken: canonicalizeBarcodeToken(trimmed), merchantId },
     });
     if (!byToken) throw notFound('الزبون غير موجود');
     return serializeCustomer(byToken);

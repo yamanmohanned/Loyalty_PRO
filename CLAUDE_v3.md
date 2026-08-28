@@ -818,3 +818,58 @@ wrote the software (CLAUDE_v2.md §7.2). **Revisit only if distribution changes 
 merchants self-installing** — the warning would then land on someone with no reason to
 trust it, and a certificate becomes the price of being installable at all. No further
 effort until then.
+
+### 12.12 The customer card number is 16 digits, not a signed string — 2026-08-28
+*(operator decision, V3-4; supersedes the v1 token format)*
+
+**Found by measuring, not by reasoning.** The v1 card token was
+`v1.<32-char random>.<43-char HMAC>` — 79 characters. Encoded as Code 128 that is
+**924 modules**, against **576** printable dots on an 80 mm thermal head at 203 dpi
+and **384** on 58 mm. The card specified in §6.2 #4 could not be printed on any
+paper the station will ever have. Nothing downstream would have caught this: the
+token worked perfectly everywhere it was not a barcode.
+
+The card number is now **16 digits**: a 10-digit random payload followed by a
+6-digit truncated HMAC. Code 128 **subset C** packs two digits into the 11 modules
+a single character costs, so the symbol is **143 modules** — it fits 58 mm paper
+with room for a module width wide enough to scan reliably off cheap stock.
+
+| | v1 token | v3 card number |
+|---|---|---|
+| Printed form | 79 chars, Code 128B | 16 digits, Code 128C |
+| Modules | 924 — fits nothing | 143 — fits 58 mm and 80 mm |
+| Randomness | 192 bits | ~33 bits (10 digits) |
+| Signature | 256-bit HMAC | 20-bit truncated HMAC (6 digits) |
+| Read aloud | no | `4821 0093 7746 1152` |
+
+**The security properties that matter are unchanged.** The number is still opaque
+(random, never derived from the phone, never walkable in sequence) and still
+*signed*, so a made-up number is rejected in memory before the database is touched
+— which is what stops the station being an enumeration oracle for who is a customer.
+
+**What genuinely weakened, and why it is acceptable.** A 6-digit signature is one
+guess in a million, not one in 2^256. Three things have to be true together for that
+to matter: the attacker is on the shop's LAN, is guessing against a rate-limited
+endpoint (120/min), and must also land on one of the few thousand 10-digit payloads
+that exist. The expected cost of a single successful forgery is years of continuous
+attack for the ability to look up one customer's balance. Against that: a number a
+customer can read down a phone line when they have lost their card, which is a
+support path that otherwise does not exist.
+
+Collisions are handled rather than assumed away: `createCustomer` retries on the
+card-number unique constraint, and distinguishes it from a phone-number collision so
+a coincidence is never reported to an operator as "already registered".
+
+**The field is still called `barcodeToken`.** It is still the token the barcode
+carries, the rename would touch thirteen files mid-phase, and the schema comment says
+what the value is. Revisit if it starts confusing readers.
+
+**Alternatives rejected:** a QR code (keeps the long token, but requires a 2D imager
+at every station instead of a cheap 1D laser — a per-store hardware cost for no
+functional gain); a short *unsigned* lookup code (shorter still, but hands back the
+enumeration oracle the signature exists to deny).
+
+Implementation: `packages/shared-types/src/card.ts` (shape, normalisation, grouping),
+`packages/shared-types/src/barcode.ts` (Code 128C, tested by decoding its own output),
+`apps/api/src/lib/barcode-token.ts` (minting and verification, the only place the
+secret is used).

@@ -9,6 +9,8 @@
  */
 
 export * from './auth';
+export * from './barcode';
+export * from './card';
 export * from './customer';
 export * from './discount';
 export * from './enums';

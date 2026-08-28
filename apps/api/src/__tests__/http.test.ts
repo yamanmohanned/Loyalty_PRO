@@ -339,9 +339,17 @@ describe('card resolution', () => {
     expect(response.json().customer.id).toBe(world.customerId);
   });
 
-  it('refuses a card code with a broken signature without leaking existence', async () => {
+  it('refuses a card number with a broken signature without leaking existence', async () => {
     const token = await tokenFor('station');
-    const tampered = `${world.customerBarcode.slice(0, -4)}AAAA`;
+
+    // Tamper by changing a digit, not by substituting letters: a card number is
+    // sixteen digits, and anything else is a malformed identifier rather than a
+    // forged one. Incrementing the final digit guarantees a different signature.
+    const digits = world.customerBarcode;
+    const lastDigit = (Number(digits.slice(-1)) + 1) % 10;
+    const tampered = `${digits.slice(0, -1)}${lastDigit}`;
+    expect(tampered).not.toBe(digits);
+    expect(tampered).toMatch(/^\d{16}$/);
 
     const response = await app.inject({
       method: 'GET',
@@ -349,7 +357,21 @@ describe('card resolution', () => {
       headers: bearer(token),
     });
 
+    // 404, and the same 404 an unknown-but-well-signed number gets — the station
+    // must not be usable as an oracle for which numbers exist.
     expect(response.statusCode).toBe(404);
+  });
+
+  it('rejects an identifier that is neither a card number nor a phone number', async () => {
+    const token = await tokenFor('station');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/resolve?identifier=${encodeURIComponent('not-an-identifier')}`),
+      headers: bearer(token),
+    });
+
+    expect(response.statusCode).toBe(400);
   });
 
   it('never exposes a customer from another merchant', async () => {
