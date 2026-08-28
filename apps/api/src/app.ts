@@ -8,12 +8,7 @@ import { auth } from './plugins/auth';
 import { registerErrorHandler } from './plugins/error-handler';
 import { registerZodValidation } from './plugins/zod-validation';
 import { authRoutes } from './routes/auth.routes';
-import { couponRoutes } from './routes/coupons.routes';
 import { customerRoutes } from './routes/customers.routes';
-import { reportRoutes } from './routes/reports.routes';
-import { ruleRoutes } from './routes/rules.routes';
-import { syncRoutes } from './routes/sync.routes';
-import { transactionRoutes } from './routes/transactions.routes';
 
 const env = loadEnv();
 
@@ -117,11 +112,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     async (api) => {
       await api.register(authRoutes, { prefix: '/auth' });
       await api.register(customerRoutes, { prefix: '/customers' });
-      await api.register(transactionRoutes, { prefix: '/transactions' });
-      await api.register(couponRoutes, { prefix: '/coupons' });
-      await api.register(ruleRoutes, { prefix: '/rules' });
-      await api.register(reportRoutes, { prefix: '/reports' });
-      await api.register(syncRoutes, { prefix: '/sync' });
+      // V3-2 restores the rest on the instant-discount model: /ingest (agent
+      // capture), /scan (station attribution), /vouchers, /discount-rules,
+      // /reports, /sync, and the WebSocket broadcast layer.
     },
     { prefix: API_PREFIX },
   );

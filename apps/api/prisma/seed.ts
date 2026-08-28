@@ -1,118 +1,123 @@
 /**
- * Development seed — realistic Iraqi data for a single merchant (CLAUDE.md §0.7).
+ * Development seed — realistic Iraqi data for one supermarket (v3).
  *
- * This file is a DEV SEED and is clearly marked as such. No part of the production
- * path may depend on it. Names, branches and amounts are plausible Iraqi retail data,
- * never placeholder filler like "John Doe" or "Acme".
+ * Clearly a DEV SEED. No production path may depend on it. Names, branches and
+ * amounts are plausible Iraqi retail data, never placeholder filler.
  *
- * What it deliberately does NOT create: coupons. Coupon issuance is a threshold
- * crossing detected by the loyalty engine (Phase 1) — minting them by hand here
- * would bake a guess at the business rule into the fixtures.
+ * Two things it deliberately does NOT create:
+ *  - **Vouchers.** A voucher is proof of a discount granted by the engine at a real
+ *    scan. Minting them here would bake a guess at the calculation into fixtures and
+ *    let a bug in the engine hide behind seeded data that looks correct.
+ *  - **Balances.** There is no balance table to seed (§5.3). Cumulative spend is
+ *    derived from transaction rows, so seeding transactions *is* seeding balances.
  *
  * Re-runnable: every write is an upsert keyed on a natural unique constraint.
  */
 
 import { PrismaClient, type PrismaClient as PrismaClientType } from '@prisma/client';
 import { hash as argon2Hash } from '@node-rs/argon2';
-import { computePeriodKey } from '@walaa/shared-types';
+import { computePeriodKey, DEFAULT_FEATURE_FLAGS, type FeatureFlagKey } from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
-import { generateQrToken } from '../src/lib/qr-token';
+import { applySqlitePragmas } from '../src/lib/prisma';
+import { generateBarcodeToken } from '../src/lib/barcode-token';
 
 const prisma = new PrismaClient();
 const env = loadEnv();
 
-/**
- * Dev-only credentials. Printed at the end of the run so there is no hunting for
- * them. Production users are created through the API, never through this file.
- */
+/** Dev-only credentials, printed at the end so there is no hunting for them. */
 const DEV_PASSWORD = 'Walaa!Dev2026';
 
-/** Argon2id with parameters matching what the API will use in Phase 1. */
-const ARGON2_OPTIONS = {
-  memoryCost: 19_456, // 19 MiB — OWASP minimum for Argon2id
-  timeCost: 2,
-  parallelism: 1,
-} as const;
+/** Argon2id parameters matching what the API uses. Must not drift, or logins fail. */
+const ARGON2_OPTIONS = { memoryCost: 19_456, timeCost: 2, parallelism: 1 } as const;
 
+const MERCHANT_ID = '00000000-0000-4000-8000-000000000001';
 const MERCHANT_TIMEZONE = env.MERCHANT_TIMEZONE;
-
-/** Fixed reference instant so a re-seed produces the same period bucket. */
 const NOW = new Date();
+
+/**
+ * The default discount ladder.
+ *
+ * Deliberately inside the **1–3% safe band** (§2.3). The instant discount is a pure
+ * price cut with 100% take-up and no return visit to earn it back, so on a 2–4% net
+ * margin anything higher loses money on every qualifying sale. A seed that shipped
+ * 10% would be teaching the wrong default.
+ *
+ * The absolute cap is set to 5,000 IQD: at 3%, that binds on any basket above
+ * roughly 167,000 IQD, which is where a percentage starts to hurt.
+ */
+const DISCOUNT_RULES = [
+  { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2, maxDiscountValue: null, sortOrder: 0 },
+  { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 3, maxDiscountValue: null, sortOrder: 1 },
+  { thresholdAmount: 200_000, discountType: 'FIXED_AMOUNT', discountRate: 7_500, maxDiscountValue: 7_500, sortOrder: 2 },
+];
 
 interface SeedTransaction {
   invoiceId: string;
-  amount: number;
-  /** Days before now the purchase happened. */
+  amountGross: number;
   daysAgo: number;
-  amountCapture: 'AUTO' | 'MANUAL';
+  captureMode: 'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'MANUAL';
+  /** false leaves the invoice unattributed — a real and common outcome (§4). */
+  attributed: boolean;
 }
 
 interface SeedCustomer {
   name: string;
   phone: string;
   category: 'REGULAR' | 'WHOLESALE' | 'VIP';
-  /** Why this fixture exists — which UI state it exercises. */
+  /** Which UI state this fixture exercises. */
   covers: string;
   transactions: SeedTransaction[];
 }
 
-/**
- * Fixtures chosen to cover every state the dashboard and assistant must render:
- * below the first tier, approaching it, crossed one, crossed all, and no activity.
- */
 const CUSTOMERS: SeedCustomer[] = [
   {
     name: 'حسين علي',
     phone: '07701234567',
     category: 'REGULAR',
-    covers: 'crossed tier 1, climbing toward tier 2',
+    covers: 'cleared tier 1, climbing toward tier 2',
     transactions: [
-      { invoiceId: 'INV-9801', amount: 62_000, daysAgo: 18, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9807', amount: 45_500, daysAgo: 12, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9814', amount: 73_250, daysAgo: 5, amountCapture: 'MANUAL' },
+      { invoiceId: 'INV-9801', amountGross: 28_500, daysAgo: 12, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9807', amountGross: 19_250, daysAgo: 6, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
     name: 'زينب عبد الرزاق',
     phone: '07811239876',
     category: 'VIP',
-    covers: 'crossed every tier',
+    covers: 'cleared every tier',
     transactions: [
-      { invoiceId: 'INV-9802', amount: 210_000, daysAgo: 20, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9809', amount: 185_750, daysAgo: 9, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9818', amount: 128_000, daysAgo: 2, amountCapture: 'AUTO' },
+      { invoiceId: 'INV-9802', amountGross: 120_000, daysAgo: 15, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9809', amountGross: 95_500, daysAgo: 8, captureMode: 'VIRTUAL_PRINTER', attributed: true },
+      { invoiceId: 'INV-9818', amountGross: 61_000, daysAgo: 2, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
     name: 'مصطفى الكاظمي',
     phone: '07901112233',
     category: 'WHOLESALE',
-    covers: 'wholesale volume — large amounts, monospace column width',
+    covers: 'wholesale volume — large baskets where the absolute cap binds',
     transactions: [
-      { invoiceId: 'INV-9803', amount: 640_000, daysAgo: 21, amountCapture: 'MANUAL' },
-      { invoiceId: 'INV-9811', amount: 415_500, daysAgo: 11, amountCapture: 'MANUAL' },
-      { invoiceId: 'INV-9820', amount: 198_000, daysAgo: 1, amountCapture: 'AUTO' },
+      { invoiceId: 'INV-9803', amountGross: 480_000, daysAgo: 14, captureMode: 'MANUAL', attributed: true },
+      { invoiceId: 'INV-9811', amountGross: 315_500, daysAgo: 7, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
     name: 'نور الهدى حسن',
     phone: '07512345678',
     category: 'REGULAR',
-    covers: 'below the first tier',
+    covers: 'below the first threshold — the progress-message state',
     transactions: [
-      { invoiceId: 'INV-9804', amount: 38_500, daysAgo: 14, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9815', amount: 27_000, daysAgo: 4, amountCapture: 'AUTO' },
+      { invoiceId: 'INV-9804', amountGross: 12_500, daysAgo: 9, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
     name: 'علي فاضل الربيعي',
     phone: '07709876543',
     category: 'REGULAR',
-    covers: 'just under tier 2 — the amber "approaching" state',
+    covers: 'a few dinars short of tier 2',
     transactions: [
-      { invoiceId: 'INV-9805', amount: 96_000, daysAgo: 16, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9812', amount: 88_750, daysAgo: 8, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9819', amount: 56_500, daysAgo: 2, amountCapture: 'MANUAL' },
+      { invoiceId: 'INV-9805', amountGross: 40_000, daysAgo: 11, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9812', amountGross: 33_750, daysAgo: 4, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
@@ -126,29 +131,24 @@ const CUSTOMERS: SeedCustomer[] = [
     name: 'أحمد عبد الأمير',
     phone: '07705556677',
     category: 'VIP',
-    covers: 'crossed tier 2',
+    covers: 'spend split across two periods, proving the reset',
     transactions: [
-      { invoiceId: 'INV-9806', amount: 175_000, daysAgo: 19, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9816', amount: 142_300, daysAgo: 3, amountCapture: 'AUTO' },
-    ],
-  },
-  {
-    name: 'سجى محمد الطائي',
-    phone: '07907778899',
-    category: 'REGULAR',
-    covers: 'a few dinars short of tier 1',
-    transactions: [
-      { invoiceId: 'INV-9808', amount: 51_000, daysAgo: 13, amountCapture: 'AUTO' },
-      { invoiceId: 'INV-9817', amount: 44_250, daysAgo: 6, amountCapture: 'MANUAL' },
+      { invoiceId: 'INV-9806', amountGross: 88_000, daysAgo: 45, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9816', amountGross: 26_300, daysAgo: 3, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
 ];
 
-/** The merchant default ladder: more spend earns a bigger discount. */
-const TIERS = [
-  { thresholdAmount: 100_000, discountPct: 5, couponValidityDays: 30, sortOrder: 0 },
-  { thresholdAmount: 250_000, discountPct: 10, couponValidityDays: 30, sortOrder: 1 },
-  { thresholdAmount: 500_000, discountPct: 15, couponValidityDays: 45, sortOrder: 2 },
+/**
+ * Invoices captured with no card scanned. These are the majority of real traffic —
+ * most shoppers are not enrolled — and the gap between captured and attributed is
+ * the enrolment rate, a headline metric rather than an error.
+ */
+const UNATTRIBUTED: SeedTransaction[] = [
+  { invoiceId: 'INV-9820', amountGross: 15_750, daysAgo: 1, captureMode: 'SPOOL_WATCH', attributed: false },
+  { invoiceId: 'INV-9821', amountGross: 42_000, daysAgo: 1, captureMode: 'SPOOL_WATCH', attributed: false },
+  { invoiceId: 'INV-9822', amountGross: 8_250, daysAgo: 0, captureMode: 'SPOOL_WATCH', attributed: false },
+  { invoiceId: 'INV-9823', amountGross: 63_400, daysAgo: 0, captureMode: 'VIRTUAL_PRINTER', attributed: false },
 ];
 
 function daysBefore(days: number): Date {
@@ -158,17 +158,16 @@ function daysBefore(days: number): Date {
 }
 
 /** E.164 normalisation, mirroring packages/shared-types/src/phone.ts. */
-function toE164(local: string): string {
-  return `+964${local.replace(/^0/, '')}`;
-}
+const toE164 = (local: string): string => `+964${local.replace(/^0/, '')}`;
 
 async function seed(db: PrismaClientType): Promise<void> {
+  await applySqlitePragmas(prisma);
   // ── Merchant ───────────────────────────────────────────────────────────────
   const merchant = await db.merchant.upsert({
-    where: { id: '00000000-0000-4000-8000-000000000001' },
+    where: { id: MERCHANT_ID },
     update: { name: 'سوبرماركت الرشيد', timezone: MERCHANT_TIMEZONE },
     create: {
-      id: '00000000-0000-4000-8000-000000000001',
+      id: MERCHANT_ID,
       name: 'سوبرماركت الرشيد',
       timezone: MERCHANT_TIMEZONE,
       currency: 'IQD',
@@ -182,8 +181,6 @@ async function seed(db: PrismaClientType): Promise<void> {
     create: { merchantId: merchant.id, name: 'فرع الكرادة', code: 'BAG-01' },
   });
 
-  // A second branch exists so branch-scoping bugs surface in development rather
-  // than in production, and so the Integrations screen has more than one row.
   await db.branch.upsert({
     where: { merchantId_code: { merchantId: merchant.id, code: 'BAG-02' } },
     update: { name: 'فرع المنصور' },
@@ -194,61 +191,122 @@ async function seed(db: PrismaClientType): Promise<void> {
   const passwordHash = await argon2Hash(DEV_PASSWORD, ARGON2_OPTIONS);
 
   const staff = [
-    { username: 'owner', name: 'مصطفى الجبوري', role: 'OWNER' as const, branchId: null },
-    { username: 'manager', name: 'سارة العبيدي', role: 'MANAGER' as const, branchId: branch.id },
-    { username: 'assistant', name: 'حيدر الموسوي', role: 'ASSISTANT' as const, branchId: branch.id },
+    { username: 'owner', name: 'مصطفى الجبوري', role: 'OWNER', branchId: null },
+    { username: 'manager', name: 'سارة العبيدي', role: 'MANAGER', branchId: branch.id },
+    // The Loyalty Station operator (§6.2). Scans, registers and prints — and never
+    // sees a settings screen.
+    { username: 'station', name: 'محطة الولاء — الكرادة', role: 'STATION', branchId: branch.id },
   ];
 
-  const users = await Promise.all(
-    staff.map((s) =>
-      db.user.upsert({
-        where: { merchantId_username: { merchantId: merchant.id, username: s.username } },
-        update: { name: s.name, role: s.role, branchId: s.branchId, isActive: true },
-        create: {
-          merchantId: merchant.id,
-          branchId: s.branchId,
-          name: s.name,
-          username: s.username,
-          passwordHash,
-          role: s.role,
-        },
-      }),
-    ),
-  );
-
-  const assistant = users.find((u) => u.role === 'ASSISTANT');
-  if (!assistant) throw new Error('تعذر إنشاء مستخدم المساعد');
-
-  // ── Loyalty rules ──────────────────────────────────────────────────────────
-  const existingRuleSet = await db.loyaltyRuleSet.findFirst({
-    where: { merchantId: merchant.id, isActive: true },
-  });
-
-  const ruleSet =
-    existingRuleSet ??
-    (await db.loyaltyRuleSet.create({
-      data: { merchantId: merchant.id, periodType: 'MONTHLY', isActive: true },
-    }));
-
-  for (const tier of TIERS) {
-    await db.loyaltyTier.upsert({
-      where: {
-        ruleSetId_thresholdAmount: {
-          ruleSetId: ruleSet.id,
-          thresholdAmount: tier.thresholdAmount,
-        },
+  for (const s of staff) {
+    await db.user.upsert({
+      where: { merchantId_username: { merchantId: merchant.id, username: s.username } },
+      update: { name: s.name, role: s.role, branchId: s.branchId, isActive: true },
+      create: {
+        merchantId: merchant.id,
+        branchId: s.branchId,
+        name: s.name,
+        username: s.username,
+        passwordHash,
+        role: s.role,
       },
-      update: {
-        discountPct: tier.discountPct,
-        couponValidityDays: tier.couponValidityDays,
-        sortOrder: tier.sortOrder,
-      },
-      create: { ruleSetId: ruleSet.id, ...tier },
     });
   }
 
-  // ── Customers, transactions and derived balances ───────────────────────────
-  let transactionCount = 0;
+  const stationUser = await db.user.findUniqueOrThrow({
+    where: { merchantId_username: { merchantId: merchant.id, username: 'station' } },
+  });
+
+  // ── Discount configuration ─────────────────────────────────────────────────
+  await db.discountSettings.upsert({
+    where: { merchantId: merchant.id },
+    update: {},
+    create: {
+      merchantId: merchant.id,
+      discountType: 'PERCENTAGE',
+      minRate: 1,
+      maxRate: 3,
+      // The last line of defence (§2.3). Never ship a percentage without it.
+      absoluteMaxDiscountValue: 5_000,
+      periodType: 'MONTHLY',
+      settlementStrategy: 'VOUCHER_AS_PAYMENT',
+    },
+  });
+
+  for (const rule of DISCOUNT_RULES) {
+    await db.discountRule.upsert({
+      where: {
+        merchantId_thresholdAmount: {
+          merchantId: merchant.id,
+          thresholdAmount: rule.thresholdAmount,
+        },
+      },
+      update: {
+        discountType: rule.discountType,
+        discountRate: rule.discountRate,
+        maxDiscountValue: rule.maxDiscountValue,
+        sortOrder: rule.sortOrder,
+        isActive: true,
+      },
+      create: { merchantId: merchant.id, ...rule, isActive: true },
+    });
+  }
+
+  // ── Feature flags ──────────────────────────────────────────────────────────
+  for (const [key, enabled] of Object.entries(DEFAULT_FEATURE_FLAGS) as Array<[FeatureFlagKey, boolean]>) {
+    await db.featureFlag.upsert({
+      where: { merchantId_key: { merchantId: merchant.id, key } },
+      update: {},
+      create: { merchantId: merchant.id, key, isEnabled: enabled },
+    });
+  }
+
+  // ── Customers and captured invoices ────────────────────────────────────────
+  let attributedCount = 0;
+
+  const writeTransaction = async (
+    tx: SeedTransaction,
+    customerId: string | null,
+  ): Promise<void> => {
+    const occurredAt = daysBefore(tx.daysAgo);
+    const periodKey = computePeriodKey({
+      periodType: 'MONTHLY',
+      occurredAt,
+      timeZone: MERCHANT_TIMEZONE,
+    });
+
+    await db.transaction.upsert({
+      where: {
+        merchantId_branchId_invoiceId: {
+          merchantId: merchant.id,
+          branchId: branch.id,
+          invoiceId: tx.invoiceId,
+        },
+      },
+      update: {},
+      create: {
+        merchantId: merchant.id,
+        branchId: branch.id,
+        customerId,
+        invoiceId: tx.invoiceId,
+        amountGross: tx.amountGross,
+        // Seeded rows carry no discount: a discount is the engine's output at a
+        // real scan, and inventing one here would let an engine bug hide.
+        discountType: 'NONE',
+        discountRate: 0,
+        discountValue: 0,
+        amountNet: tx.amountGross,
+        currency: 'IQD',
+        captureMode: tx.captureMode,
+        periodKey,
+        occurredAt,
+        capturedAt: occurredAt,
+        linkedAt: customerId ? occurredAt : null,
+        linkedByUserId: customerId ? stationUser.id : null,
+        stationId: customerId ? 'station-01' : null,
+      },
+    });
+  };
 
   for (const fixture of CUSTOMERS) {
     const phone = toE164(fixture.phone);
@@ -265,84 +323,36 @@ async function seed(db: PrismaClientType): Promise<void> {
           name: fixture.name,
           phone,
           category: fixture.category,
-          // Opaque signed token — never the phone number (CLAUDE.md §3.6).
-          qrToken: generateQrToken(env.QR_TOKEN_SECRET),
+          // Opaque signed token — never the phone number (§6.2).
+          barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
         },
       }));
 
-    // Accumulate per period so the snapshot cache matches what the transactions say.
-    const perPeriod = new Map<string, { amount: number; count: number }>();
-
     for (const tx of fixture.transactions) {
-      const occurredAt = daysBefore(tx.daysAgo);
-      const periodKey = computePeriodKey({
-        periodType: ruleSet.periodType,
-        occurredAt,
-        timeZone: MERCHANT_TIMEZONE,
-        customStart: ruleSet.periodStart,
-        customEnd: ruleSet.periodEnd,
-      });
-
-      await db.transaction.upsert({
-        where: {
-          merchantId_branchId_invoiceId: {
-            merchantId: merchant.id,
-            branchId: branch.id,
-            invoiceId: tx.invoiceId,
-          },
-        },
-        update: {},
-        create: {
-          merchantId: merchant.id,
-          branchId: branch.id,
-          customerId: customer.id,
-          invoiceId: tx.invoiceId,
-          amount: tx.amount,
-          currency: 'IQD',
-          occurredAt,
-          source: 'SCAN',
-          amountCapture: tx.amountCapture,
-          periodKey,
-          linkedByUserId: assistant.id,
-          deviceId: 'seed-device-01',
-        },
-      });
-
-      transactionCount += 1;
-      const bucket = perPeriod.get(periodKey) ?? { amount: 0, count: 0 };
-      bucket.amount += tx.amount;
-      bucket.count += 1;
-      perPeriod.set(periodKey, bucket);
+      await writeTransaction(tx, customer.id);
+      attributedCount += 1;
     }
+  }
 
-    for (const [periodKey, bucket] of perPeriod) {
-      await db.balanceSnapshot.upsert({
-        where: { customerId_periodKey: { customerId: customer.id, periodKey } },
-        update: { cumulativeAmount: bucket.amount, transactionCount: bucket.count },
-        create: {
-          merchantId: merchant.id,
-          customerId: customer.id,
-          periodKey,
-          cumulativeAmount: bucket.amount,
-          transactionCount: bucket.count,
-        },
-      });
-    }
+  for (const tx of UNATTRIBUTED) {
+    await writeTransaction(tx, null);
   }
 
   // eslint-disable-next-line no-console -- a seed script reports to the operator by design
   console.log(
     [
       '',
-      '  ✔ اكتمل إدخال بيانات التطوير',
+      '  ✔ اكتمل إدخال بيانات التطوير (v3)',
       '',
-      `    التاجر        ${merchant.name}`,
-      `    الفروع        BAG-01 (فرع الكرادة) · BAG-02 (فرع المنصور)`,
-      `    المستخدمون    ${staff.map((s) => s.username).join(' · ')}`,
-      `    كلمة المرور   ${DEV_PASSWORD}   ← بيئة التطوير فقط`,
-      `    الزبائن       ${CUSTOMERS.length}`,
-      `    العمليات      ${transactionCount}`,
-      `    المستويات     ${TIERS.map((t) => `${t.thresholdAmount / 1000}k → ${t.discountPct}%`).join(' · ')}`,
+      `    التاجر          ${merchant.name}`,
+      `    الفروع          BAG-01 (فرع الكرادة) · BAG-02 (فرع المنصور)`,
+      `    المستخدمون      ${staff.map((s) => `${s.username}:${s.role}`).join(' · ')}`,
+      `    كلمة المرور     ${DEV_PASSWORD}   ← بيئة التطوير فقط`,
+      `    الزبائن         ${CUSTOMERS.length}`,
+      `    فواتير مرتبطة   ${attributedCount}`,
+      `    فواتير غير مرتبطة ${UNATTRIBUTED.length}   ← طبيعي: أغلب المتسوقين غير مسجّلين`,
+      `    قواعد الخصم     ${DISCOUNT_RULES.map((r) => r.discountType === 'PERCENTAGE' ? `${r.thresholdAmount / 1000}k→${r.discountRate}٪` : `${r.thresholdAmount / 1000}k→${r.discountRate} د.ع`).join(' · ')}`,
+      `    الحد الأقصى للخصم 5,000 د.ع  ← خط الدفاع الأخير (§2.3)`,
       '',
     ].join('\n'),
   );

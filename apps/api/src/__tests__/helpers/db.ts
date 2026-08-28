@@ -1,60 +1,48 @@
 import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 
 /**
- * Test database lifecycle.
+ * Test database lifecycle (SQLite).
  *
- * Tests run against a **separate database** (`walaa_test`), never the dev one. The
- * suite truncates tables between tests, and pointing that at development data
- * would destroy it — the isolation here is a safety property, not a nicety.
+ * Tests run against a **separate database file**, never the dev one. The suite
+ * empties tables between cases, and pointing that at development data would
+ * destroy it — the isolation is a safety property, not a convenience.
+ *
+ * SQLite makes this simpler than Postgres did: the "server" is a file, so setup is
+ * deleting it and re-running migrations.
  */
 
-export const TEST_DATABASE_NAME = 'walaa_test';
-
-/** The api package root, as a path `execSync` can use on Windows and POSIX alike. */
 const API_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+const TEST_DB_DIR = join(API_ROOT, 'prisma');
+const TEST_DB_FILE = join(TEST_DB_DIR, 'walaa_test.db');
 
-/** Rewrites the configured DATABASE_URL to point at the test database. */
-export function testDatabaseUrl(): string {
-  const base = process.env.DATABASE_URL;
-  if (!base) throw new Error('DATABASE_URL is not set — copy .env.example to .env');
-
-  const url = new URL(base);
-  url.pathname = `/${TEST_DATABASE_NAME}`;
-  return url.toString();
-}
+/** Prisma resolves a relative file: URL from the schema directory. */
+export const TEST_DATABASE_URL = 'file:./walaa_test.db';
 
 /**
- * Creates the test database if absent and applies migrations. Runs once per suite.
+ * Recreates the test database from scratch and applies migrations.
  *
- * `migrate deploy`, not `migrate dev`: deploy applies committed migrations without
- * prompting or authoring new ones, which is exactly what a test bootstrap wants.
+ * Deletes the file first so every run starts from a known schema — a stale file
+ * from an older migration state is the kind of failure that wastes an afternoon.
+ * The `-wal` and `-shm` sidecars must go too, or SQLite will recover state from
+ * them into the "fresh" database.
  */
-export async function prepareTestDatabase(): Promise<void> {
-  const configured = process.env.DATABASE_URL;
-  if (!configured) throw new Error('DATABASE_URL is not set — copy .env.example to .env');
+export function prepareTestDatabase(): void {
+  if (!existsSync(TEST_DB_DIR)) mkdirSync(TEST_DB_DIR, { recursive: true });
 
-  // Connect to the maintenance database to issue CREATE DATABASE.
-  const adminUrl = new URL(configured);
-  adminUrl.pathname = '/postgres';
-  const admin = new PrismaClient({ datasources: { db: { url: adminUrl.toString() } } });
-
-  try {
-    const existing = await admin.$queryRaw<Array<{ datname: string }>>`
-      SELECT datname FROM pg_database WHERE datname = ${TEST_DATABASE_NAME}
-    `;
-    if (existing.length === 0) {
-      // Identifier cannot be parameterised; the value is a module constant, not input.
-      await admin.$executeRawUnsafe(`CREATE DATABASE "${TEST_DATABASE_NAME}"`);
-    }
-  } finally {
-    await admin.$disconnect();
+  for (const suffix of ['', '-wal', '-shm']) {
+    const path = `${TEST_DB_FILE}${suffix}`;
+    if (existsSync(path)) rmSync(path);
   }
 
+  // `migrate deploy` applies committed migrations without prompting or authoring
+  // new ones, which is what a test bootstrap wants.
   execSync('pnpm exec prisma migrate deploy', {
     cwd: API_ROOT,
-    env: { ...process.env, DATABASE_URL: testDatabaseUrl() },
+    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
     stdio: 'pipe',
   });
 }
@@ -62,25 +50,28 @@ export async function prepareTestDatabase(): Promise<void> {
 /**
  * Empties every table between tests.
  *
- * One TRUNCATE ... CASCADE rather than per-table deletes: dramatically faster, and
- * it sidesteps foreign-key ordering entirely.
+ * SQLite has no `TRUNCATE ... CASCADE`, so this deletes in dependency order with
+ * foreign keys momentarily off — faster than ordering perfectly, and the tables
+ * are all repopulated by the next fixture anyway.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      audit_log,
-      notification_log,
-      balance_snapshot,
-      coupon,
-      transaction,
-      customer_override_rule,
-      loyalty_tier,
-      loyalty_rule_set,
-      customer,
-      refresh_token,
-      "user",
-      branch,
-      merchant
-    RESTART IDENTITY CASCADE
-  `);
+  await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
+  const tables = [
+    'audit_log',
+    'notification_log',
+    'voucher',
+    'transaction',
+    'feature_flag',
+    'discount_rule',
+    'discount_settings',
+    'customer',
+    'refresh_token',
+    'user',
+    'branch',
+    'merchant',
+  ];
+  for (const table of tables) {
+    await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
+  }
+  await prisma.$queryRawUnsafe('PRAGMA foreign_keys = ON');
 }

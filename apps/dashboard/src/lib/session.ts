@@ -21,7 +21,7 @@ export interface SessionUser {
   id: string;
   name: string;
   username: string;
-  role: 'OWNER' | 'MANAGER' | 'ASSISTANT';
+  role: 'OWNER' | 'MANAGER' | 'STATION';
   merchantId: string;
   branchId: string | null;
   branchCode: string | null;

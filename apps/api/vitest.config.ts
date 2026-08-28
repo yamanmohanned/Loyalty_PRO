@@ -4,14 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 loadDotenv({ path: fileURLToPath(new URL('../../.env', import.meta.url)) });
 
-// Point every worker at the test database before any module loads a Prisma client.
-const testUrl = (() => {
-  const base = process.env.DATABASE_URL;
-  if (!base) return undefined;
-  const url = new URL(base);
-  url.pathname = '/walaa_test';
-  return url.toString();
-})();
+// Point every worker at the SQLite test database file before any module loads a
+// Prisma client. Relative file: URLs resolve from the schema directory.
+const testUrl = 'file:./walaa_test.db';
 
 export default defineConfig({
   test: {
@@ -26,7 +21,7 @@ export default defineConfig({
     hookTimeout: 60_000,
     env: {
       NODE_ENV: 'test',
-      ...(testUrl ? { DATABASE_URL: testUrl } : {}),
+      DATABASE_URL: testUrl,
     },
   },
 });

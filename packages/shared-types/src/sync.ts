@@ -1,29 +1,45 @@
 import { z } from 'zod';
 import { CreateCustomerRequestSchema } from './customer';
-import { LinkTransactionRequestSchema } from './transaction';
 import { ApiErrorCodeSchema } from './errors';
+import { CapturedInvoiceSchema } from './invoice';
+import { ScanCardRequestSchema } from './transaction';
 
 /**
- * Offline sync (CLAUDE.md §5, §8).
+ * Offline sync (CLAUDE_v3.md §7.2).
  *
- * The assistant app writes locally first and is the temporary source of truth until
- * a batch is confirmed. Two properties make that safe:
+ * The Station and the Agent each keep a local queue and flush it on reconnect.
+ * That queue lives **on the client** — browser storage for the Station, a local
+ * store for the Agent — and deliberately has no table in the manager's database
+ * (§5.2). Putting it there would invert the design: the queue exists precisely for
+ * the times the manager machine is unreachable.
+ *
+ * Two properties make the flush safe:
  *
  *  - **Per-item idempotency.** Every operation carries a client-generated
- *    `operationId`; replaying a batch cannot double-apply anything.
- *  - **Per-item results.** The server reports each item separately so the device
- *    clears exactly the confirmed operations and keeps the rest queued. A partial
- *    failure must never corrupt the queue.
+ *    `operationId`; replaying a batch cannot double-apply anything. For an agent
+ *    this is what stops a network retry becoming a second recorded sale.
+ *  - **Per-item results.** The server reports each item separately, so the device
+ *    clears exactly what was settled and keeps the rest. A partial failure must
+ *    never corrupt the queue — no work stoppage, no data loss.
  */
 
 export const SyncOperationSchema = z.discriminatedUnion('type', [
+  /** From the Print Capture Agent: a receipt it intercepted while offline. */
   z
     .object({
-      type: z.literal('LINK_TRANSACTION'),
+      type: z.literal('INGEST_INVOICE'),
       operationId: z.string().uuid(),
-      /** When the device recorded it — preserved so offline links keep their real time. */
       queuedAt: z.string().datetime({ offset: true }),
-      payload: LinkTransactionRequestSchema,
+      payload: CapturedInvoiceSchema,
+    })
+    .strict(),
+  /** From the Loyalty Station: a card scanned while the manager was unreachable. */
+  z
+    .object({
+      type: z.literal('SCAN_CARD'),
+      operationId: z.string().uuid(),
+      queuedAt: z.string().datetime({ offset: true }),
+      payload: ScanCardRequestSchema,
     })
     .strict(),
   z
@@ -36,10 +52,10 @@ export const SyncOperationSchema = z.discriminatedUnion('type', [
     .strict(),
   z
     .object({
-      type: z.literal('REDEEM_COUPON'),
+      type: z.literal('REDEEM_VOUCHER'),
       operationId: z.string().uuid(),
       queuedAt: z.string().datetime({ offset: true }),
-      payload: z.object({ couponId: z.string().uuid() }).strict(),
+      payload: z.object({ voucherId: z.string().uuid() }).strict(),
     })
     .strict(),
 ]);
@@ -48,6 +64,7 @@ export type SyncOperation = z.infer<typeof SyncOperationSchema>;
 
 export const SyncBatchRequestSchema = z
   .object({
+    /** Which device is flushing — an agent id or a station id. */
     deviceId: z.string().trim().min(1).max(128),
     /** Bounded so one device cannot hold a connection open with an unbounded batch. */
     operations: z.array(SyncOperationSchema).min(1).max(100),
@@ -60,8 +77,10 @@ export type SyncBatchRequest = z.infer<typeof SyncBatchRequestSchema>;
  * Outcome of one queued operation.
  *
  * `DUPLICATE` is a **success** from the device's point of view: the server already
- * has this operation, so the device should clear it. Only `FAILED` items stay queued,
- * and only `REJECTED` items are dropped as permanently invalid.
+ * has this operation, so the device should clear it. Only `FAILED` stays queued;
+ * `REJECTED` is dropped as permanently invalid. Getting this classification wrong
+ * either loses a sale or retries it forever, which is why it is decided in one
+ * place and shared with every client.
  */
 export const SyncItemStatusSchema = z.enum(['APPLIED', 'DUPLICATE', 'REJECTED', 'FAILED']);
 export type SyncItemStatus = z.infer<typeof SyncItemStatusSchema>;
@@ -69,7 +88,6 @@ export type SyncItemStatus = z.infer<typeof SyncItemStatusSchema>;
 export const SyncItemResultSchema = z.object({
   operationId: z.string().uuid(),
   status: SyncItemStatusSchema,
-  /** Populated for REJECTED/FAILED so the device can show why. */
   errorCode: ApiErrorCodeSchema.nullable(),
   errorMessage: z.string().nullable(),
   /** The server-assigned entity id when the operation created something. */
@@ -86,10 +104,26 @@ export const SyncBatchResponseSchema = z.object({
 
 export type SyncBatchResponse = z.infer<typeof SyncBatchResponseSchema>;
 
-/** Device-side connection state driving the sync indicators (CLAUDE.md §6.7 #3). */
+/** Connection state driving the station's status indicator. */
 export const SyncStateSchema = z.enum(['ONLINE', 'SYNCING', 'OFFLINE']);
 export type SyncState = z.infer<typeof SyncStateSchema>;
 
 /** Whether a result means the device may clear the operation from its queue. */
 export const isSyncItemSettled = (status: SyncItemStatus): boolean =>
   status === 'APPLIED' || status === 'DUPLICATE' || status === 'REJECTED';
+
+/* ── Real-time push (§7.2) ─────────────────────────────────────────────────── */
+
+/**
+ * Events the API broadcasts over WebSocket so the manager dashboard updates in
+ * under a second without polling.
+ */
+export const RealtimeEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('INVOICE_CAPTURED'), transactionId: z.string().uuid(), invoiceId: z.string(), amountGross: z.number().int(), at: z.string() }),
+  z.object({ type: z.literal('CARD_SCANNED'), transactionId: z.string().uuid(), customerId: z.string().uuid(), qualified: z.boolean(), at: z.string() }),
+  z.object({ type: z.literal('VOUCHER_ISSUED'), voucherId: z.string().uuid(), value: z.number().int(), at: z.string() }),
+  z.object({ type: z.literal('CUSTOMER_REGISTERED'), customerId: z.string().uuid(), at: z.string() }),
+  z.object({ type: z.literal('AGENT_STATUS'), agentId: z.string(), online: z.boolean(), captureMode: z.string(), at: z.string() }),
+]);
+
+export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

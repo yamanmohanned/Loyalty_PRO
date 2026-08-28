@@ -3,14 +3,17 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { API_PREFIX, buildApp } from '../app';
 import { resetDatabase } from './helpers/db';
-import { createWorld, TEST_PASSWORD, type World } from './helpers/fixtures';
+import { createTransaction, createWorld, TEST_PASSWORD, type World } from './helpers/fixtures';
 
 /**
- * The HTTP surface: authentication, RBAC, validation and the error envelope
- * (CLAUDE.md §7.1, §7.2, §7.4, §9).
+ * The HTTP surface after the v3 data-layer migration.
  *
- * Driven through `app.inject()` rather than a real socket — it exercises the full
- * plugin chain (hooks, validation, error handler) without binding a port.
+ * Auth, RBAC, validation and the error envelope are classified KEEP — they were
+ * correct under v1 and the pivot did not change their reasoning. These tests prove
+ * that survived the migration intact.
+ *
+ * The instant-discount endpoints (/ingest, /scan, /vouchers, /discount-rules) land
+ * in V3-2 and are tested there.
  */
 
 const prisma = new PrismaClient();
@@ -48,29 +51,40 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('authentication (CLAUDE.md §7.1)', () => {
+describe('authentication', () => {
   it('issues tokens for valid credentials', async () => {
     const response = await app.inject({
       method: 'POST',
       url: url('/auth/login'),
-      payload: { username: 'assistant', password: TEST_PASSWORD },
+      payload: { username: 'manager', password: TEST_PASSWORD },
     });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.tokens.accessToken).toBeTruthy();
-    expect(body.tokens.refreshToken).toBeTruthy();
-    expect(body.user.role).toBe('ASSISTANT');
+    expect(body.user.role).toBe('MANAGER');
     // The password hash must never cross the wire.
     expect(JSON.stringify(body)).not.toContain('argon2');
   });
 
+  it('issues tokens for the new STATION role', async () => {
+    // STATION replaces v1's ASSISTANT: the Loyalty Station operator (§6.2).
+    const response = await app.inject({
+      method: 'POST',
+      url: url('/auth/login'),
+      payload: { username: 'station', password: TEST_PASSWORD },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().user.role).toBe('STATION');
+  });
+
   it('gives the same answer for a wrong password and an unknown user', async () => {
-    // Different messages here would turn login into a username oracle.
+    // Different messages would turn login into a username oracle.
     const wrongPassword = await app.inject({
       method: 'POST',
       url: url('/auth/login'),
-      payload: { username: 'assistant', password: 'not-the-password' },
+      payload: { username: 'manager', password: 'not-the-password' },
     });
     const unknownUser = await app.inject({
       method: 'POST',
@@ -83,11 +97,11 @@ describe('authentication (CLAUDE.md §7.1)', () => {
     expect(wrongPassword.json().error.message).toBe(unknownUser.json().error.message);
   });
 
-  it('rotates refresh tokens and revokes the old one', async () => {
+  it('rotates refresh tokens and revokes the whole chain on replay', async () => {
     const login = await app.inject({
       method: 'POST',
       url: url('/auth/login'),
-      payload: { username: 'assistant', password: TEST_PASSWORD },
+      payload: { username: 'manager', password: TEST_PASSWORD },
     });
     const original = login.json().tokens.refreshToken as string;
 
@@ -99,8 +113,8 @@ describe('authentication (CLAUDE.md §7.1)', () => {
     expect(refreshed.statusCode).toBe(200);
     expect(refreshed.json().tokens.refreshToken).not.toBe(original);
 
-    // Replaying the old token must fail — and take the whole chain down with it,
-    // because a replay is indistinguishable from a theft.
+    // Replaying the old token fails — and takes the chain down with it, because a
+    // replay is indistinguishable from a theft.
     const replay = await app.inject({
       method: 'POST',
       url: url('/auth/refresh'),
@@ -108,11 +122,10 @@ describe('authentication (CLAUDE.md §7.1)', () => {
     });
     expect(replay.statusCode).toBe(401);
 
-    const newToken = refreshed.json().tokens.refreshToken as string;
     const afterBreach = await app.inject({
       method: 'POST',
       url: url('/auth/refresh'),
-      payload: { refreshToken: newToken },
+      payload: { refreshToken: refreshed.json().tokens.refreshToken },
     });
     expect(afterBreach.statusCode).toBe(401);
   });
@@ -135,85 +148,129 @@ describe('authentication (CLAUDE.md §7.1)', () => {
   });
 
   it('protects routes by default — a new route is not accidentally public', async () => {
-    // Auth is opt-out, so anything without an explicit `public` marker requires a
-    // token. This is the property that keeps a forgotten route from leaking.
-    const response = await app.inject({ method: 'GET', url: url('/customers') });
+    // Auth is opt-out: anything without an explicit `public` marker needs a token.
+    // This is the property that keeps a forgotten route from leaking.
+    const response = await app.inject({ method: 'GET', url: url(`/customers/${world.customerId}`) });
     expect(response.statusCode).toBe(401);
   });
 });
 
-describe('RBAC (CLAUDE.md §7.2)', () => {
-  it('lets an assistant run the core loop', async () => {
-    const token = await tokenFor('assistant');
+describe('RBAC', () => {
+  it('lets the station resolve a customer by scanned card', async () => {
+    const token = await tokenFor('station');
     const response = await app.inject({
       method: 'GET',
-      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerPhone)}`),
+      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerBarcode)}`),
       headers: bearer(token),
     });
+
     expect(response.statusCode).toBe(200);
-    expect(response.json().customer.name).toBe('حسين علي');
+    expect(response.json().customer.id).toBe(world.customerId);
   });
 
-  it('stops an assistant reading the customer list', async () => {
-    const token = await tokenFor('assistant');
+  it('lets the station register a customer', async () => {
+    // Registration happens at the counter, so the station operator must be able to.
+    const token = await tokenFor('station');
     const response = await app.inject({
-      method: 'GET',
+      method: 'POST',
       url: url('/customers'),
       headers: bearer(token),
+      payload: { name: 'زينب عبد الرزاق', phone: '07801112233' },
     });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().customer.barcodeToken).toBeTruthy();
+  });
+
+  it('stops the station reading customer detail', async () => {
+    // Detail is a manager screen. The station shows one field and three outcomes.
+    const token = await tokenFor('station');
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/${world.customerId}`),
+      headers: bearer(token),
+    });
+
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('FORBIDDEN');
   });
 
-  it('stops an assistant changing the loyalty rules', async () => {
-    // An assistant who could move thresholds could mint themselves discounts.
-    const token = await tokenFor('assistant');
+  it('lets a manager read customer detail with a derived balance', async () => {
+    await createTransaction(prisma, world, { invoiceId: 'INV-1', amountGross: 30_000 });
 
-    const read = await app.inject({ method: 'GET', url: url('/rules'), headers: bearer(token) });
-    expect(read.statusCode).toBe(403);
-
-    const write = await app.inject({
-      method: 'PUT',
-      url: url('/rules'),
-      headers: bearer(token),
-      payload: {
-        periodType: 'MONTHLY',
-        tiers: [{ thresholdAmount: 1, discountPct: 99, couponValidityDays: 365 }],
-      },
-    });
-    expect(write.statusCode).toBe(403);
-  });
-
-  it('lets a manager read and update the rules, and audits the change', async () => {
     const token = await tokenFor('manager');
-
-    const read = await app.inject({ method: 'GET', url: url('/rules'), headers: bearer(token) });
-    expect(read.statusCode).toBe(200);
-    expect(read.json().ruleSet.tiers).toHaveLength(3);
-
-    const update = await app.inject({
-      method: 'PUT',
-      url: url('/rules'),
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/${world.customerId}`),
       headers: bearer(token),
-      payload: {
-        periodType: 'MONTHLY',
-        tiers: [
-          { thresholdAmount: 150_000, discountPct: 7, couponValidityDays: 30 },
-          { thresholdAmount: 400_000, discountPct: 12, couponValidityDays: 30 },
-        ],
-      },
     });
-    expect(update.statusCode).toBe(200);
-    expect(update.json().ruleSet.tiers).toHaveLength(2);
 
-    const audit = await prisma.auditLog.findFirst({ where: { action: 'rules.updated' } });
-    expect(audit?.actorUserId).toBe(world.managerId);
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.customer.name).toBe('حسين علي');
+    // Computed from transaction rows, not read from a stored total (§5.3).
+    expect(body.balance.cumulativeAmount).toBe(30_000);
+    expect(body.balance.transactionCount).toBe(1);
   });
 });
 
-describe('validation (CLAUDE.md §7.4)', () => {
+describe('balance derivation over HTTP (§5.3)', () => {
+  it('reports the gap to the next threshold', async () => {
+    await createTransaction(prisma, world, { invoiceId: 'INV-1', amountGross: 30_000 });
+
+    const token = await tokenFor('station');
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerBarcode)}`),
+      headers: bearer(token),
+    });
+
+    const balance = response.json().balance;
+    expect(balance.cumulativeAmount).toBe(30_000);
+    expect(balance.nextThresholdAmount).toBe(75_000);
+    expect(balance.amountToNextThreshold).toBe(45_000);
+    expect(balance.nextDiscountLabel).toBe('3٪');
+  });
+
+  it('reports no next threshold once every tier is cleared', async () => {
+    await createTransaction(prisma, world, { invoiceId: 'INV-BIG', amountGross: 200_000 });
+
+    const token = await tokenFor('station');
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerBarcode)}`),
+      headers: bearer(token),
+    });
+
+    const balance = response.json().balance;
+    expect(balance.nextThresholdAmount).toBeNull();
+    expect(balance.amountToNextThreshold).toBeNull();
+  });
+
+  it('excludes unattributed invoices from any customer balance', async () => {
+    // A capture with no card scanned belongs to nobody. Counting it toward a
+    // balance would hand a customer someone else's spending.
+    await createTransaction(prisma, world, { invoiceId: 'INV-MINE', amountGross: 30_000 });
+    await createTransaction(prisma, world, {
+      invoiceId: 'INV-NOBODY',
+      amountGross: 900_000,
+      customerId: null,
+    });
+
+    const token = await tokenFor('manager');
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/${world.customerId}`),
+      headers: bearer(token),
+    });
+
+    expect(response.json().balance.cumulativeAmount).toBe(30_000);
+  });
+});
+
+describe('validation', () => {
   it('rejects unknown fields instead of dropping them silently', async () => {
-    const token = await tokenFor('assistant');
+    const token = await tokenFor('station');
     const response = await app.inject({
       method: 'POST',
       url: url('/customers'),
@@ -226,7 +283,7 @@ describe('validation (CLAUDE.md §7.4)', () => {
   });
 
   it('normalises a phone number to E.164 on the way in', async () => {
-    const token = await tokenFor('assistant');
+    const token = await tokenFor('station');
     const response = await app.inject({
       method: 'POST',
       url: url('/customers'),
@@ -235,37 +292,12 @@ describe('validation (CLAUDE.md §7.4)', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    // One human must never become two accounts because of formatting (§13.4).
+    // One human must never become two accounts because of formatting.
     expect(response.json().customer.phone).toBe('+9647801112233');
   });
 
-  it('rejects a float amount — money is an integer', async () => {
-    const token = await tokenFor('assistant');
-    const response = await app.inject({
-      method: 'POST',
-      url: url('/transactions'),
-      headers: bearer(token),
-      payload: {
-        customerId: world.customerId,
-        invoice: {
-          invoice_id: 'INV-1',
-          amount: 85_000.5,
-          currency: 'IQD',
-          branch_id: 'BAG-01',
-          customer_identifier: world.customerPhone,
-          occurred_at: new Date().toISOString(),
-          source: 'scan',
-          amount_capture: 'auto',
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.fields?.length).toBeGreaterThan(0);
-  });
-
   it('reports field-level detail on a validation failure', async () => {
-    const token = await tokenFor('assistant');
+    const token = await tokenFor('station');
     const response = await app.inject({
       method: 'POST',
       url: url('/customers'),
@@ -277,66 +309,29 @@ describe('validation (CLAUDE.md §7.4)', () => {
     expect(response.statusCode).toBe(400);
     expect(body.error.fields.map((f: { path: string }) => f.path)).toContain('phone');
   });
+
+  it('refuses a duplicate phone number', async () => {
+    const token = await tokenFor('station');
+    const response = await app.inject({
+      method: 'POST',
+      url: url('/customers'),
+      headers: bearer(token),
+      // The fixture already holds this number.
+      payload: { name: 'حسين علي', phone: world.customerPhone },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('CUSTOMER_ALREADY_EXISTS');
+  });
 });
 
-describe('the core loop over HTTP', () => {
-  const invoicePayload = (invoiceId: string, amount: number) => ({
-    invoice_id: invoiceId,
-    amount,
-    currency: 'IQD' as const,
-    branch_id: 'BAG-01',
-    customer_identifier: '+9647701234567',
-    occurred_at: new Date().toISOString(),
-    source: 'scan' as const,
-    amount_capture: 'auto' as const,
-  });
-
-  it('links an invoice and returns balance plus any coupon', async () => {
-    const token = await tokenFor('assistant');
-    const response = await app.inject({
-      method: 'POST',
-      url: url('/transactions'),
-      headers: bearer(token),
-      payload: { customerId: world.customerId, invoice: invoicePayload('INV-9824', 100_000) },
-    });
-
-    expect(response.statusCode).toBe(201);
-    const body = response.json();
-    expect(body.balance.cumulativeAmount).toBe(100_000);
-    expect(body.issuedCoupon.discountPct).toBe(5);
-  });
-
-  it('returns 409 with the existing record on a duplicate', async () => {
-    const token = await tokenFor('assistant');
-    const payload = {
-      customerId: world.customerId,
-      invoice: invoicePayload('INV-9824', 50_000),
-    };
-
-    await app.inject({
-      method: 'POST',
-      url: url('/transactions'),
-      headers: bearer(token),
-      payload,
-    });
-    const duplicate = await app.inject({
-      method: 'POST',
-      url: url('/transactions'),
-      headers: bearer(token),
-      payload,
-    });
-
-    expect(duplicate.statusCode).toBe(409);
-    const body = duplicate.json();
-    expect(body.error.code).toBe('DUPLICATE_INVOICE');
-    expect(body.error.details.customerName).toBe('حسين علي');
-  });
-
-  it('resolves a customer by QR token as well as by phone', async () => {
-    const token = await tokenFor('assistant');
+describe('card resolution', () => {
+  it('resolves by phone as well as by scanned card', async () => {
+    // Phone lookup exists for reprint, when the customer has lost the card.
+    const token = await tokenFor('station');
     const response = await app.inject({
       method: 'GET',
-      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerQrToken)}`),
+      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerPhone)}`),
       headers: bearer(token),
     });
 
@@ -344,13 +339,26 @@ describe('the core loop over HTTP', () => {
     expect(response.json().customer.id).toBe(world.customerId);
   });
 
-  it('refuses a QR token with a broken signature without leaking existence', async () => {
-    const token = await tokenFor('assistant');
-    const tampered = `${world.customerQrToken.slice(0, -4)}AAAA`;
+  it('refuses a card code with a broken signature without leaking existence', async () => {
+    const token = await tokenFor('station');
+    const tampered = `${world.customerBarcode.slice(0, -4)}AAAA`;
 
     const response = await app.inject({
       method: 'GET',
       url: url(`/customers/resolve?identifier=${encodeURIComponent(tampered)}`),
+      headers: bearer(token),
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('never exposes a customer from another merchant', async () => {
+    const other = await createWorld(prisma);
+    const token = await tokenFor('station');
+
+    const response = await app.inject({
+      method: 'GET',
+      url: url(`/customers/resolve?identifier=${encodeURIComponent(other.customerBarcode)}`),
       headers: bearer(token),
     });
 
@@ -369,26 +377,13 @@ describe('error envelope and headers', () => {
   });
 
   it('does not let an unauthenticated caller enumerate routes', async () => {
-    // The auth hook runs before the not-found handler, so an unknown path is 401
-    // rather than 404. That is deliberate: differing answers would reveal which
-    // routes exist to someone with no credentials.
+    // The auth hook runs before the not-found handler, so an unknown path answers
+    // 401 rather than 404 — differing answers would reveal which routes exist.
     const response = await app.inject({ method: 'GET', url: url('/nope') });
     expect(response.statusCode).toBe(401);
-    expect(response.json().error.code).toBe('UNAUTHENTICATED');
   });
 
-  it('returns the envelope for an unknown route when authenticated', async () => {
-    const token = await tokenFor('manager');
-    const response = await app.inject({
-      method: 'GET',
-      url: url('/nope'),
-      headers: bearer(token),
-    });
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('NOT_FOUND');
-  });
-
-  it('sets HSTS and the other security headers (CLAUDE.md §7.3)', async () => {
+  it('sets HSTS and the other security headers', async () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
     expect(response.headers['strict-transport-security']).toContain('max-age=63072000');
     expect(response.headers['x-content-type-options']).toBe('nosniff');

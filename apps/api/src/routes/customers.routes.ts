@@ -2,26 +2,20 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   CreateCustomerRequestSchema,
-  CustomerListQuerySchema,
   DASHBOARD_ROLES,
   ResolveCustomerQuerySchema,
   UpdateCustomerRequestSchema,
   type CreateCustomerRequest,
-  type CustomerListQuery,
   type UpdateCustomerRequest,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
-import { listCustomerCoupons } from '../services/coupon.service';
+import { getCustomerBalance } from '../services/balance.service';
 import {
   createCustomer,
   getCustomer,
-  listCustomers,
   resolveCustomer,
   updateCustomer,
 } from '../services/customer.service';
-import { getPeriodContext, periodKeyFor, resolveEffectiveRules } from '../services/rules.service';
-import { getCustomerBalance } from '../services/transaction.service';
-import { prisma } from '../lib/prisma';
 
 const IdParamSchema = z.object({ id: z.string().uuid('معرّف غير صالح') }).strict();
 
@@ -57,58 +51,18 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     return { customer };
   });
 
-  /** Dashboard listing — managers only; an assistant has no reason to browse customers. */
-  app.get(
-    '/',
-    {
-      config: { roles: DASHBOARD_ROLES },
-      schema: { querystring: CustomerListQuerySchema },
-    },
-    async (request) => {
-      const auth = requireDashboardRole(request);
-      const periodContext = await getPeriodContext(auth.merchantId);
-      const periodKey = periodKeyFor(periodContext, new Date());
-      return listCustomers(auth.merchantId, request.query as CustomerListQuery, periodKey);
-    },
-  );
-
-  /** Full customer detail: balance, effective rules, recent transactions, coupons. */
+  /** Customer detail. V3-2 adds transactions, vouchers and rule origin. */
   app.get(
     '/:id',
     { config: { roles: DASHBOARD_ROLES }, schema: { params: IdParamSchema } },
     async (request) => {
       const auth = requireDashboardRole(request);
       const { id } = request.params as { id: string };
-
-      const customer = await getCustomer(auth.merchantId, id);
-      const [balance, rules, coupons, transactions] = await Promise.all([
+      const [customer, balance] = await Promise.all([
+        getCustomer(auth.merchantId, id),
         getCustomerBalance(auth.merchantId, id),
-        resolveEffectiveRules(auth.merchantId, id),
-        listCustomerCoupons(auth.merchantId, id),
-        prisma.transaction.findMany({
-          where: { customerId: id, merchantId: auth.merchantId },
-          orderBy: { occurredAt: 'desc' },
-          take: 25,
-          include: { branch: { select: { code: true } } },
-        }),
       ]);
-
-      return {
-        customer,
-        balance,
-        // Which layer supplied the rules, so the screen can explain why this
-        // customer's threshold differs from everyone else's (CLAUDE.md §13.3).
-        rules: { origin: rules.origin, tiers: rules.tiers },
-        coupons,
-        transactions: transactions.map((t) => ({
-          id: t.id,
-          invoiceId: t.invoiceId,
-          amount: t.amount,
-          occurredAt: t.occurredAt.toISOString(),
-          branchCode: t.branch.code,
-          amountCapture: t.amountCapture,
-        })),
-      };
+      return { customer, balance };
     },
   );
 
@@ -128,11 +82,4 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       return { customer };
     },
   );
-
-  /** A customer's coupons. Reachable by assistants — redemption happens at the register. */
-  app.get('/:id/coupons', { schema: { params: IdParamSchema } }, async (request) => {
-    const auth = requireAuth(request);
-    const { id } = request.params as { id: string };
-    return { coupons: await listCustomerCoupons(auth.merchantId, id) };
-  });
 }

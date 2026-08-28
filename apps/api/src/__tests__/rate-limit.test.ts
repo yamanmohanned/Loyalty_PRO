@@ -40,7 +40,7 @@ describe('login throttling', () => {
         await app.inject({
           method: 'POST',
           url: `${API_PREFIX}/auth/login`,
-          payload: { username: 'assistant', password: 'wrong-password' },
+          payload: { username: 'manager', password: 'wrong-password' },
         }),
       );
     }
@@ -63,7 +63,7 @@ describe('login throttling', () => {
         await app.inject({
           method: 'POST',
           url: `${API_PREFIX}/auth/login`,
-          payload: { username: 'assistant', password: TEST_PASSWORD },
+          payload: { username: 'manager', password: TEST_PASSWORD },
         }),
       );
     }

@@ -1,8 +1,6 @@
 import { z } from 'zod';
 import { CustomerCategorySchema } from './enums';
-import { IqdAmountSchema } from './money';
 import { PhoneInputSchema } from './phone';
-import { PeriodKeySchema } from './period';
 
 /** Customer DTOs. Phone is the identifier; nothing sensitive is stored (CLAUDE.md §0.4). */
 
@@ -13,15 +11,21 @@ export const CustomerSchema = z.object({
   phone: z.string(),
   category: CustomerCategorySchema,
   /**
-   * The signed, opaque token encoded in the customer's QR. Never contains PII
-   * (CLAUDE.md §3.6, §7.9) — it resolves to a customer server-side and nowhere else.
+   * The permanent code printed on the customer's loyalty card. Opaque and signed —
+   * never PII, never derived from the phone number. A reprint reissues THIS code:
+   * a new one would sever the customer from their own history (§6.2 #5).
    */
-  qrToken: z.string(),
+  barcodeToken: z.string(),
   createdAt: z.string().datetime({ offset: true }),
 });
 
 export type Customer = z.infer<typeof CustomerSchema>;
 
+/**
+ * Registration takes **name and phone only** (§6.2 #4). Category is optional and
+ * defaults to REGULAR — the station never asks for it. Every additional field at
+ * the counter costs enrolment, and enrolment is the whole programme.
+ */
 export const CreateCustomerRequestSchema = z
   .object({
     name: z.string().trim().min(2, 'الاسم مطلوب').max(120),
@@ -55,21 +59,6 @@ export const ResolveCustomerQuerySchema = z
   .strict();
 
 export type ResolveCustomerQuery = z.infer<typeof ResolveCustomerQuerySchema>;
-
-/** A customer's standing within the *current* loyalty period. */
-export const CustomerBalanceSchema = z.object({
-  periodKey: PeriodKeySchema,
-  /** Cumulative spend this period, derived from transactions — never hand-edited. */
-  cumulativeAmount: IqdAmountSchema,
-  /** The next tier's threshold, or null when every tier is already earned. */
-  nextThresholdAmount: IqdAmountSchema.nullable(),
-  /** How much more to spend to reach it. Null when there is no next tier. */
-  amountToNextThreshold: IqdAmountSchema.nullable(),
-  /** The discount waiting at that next threshold. */
-  nextDiscountPct: z.number().int().nullable(),
-});
-
-export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
 
 /** Sorting for the dashboard list. Deliberately no `name` search (see above). */
 export const CustomerListQuerySchema = z

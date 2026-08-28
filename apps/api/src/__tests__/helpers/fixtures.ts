@@ -1,13 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
-import { hashPassword } from '../../lib/password';
-import { generateQrToken } from '../../lib/qr-token';
+import { computePeriodKey } from '@walaa/shared-types';
 import { loadEnv } from '../../config/env';
+import { generateBarcodeToken } from '../../lib/barcode-token';
+import { hashPassword } from '../../lib/password';
 
 /**
- * Minimal, explicit fixtures.
+ * Minimal, explicit fixtures (v3).
  *
  * Deliberately not the dev seed: tests assert on exact amounts and thresholds, so
- * they build precisely the world each case needs. Reusing the seed would couple
+ * each case builds precisely the world it needs. Reusing the seed would couple
  * every assertion to fixture data that exists for a different purpose.
  */
 
@@ -23,19 +24,22 @@ export interface World {
   otherBranchCode: string;
   ownerId: string;
   managerId: string;
-  assistantId: string;
-  ruleSetId: string;
+  stationUserId: string;
   customerId: string;
   customerPhone: string;
-  customerQrToken: string;
+  customerBarcode: string;
 }
 
-/** Tier ladder used across the suite: 100k→5%, 250k→10%, 500k→15%. */
-export const TIERS = [
-  { thresholdAmount: 100_000, discountPct: 5, couponValidityDays: 30, sortOrder: 0 },
-  { thresholdAmount: 250_000, discountPct: 10, couponValidityDays: 30, sortOrder: 1 },
-  { thresholdAmount: 500_000, discountPct: 15, couponValidityDays: 45, sortOrder: 2 },
+/**
+ * The ladder used across the suite. Inside the 1–3% safe band (§2.3), because a
+ * fixture is also a worked example and should not model a rate that loses money.
+ */
+export const DISCOUNT_RULES = [
+  { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2, maxDiscountValue: null, sortOrder: 0 },
+  { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 3, maxDiscountValue: null, sortOrder: 1 },
 ];
+
+export const ABSOLUTE_MAX_DISCOUNT = 5_000;
 
 export async function createWorld(
   prisma: PrismaClient,
@@ -78,25 +82,34 @@ export async function createWorld(
       branchId: branch.id,
     },
   });
-  const assistant = await prisma.user.create({
+  const station = await prisma.user.create({
     data: {
       merchantId: merchant.id,
-      name: 'المساعد',
-      username: 'assistant',
+      name: 'محطة الولاء',
+      username: 'station',
       passwordHash,
-      role: 'ASSISTANT',
+      role: 'STATION',
       branchId: branch.id,
     },
   });
 
-  const ruleSet = await prisma.loyaltyRuleSet.create({
+  await prisma.discountSettings.create({
     data: {
       merchantId: merchant.id,
+      discountType: 'PERCENTAGE',
+      minRate: 1,
+      maxRate: 3,
+      absoluteMaxDiscountValue: ABSOLUTE_MAX_DISCOUNT,
       periodType: options?.periodType ?? 'MONTHLY',
-      isActive: true,
-      tiers: { create: TIERS },
+      settlementStrategy: 'VOUCHER_AS_PAYMENT',
     },
   });
+
+  for (const rule of DISCOUNT_RULES) {
+    await prisma.discountRule.create({
+      data: { merchantId: merchant.id, ...rule, isActive: true },
+    });
+  }
 
   const customer = await prisma.customer.create({
     data: {
@@ -104,7 +117,7 @@ export async function createWorld(
       name: 'حسين علي',
       phone: '+9647701234567',
       category: 'REGULAR',
-      qrToken: generateQrToken(env.QR_TOKEN_SECRET),
+      barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
     },
   });
 
@@ -116,30 +129,82 @@ export async function createWorld(
     otherBranchCode: otherBranch.code,
     ownerId: owner.id,
     managerId: manager.id,
-    assistantId: assistant.id,
-    ruleSetId: ruleSet.id,
+    stationUserId: station.id,
     customerId: customer.id,
     customerPhone: customer.phone,
-    customerQrToken: customer.qrToken,
+    customerBarcode: customer.barcodeToken,
   };
 }
 
-/** Builds a Normalized Invoice Schema payload with sensible defaults. */
-export function invoice(overrides: {
+/**
+ * Writes a captured transaction directly.
+ *
+ * `customerId: null` produces an unattributed capture — an invoice the agent
+ * recorded before (or without) any card scan, which is the common case in a real
+ * store and must be exercised as a first-class state.
+ */
+export async function createTransaction(
+  prisma: PrismaClient,
+  world: World,
+  params: {
+    invoiceId: string;
+    amountGross: number;
+    customerId?: string | null;
+    occurredAt?: Date;
+    captureMode?: string;
+    branchId?: string;
+    timezone?: string;
+  },
+): Promise<{ id: string; periodKey: string }> {
+  const occurredAt = params.occurredAt ?? new Date();
+  const periodKey = computePeriodKey({
+    periodType: 'MONTHLY',
+    occurredAt,
+    timeZone: params.timezone ?? 'Asia/Baghdad',
+  });
+
+  const customerId = params.customerId === undefined ? world.customerId : params.customerId;
+
+  const created = await prisma.transaction.create({
+    data: {
+      merchantId: world.merchantId,
+      branchId: params.branchId ?? world.branchId,
+      customerId,
+      invoiceId: params.invoiceId,
+      amountGross: params.amountGross,
+      discountType: 'NONE',
+      discountRate: 0,
+      discountValue: 0,
+      amountNet: params.amountGross,
+      currency: 'IQD',
+      captureMode: params.captureMode ?? 'SPOOL_WATCH',
+      periodKey,
+      occurredAt,
+      capturedAt: occurredAt,
+      linkedAt: customerId ? occurredAt : null,
+      linkedByUserId: customerId ? world.stationUserId : null,
+    },
+  });
+
+  return { id: created.id, periodKey };
+}
+
+/** A captured-invoice payload as the Print Capture Agent would send it. */
+export function capturedInvoice(overrides: {
   invoice_id: string;
-  amount: number;
+  amount_gross: number;
   branch_id?: string;
   occurred_at?: string;
-  amount_capture?: 'auto' | 'manual';
+  capture_mode?: 'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'SERIAL_BRIDGE' | 'NETWORK_PROXY' | 'MANUAL';
 }) {
+  const occurred = overrides.occurred_at ?? new Date().toISOString();
   return {
     invoice_id: overrides.invoice_id,
-    amount: overrides.amount,
+    amount_gross: overrides.amount_gross,
     currency: 'IQD' as const,
     branch_id: overrides.branch_id ?? 'BAG-01',
-    customer_identifier: '+9647701234567',
-    occurred_at: overrides.occurred_at ?? new Date().toISOString(),
-    source: 'scan' as const,
-    amount_capture: overrides.amount_capture ?? 'auto',
+    occurred_at: occurred,
+    captured_at: occurred,
+    capture_mode: overrides.capture_mode ?? ('SPOOL_WATCH' as const),
   };
 }

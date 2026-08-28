@@ -1,20 +1,21 @@
 /**
- * Phase 0 verification probe.
+ * V3-1 verification probe.
  *
- * Reads back what the migration and seed produced and asserts the invariants that
- * Phase 0 is responsible for — most importantly that the idempotency guard exists
- * as a real database constraint and actually refuses a duplicate invoice
- * (CLAUDE.md §0.2, §0.6: evidence before assertions).
+ * Reads back what the migration and seed produced and asserts the invariants the
+ * data layer is responsible for. Exits non-zero on any failure, so it is usable
+ * in CI as well as by hand.
  *
- * Exits non-zero if any check fails, so it is usable in CI.
+ * The invariant it exists for above all others: **cumulative balance is computed
+ * from transactions, never stored** (CLAUDE_v3.md §5.3). There is no snapshot
+ * table any more, so this proves the derivation returns the right number rather
+ * than proving a cache agrees with its source.
  */
 
 import { PrismaClient } from '@prisma/client';
-import { computePeriodKey, formatIqd, formatPhoneLocal } from '@walaa/shared-types';
+import { computeDiscount, computePeriodKey, formatIqd, formatPhoneLocal } from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
+import { applySqlitePragmas } from '../src/lib/prisma';
 
-// Everything reaches the environment through the validated config module (§7.6) —
-// this also loads the repo-root .env that Prisma Client needs for DATABASE_URL.
 loadEnv();
 
 const prisma = new PrismaClient();
@@ -24,17 +25,16 @@ const prisma = new PrismaClient();
 let failures = 0;
 
 function check(label: string, passed: boolean, detail = ''): void {
-  const mark = passed ? '✔' : '✘';
-  console.log(`  ${mark} ${label}${detail ? `  ${detail}` : ''}`);
+  console.log(`  ${passed ? '✔' : '✘'} ${label}${detail ? `  ${detail}` : ''}`);
   if (!passed) failures += 1;
 }
 
-interface IndexRow {
-  indexname: string;
-  indexdef: string;
+interface TableRow {
+  name: string;
 }
 
 async function main(): Promise<void> {
+  await applySqlitePragmas(prisma);
   console.log('\n── بيانات مُدخلة ─────────────────────────────────────────────\n');
 
   const merchant = await prisma.merchant.findFirst({
@@ -43,53 +43,61 @@ async function main(): Promise<void> {
   if (!merchant) throw new Error('لا يوجد تاجر — شغّل `pnpm db:seed` أولاً');
 
   console.log(`  التاجر    ${merchant.name}  ·  ${merchant.timezone}  ·  ${merchant.currency}`);
-  console.log(
-    `  الفروع    ${merchant.branches.map((b) => `${b.code} (${b.name})`).join('  ·  ')}`,
-  );
-  console.log(
-    `  الطاقم    ${merchant.users.map((u) => `${u.username}:${u.role}`).join('  ·  ')}`,
-  );
+  console.log(`  الفروع    ${merchant.branches.map((b) => `${b.code} (${b.name})`).join('  ·  ')}`);
+  console.log(`  الطاقم    ${merchant.users.map((u) => `${u.username}:${u.role}`).join('  ·  ')}`);
 
-  const ruleSet = await prisma.loyaltyRuleSet.findFirst({
+  const settings = await prisma.discountSettings.findUnique({ where: { merchantId: merchant.id } });
+  if (!settings) throw new Error('لا توجد إعدادات خصم');
+
+  const rules = await prisma.discountRule.findMany({
     where: { merchantId: merchant.id, isActive: true },
-    include: { tiers: { orderBy: { sortOrder: 'asc' } } },
+    orderBy: { thresholdAmount: 'asc' },
   });
-  if (!ruleSet) throw new Error('لا توجد قواعد ولاء فعّالة');
 
   console.log(
-    `\n  المستويات (${ruleSet.periodType})  ` +
-      ruleSet.tiers
-        .map((t) => `${formatIqd(t.thresholdAmount)} → ${t.discountPct}٪ / ${t.couponValidityDays}ي`)
+    `\n  قواعد الخصم (${settings.periodType})  ` +
+      rules
+        .map((r) =>
+          r.discountType === 'PERCENTAGE'
+            ? `${formatIqd(r.thresholdAmount)} → ${r.discountRate}٪`
+            : `${formatIqd(r.thresholdAmount)} → ${formatIqd(r.discountRate)}`,
+        )
         .join('   ·   '),
   );
+  console.log(`  الحد الأقصى المطلق للخصم  ${formatIqd(settings.absoluteMaxDiscountValue)}`);
+  console.log(`  استراتيجية التسوية        ${settings.settlementStrategy}`);
 
   const currentPeriod = computePeriodKey({
-    periodType: ruleSet.periodType,
+    periodType: settings.periodType as 'WEEKLY' | 'MONTHLY' | 'CUSTOM',
     occurredAt: new Date(),
     timeZone: merchant.timezone,
-    customStart: ruleSet.periodStart,
-    customEnd: ruleSet.periodEnd,
+    customStart: settings.periodStart,
+    customEnd: settings.periodEnd,
   });
-  console.log(`  الفترة الحالية  ${currentPeriod}\n`);
+  console.log(`  الفترة الحالية            ${currentPeriod}\n`);
 
-  console.log('── أرصدة الزبائن ─────────────────────────────────────────────\n');
-  console.log('  الزبون                الهاتف           الفئة       الرصيد التراكمي   العمليات');
+  /* ── Derived balances ─────────────────────────────────────────────────────── */
+
+  console.log('── أرصدة الزبائن (محسوبة من العمليات — لا تُخزَّن) ──────────────\n');
+  console.log('  الزبون                الهاتف           الفئة       الرصيد التراكمي   الفواتير');
 
   const customers = await prisma.customer.findMany({
     where: { merchantId: merchant.id },
-    include: {
-      balanceSnapshots: { where: { periodKey: currentPeriod } },
-      _count: { select: { transactions: true } },
-    },
     orderBy: { createdAt: 'asc' },
   });
 
   for (const c of customers) {
-    const snapshot = c.balanceSnapshots[0];
-    const balance = snapshot ? formatIqd(snapshot.cumulativeAmount) : '—';
+    // §5.3: computed on demand from the log. There is no stored total to read.
+    const totals = await prisma.transaction.aggregate({
+      where: { customerId: c.id, periodKey: currentPeriod },
+      _sum: { amountGross: true },
+      _count: true,
+    });
+    const cumulative = totals._sum.amountGross ?? 0;
+
     console.log(
       `  ${c.name.padEnd(20)}  ${formatPhoneLocal(c.phone).padEnd(15)}  ` +
-        `${c.category.padEnd(10)}  ${balance.padStart(15)}   ${String(c._count.transactions).padStart(3)}`,
+        `${c.category.padEnd(10)}  ${(cumulative ? formatIqd(cumulative) : '—').padStart(15)}   ${String(totals._count).padStart(3)}`,
     );
   }
 
@@ -97,99 +105,126 @@ async function main(): Promise<void> {
 
   console.log('\n── تحقق من القيود ────────────────────────────────────────────\n');
 
-  // 1. The snapshot cache must agree with the authoritative transaction rows.
-  //    The cache is derived; if it ever disagrees, the cache is what is wrong.
-  let snapshotsAgree = true;
-  for (const c of customers) {
-    const snapshot = c.balanceSnapshots[0];
-    const grouped = await prisma.transaction.aggregate({
-      where: { customerId: c.id, periodKey: currentPeriod },
-      _sum: { amount: true },
-      _count: true,
-    });
-    const computed = grouped._sum.amount ?? 0;
-    const cached = snapshot?.cumulativeAmount ?? 0;
-    if (computed !== cached) {
-      snapshotsAgree = false;
-      console.log(`      تعارض عند ${c.name}: محسوب ${computed} ≠ مخزّن ${cached}`);
-    }
-  }
-  check('الرصيد المخزّن مطابق للمحسوب من العمليات', snapshotsAgree);
-
-  // 2. The idempotency guard must exist as a real UNIQUE index, not just API logic.
-  const indexes = await prisma.$queryRaw<IndexRow[]>`
-    SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'transaction'
+  // 1. No stored-balance table may exist. This is the check that would catch a
+  //    future reintroduction of a cache — the failure mode §5.3 exists to prevent.
+  const tables = await prisma.$queryRaw<TableRow[]>`
+    SELECT name FROM sqlite_master WHERE type = 'table'
   `;
-  const uniqueGuard = indexes.find(
-    (i) =>
-      i.indexdef.includes('UNIQUE') &&
-      i.indexdef.includes('merchant_id') &&
-      i.indexdef.includes('branch_id') &&
-      i.indexdef.includes('invoice_id'),
-  );
+  const tableNames = tables.map((t) => t.name);
   check(
-    'قيد الفريدة (merchant_id, branch_id, invoice_id) موجود في قاعدة البيانات',
-    Boolean(uniqueGuard),
-    uniqueGuard ? `[${uniqueGuard.indexname}]` : '',
+    'لا يوجد جدول لتخزين الرصيد التراكمي (§5.3)',
+    !tableNames.includes('balance_snapshot'),
+    `[${tableNames.length} جدول]`,
   );
 
-  // 3. And it must actually refuse a duplicate. A constraint nobody tested is a hope.
-  const sample = await prisma.transaction.findFirst({ where: { merchantId: merchant.id } });
-  if (!sample) throw new Error('لا توجد عمليات لاختبار التكرار');
+  // 2. The coupon engine is gone.
+  check('جداول الكوبونات محذوفة', !tableNames.includes('coupon'));
+
+  // 3. The v3 tables exist.
+  for (const expected of ['discount_rule', 'discount_settings', 'voucher', 'feature_flag']) {
+    check(`جدول ${expected} موجود`, tableNames.includes(expected));
+  }
+
+  // 4. The derived balance must equal a hand-summed total.
+  const sample = customers.find((c) => c.name === 'زينب عبد الرزاق');
+  if (sample) {
+    const rows = await prisma.transaction.findMany({
+      where: { customerId: sample.id, periodKey: currentPeriod },
+      select: { amountGross: true },
+    });
+    const byHand = rows.reduce((sum, r) => sum + r.amountGross, 0);
+    const aggregated = await prisma.transaction.aggregate({
+      where: { customerId: sample.id, periodKey: currentPeriod },
+      _sum: { amountGross: true },
+    });
+    check(
+      'الرصيد المحسوب يطابق الجمع اليدوي للعمليات',
+      byHand === (aggregated._sum.amountGross ?? 0),
+      `[${formatIqd(byHand)}]`,
+    );
+  }
+
+  // 5. The idempotency guard must exist as a real UNIQUE index.
+  const indexes = await prisma.$queryRaw<Array<{ name: string; sql: string | null }>>`
+    SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'transaction'
+  `;
+  const guard = indexes.find(
+    (i) =>
+      i.sql &&
+      i.sql.includes('merchant_id') &&
+      i.sql.includes('branch_id') &&
+      i.sql.includes('invoice_id') &&
+      i.sql.toUpperCase().includes('UNIQUE'),
+  );
+  check('قيد الفريدة (merchant_id, branch_id, invoice_id) موجود', Boolean(guard), guard ? `[${guard.name}]` : '');
+
+  // 6. And it must actually refuse a duplicate. A constraint nobody tested is a hope.
+  const existing = await prisma.transaction.findFirst({ where: { merchantId: merchant.id } });
+  if (!existing) throw new Error('لا توجد عمليات لاختبار التكرار');
 
   let duplicateRejected = false;
-  let duplicateCode = '';
   try {
     await prisma.transaction.create({
       data: {
-        merchantId: sample.merchantId,
-        branchId: sample.branchId,
-        customerId: sample.customerId,
-        invoiceId: sample.invoiceId, // same invoice, same branch — must be refused
-        amount: 1_000,
+        merchantId: existing.merchantId,
+        branchId: existing.branchId,
+        customerId: existing.customerId,
+        invoiceId: existing.invoiceId, // same invoice, same branch — must be refused
+        amountGross: 1_000,
+        amountNet: 1_000,
         currency: 'IQD',
+        captureMode: 'SPOOL_WATCH',
+        periodKey: existing.periodKey,
         occurredAt: new Date(),
-        source: 'SCAN',
-        amountCapture: 'MANUAL',
-        periodKey: sample.periodKey,
-        linkedByUserId: sample.linkedByUserId,
+        capturedAt: new Date(),
       },
     });
-  } catch (error: unknown) {
+  } catch {
     duplicateRejected = true;
-    if (error && typeof error === 'object' && 'code' in error) {
-      duplicateCode = String((error as { code: unknown }).code);
-    }
   }
+  check(`قاعدة البيانات ترفض التقاط نفس الفاتورة مرتين (${existing.invoiceId})`, duplicateRejected);
+
+  // 7. Unattributed captures are a normal state, not an error (§4).
+  const unattributed = await prisma.transaction.count({
+    where: { merchantId: merchant.id, customerId: null },
+  });
+  check('توجد فواتير ملتقطة غير مرتبطة بزبون (حالة طبيعية)', unattributed > 0, `[${unattributed}]`);
+
+  // 8. No barcode token may contain the customer's phone number.
+  const leaking = customers.filter((c) => {
+    const national = c.phone.replace('+964', '');
+    return c.barcodeToken.includes(national) || c.barcodeToken.includes(c.phone);
+  });
+  check('لا يحتوي أي رمز بطاقة على رقم هاتف الزبون', leaking.length === 0);
+
+  // 9. WAL mode must be on — the concurrency decision in §12.5 depends on it.
+  const journal = await prisma.$queryRaw<Array<{ journal_mode: string }>>`PRAGMA journal_mode`;
   check(
-    `قاعدة البيانات ترفض ربط نفس الفاتورة مرتين (${sample.invoiceId})`,
-    duplicateRejected,
-    duplicateCode ? `[Prisma ${duplicateCode}]` : '',
+    'وضع WAL مفعّل (قرّاء متزامنون + كاتب واحد)',
+    journal[0]?.journal_mode?.toLowerCase() === 'wal',
+    `[${journal[0]?.journal_mode ?? 'unknown'}]`,
   );
 
-  // 4. Hot-path indexes from CLAUDE.md §8 must be present.
-  const customerIndexes = await prisma.$queryRaw<IndexRow[]>`
-    SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'customer'
-  `;
-  const couponIndexes = await prisma.$queryRaw<IndexRow[]>`
-    SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'coupon'
-  `;
-  const hasIndexOn = (rows: IndexRow[], column: string): boolean =>
-    rows.some((r) => r.indexdef.includes(`(${column})`) || r.indexdef.includes(`${column},`) || r.indexdef.includes(`, ${column})`));
-
-  check('فهرس customer.phone', hasIndexOn(customerIndexes, 'phone'));
-  check('فهرس customer.qr_token', hasIndexOn(customerIndexes, 'qr_token'));
-  check('فهرس transaction (branch_id, invoice_id)', hasIndexOn(indexes, 'branch_id'));
-  check('فهرس transaction.customer_id', hasIndexOn(indexes, 'customer_id'));
-  check('فهرس coupon.customer_id', hasIndexOn(couponIndexes, 'customer_id'));
-  check('فهرس coupon.status', hasIndexOn(couponIndexes, 'status'));
-
-  // 5. No customer QR token may contain the customer's phone number (§7.9).
-  const leakingQr = customers.filter((c) => {
-    const national = c.phone.replace('+964', '');
-    return c.qrToken.includes(national) || c.qrToken.includes(c.phone);
+  // 10. The discount engine's cap must hold against a deliberately large basket.
+  const activeRules = rules.map((r) => ({
+    thresholdAmount: r.thresholdAmount,
+    discountType: r.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT',
+    discountRate: r.discountRate,
+    maxDiscountValue: r.maxDiscountValue,
+    isActive: r.isActive,
+  }));
+  const huge = computeDiscount({
+    amountGross: 5_000_000,
+    cumulativeAmount: 5_000_000,
+    rules: activeRules,
+    absoluteMaxDiscountValue: settings.absoluteMaxDiscountValue,
+    discountTypeSetting: settings.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE',
   });
-  check('لا يحتوي أي رمز QR على رقم هاتف الزبون', leakingQr.length === 0);
+  check(
+    'الحد الأقصى المطلق يقيّد فاتورة ضخمة (§2.3)',
+    huge.discountValue <= settings.absoluteMaxDiscountValue,
+    `[5,000,000 د.ع → خصم ${formatIqd(huge.discountValue)}]`,
+  );
 
   console.log('');
   if (failures > 0) {

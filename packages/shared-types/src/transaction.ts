@@ -1,100 +1,149 @@
 import { z } from 'zod';
-import { CouponSchema } from './coupon';
-import { CustomerBalanceSchema } from './customer';
-import { AmountCaptureSchema, InvoiceSourceSchema } from './enums';
-import { NormalizedInvoiceSchema } from './invoice';
-import { PositiveIqdAmountSchema } from './money';
+import { CaptureModeSchema, DiscountTypeSchema } from './enums';
+import { CapturedInvoiceSchema } from './invoice';
+import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
+import { PeriodKeySchema } from './period';
+import { VoucherSchema } from './voucher';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  THE CORE LOOP — linking an invoice to a customer
+ *  THE CORE LOOP (v3) — capture, then attribute
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Two invariants this DTO exists to protect (CLAUDE.md §0.1, §0.2):
+ * v1 had one step: the assistant held the customer and the invoice together and
+ * linked them. v3 splits that in two, because the receipt now prints before anyone
+ * knows who is holding it:
  *
- *  1. `customerId` is REQUIRED and non-nullable. Identity is captured before the
- *     invoice, always. There is deliberately no shape of this request that expresses
- *     "an invoice with no customer" — the loop order is enforced by the type, not
- *     only by a UI guard that a future refactor could route around.
+ *   1. **Ingestion** — the agent posts a captured invoice. Customer unknown.
+ *   2. **Attribution** — the customer scans their card at the station; the system
+ *      matches card to captured invoice, evaluates thresholds, computes the
+ *      discount, and issues a voucher.
  *
- *  2. (merchant, branch, invoice_id) is the idempotency key. A replay returns 409
- *     carrying the transaction that already exists, so the assistant can show the
- *     customer it was linked to rather than a bare failure.
+ * Step 1 happens for every sale in the store. Step 2 happens only for enrolled
+ * customers who scan. The gap between those two numbers is the enrolment rate, and
+ * it is a headline metric rather than an error condition.
  */
 
-export const LinkTransactionRequestSchema = z
+/* ── Step 1: ingestion ─────────────────────────────────────────────────────── */
+
+export const IngestInvoiceRequestSchema = z
   .object({
-    /** The resolved customer. Never optional — see invariant 1 above. */
-    customerId: z.string().uuid('معرّف الزبون غير صالح'),
-    /** The Normalized Invoice Schema, verbatim (CLAUDE.md §2.3). */
-    invoice: NormalizedInvoiceSchema,
-    /**
-     * Client-generated id for this link attempt, so a retry after a dropped response
-     * is recognised as the same attempt. Distinct from the invoice idempotency key:
-     * this one guards the network, that one guards the business rule.
-     */
-    idempotencyKey: z.string().uuid().optional(),
-    /** Which device performed the link — for the audit trail, not for authorisation. */
-    deviceId: z.string().trim().max(128).optional(),
+    invoice: CapturedInvoiceSchema,
+    /** Which agent installation sent it, for capture-health reporting. */
+    agentId: z.string().trim().max(128).optional(),
   })
   .strict();
 
-export type LinkTransactionRequest = z.infer<typeof LinkTransactionRequestSchema>;
+export type IngestInvoiceRequest = z.infer<typeof IngestInvoiceRequestSchema>;
+
+export const IngestInvoiceResponseSchema = z.object({
+  transactionId: z.string().uuid(),
+  invoiceId: z.string(),
+  /** True when this capture was already on record — a retry, not a new sale. */
+  duplicate: z.boolean(),
+  capturedAt: z.string().datetime({ offset: true }),
+});
+
+export type IngestInvoiceResponse = z.infer<typeof IngestInvoiceResponseSchema>;
+
+/* ── Step 2: attribution ───────────────────────────────────────────────────── */
+
+export const ScanCardRequestSchema = z
+  .object({
+    /** What the keyboard-wedge scanner typed — the customer's permanent card code. */
+    barcodeToken: z.string().trim().min(1, 'رمز البطاقة مطلوب').max(256),
+    /**
+     * A specific invoice to attribute. Normally omitted: the station takes the most
+     * recent unattributed capture from this branch, which is the receipt the person
+     * at the counter is holding.
+     */
+    invoiceId: z.string().trim().max(64).optional(),
+    stationId: z.string().trim().max(128).optional(),
+    idempotencyKey: z.string().uuid().optional(),
+  })
+  .strict();
+
+export type ScanCardRequest = z.infer<typeof ScanCardRequestSchema>;
 
 export const TransactionSchema = z.object({
   id: z.string().uuid(),
-  customerId: z.string().uuid(),
+  customerId: z.string().uuid().nullable(),
   branchId: z.string().uuid(),
   branchCode: z.string(),
   invoiceId: z.string(),
-  amount: PositiveIqdAmountSchema,
+  amountGross: PositiveIqdAmountSchema,
+  discountType: DiscountTypeSchema,
+  discountRate: z.number().int().min(0),
+  discountValue: IqdAmountSchema,
+  amountNet: IqdAmountSchema,
   currency: z.literal('IQD'),
+  captureMode: CaptureModeSchema,
+  periodKey: PeriodKeySchema,
   occurredAt: z.string().datetime({ offset: true }),
-  source: InvoiceSourceSchema,
-  amountCapture: AmountCaptureSchema,
-  linkedByUserId: z.string().uuid(),
+  capturedAt: z.string().datetime({ offset: true }),
+  linkedAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
 });
 
 export type Transaction = z.infer<typeof TransactionSchema>;
 
 /**
- * The response the assistant renders on the success screen: what was linked, where
- * the customer now stands, and whether that purchase just earned something.
+ * A customer's standing within the active period.
+ *
+ * **Always computed from transaction rows, never read from a stored total**
+ * (§5.3). v1's `balance_snapshot` cache is gone: a stored aggregate drifts from the
+ * log that produced it and then lies quietly. There is no cache to reconcile
+ * because there is no cache.
  */
-export const LinkTransactionResponseSchema = z.object({
-  transaction: TransactionSchema,
-  /** Cumulative balance for the active period, recomputed after this link. */
-  balance: CustomerBalanceSchema,
-  /**
-   * The coupon this transaction just earned, if it crossed a threshold. Null on the
-   * ordinary path — most links earn nothing, and that is the quiet case.
-   */
-  issuedCoupon: CouponSchema.nullable(),
-  /**
-   * A previously ACTIVE coupon that this higher tier superseded, if any. Customers
-   * hold at most one earned coupon per period; crossing a better tier replaces the
-   * lesser one rather than stacking discounts.
-   */
-  supersededCoupon: CouponSchema.nullable(),
+export const CustomerBalanceSchema = z.object({
+  periodKey: PeriodKeySchema,
+  cumulativeAmount: IqdAmountSchema,
+  transactionCount: z.number().int().min(0),
+  nextThresholdAmount: IqdAmountSchema.nullable(),
+  amountToNextThreshold: IqdAmountSchema.nullable(),
+  nextDiscountLabel: z.string().nullable(),
 });
 
-export type LinkTransactionResponse = z.infer<typeof LinkTransactionResponseSchema>;
+export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
 
-/** Payload carried in a 409 DUPLICATE_INVOICE error — the link that already exists. */
-export const DuplicateInvoiceDetailsSchema = z.object({
-  existingTransaction: TransactionSchema,
-  /** Who it was linked to, so the assistant can say "already linked to حسين علي". */
-  customerName: z.string(),
-  linkedAt: z.string().datetime({ offset: true }),
+/**
+ * The three outcomes of a card scan (§6.2 #3). The station renders exactly one.
+ *
+ * `NOT_QUALIFIED` is framed as progress, never as rejection — "you are X away from
+ * a discount" is a sales prompt, and telling a paying customer they failed at the
+ * till is the opposite of a loyalty programme.
+ */
+export const ScanOutcomeSchema = z.enum(['QUALIFIED', 'NOT_QUALIFIED', 'UNKNOWN_CARD', 'NO_PENDING_INVOICE']);
+export type ScanOutcome = z.infer<typeof ScanOutcomeSchema>;
+
+export const ScanCardResponseSchema = z.object({
+  outcome: ScanOutcomeSchema,
+  customer: z
+    .object({
+      id: z.string().uuid(),
+      name: z.string(),
+      phone: z.string(),
+      category: z.string(),
+    })
+    .nullable(),
+  transaction: TransactionSchema.nullable(),
+  balance: CustomerBalanceSchema.nullable(),
+  /** Present only on QUALIFIED — the slip to print. */
+  voucher: VoucherSchema.nullable(),
+  /** The progress sentence shown on NOT_QUALIFIED. */
+  progressMessage: z.string().nullable(),
 });
 
-export type DuplicateInvoiceDetails = z.infer<typeof DuplicateInvoiceDetailsSchema>;
+export type ScanCardResponse = z.infer<typeof ScanCardResponseSchema>;
+
+/* ── Listing ───────────────────────────────────────────────────────────────── */
 
 export const TransactionListQuerySchema = z
   .object({
     customerId: z.string().uuid().optional(),
     branchId: z.string().uuid().optional(),
+    /** `true` returns only captures no card has claimed yet. */
+    unattributed: z.coerce.boolean().optional(),
     from: z.string().datetime({ offset: true }).optional(),
     to: z.string().datetime({ offset: true }).optional(),
     page: z.coerce.number().int().min(1).default(1),
@@ -103,3 +152,12 @@ export const TransactionListQuerySchema = z
   .strict();
 
 export type TransactionListQuery = z.infer<typeof TransactionListQuerySchema>;
+
+/** Payload carried in a 409 on a duplicate capture — the record already held. */
+export const DuplicateInvoiceDetailsSchema = z.object({
+  existingTransaction: TransactionSchema,
+  customerName: z.string().nullable(),
+  capturedAt: z.string().datetime({ offset: true }),
+});
+
+export type DuplicateInvoiceDetails = z.infer<typeof DuplicateInvoiceDetailsSchema>;

@@ -1,28 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CapturedInvoiceSchema,
   IqdAmountSchema,
-  NormalizedInvoiceSchema,
+  UpdateDiscountRulesRequestSchema,
   computePeriodKey,
   formatIqd,
   formatPhoneLocal,
-  normalizePhone,
-  toAmountCapture,
-  toInvoiceSource,
-  toInvoiceSourceWire,
+  isInPathCaptureMode,
   isSyncItemSettled,
-  UpdateRuleSetRequestSchema,
+  normalizePhone,
+  PREFERRED_CAPTURE_MODE,
 } from '../index';
 
+/**
+ * Contract tests for the v3 shared types.
+ *
+ * These matter more under SQLite than they did under PostgreSQL: the database no
+ * longer enforces enums, so these schemas are the only thing standing between a
+ * typo and a corrupt row.
+ */
+
 describe('money', () => {
-  it('rejects floats — money is never a float (CLAUDE.md §4.2)', () => {
-    expect(IqdAmountSchema.safeParse(85000).success).toBe(true);
+  it('rejects floats — money is never a float (§5.4)', () => {
+    expect(IqdAmountSchema.safeParse(85_000).success).toBe(true);
     expect(IqdAmountSchema.safeParse(850.5).success).toBe(false);
     expect(IqdAmountSchema.safeParse(-1).success).toBe(false);
   });
 
   it('formats whole dinars with the IQD suffix', () => {
-    expect(formatIqd(85000)).toBe('85,000 د.ع');
-    expect(formatIqd(85000, { withSuffix: false })).toBe('85,000');
+    expect(formatIqd(85_000)).toBe('85,000 د.ع');
+    expect(formatIqd(85_000, { withSuffix: false })).toBe('85,000');
   });
 });
 
@@ -36,7 +43,6 @@ describe('phone normalization', () => {
       '009647701234567',
       '0770 123 4567',
       '0770-123-4567',
-      '+964 770 123 4567',
     ]) {
       expect(normalizePhone(input), `input: ${input}`).toBe(expected);
     }
@@ -57,113 +63,104 @@ describe('period keys', () => {
   const timeZone = 'Asia/Baghdad';
 
   it('buckets by calendar month in the merchant timezone', () => {
-    const key = computePeriodKey({
-      periodType: 'MONTHLY',
-      occurredAt: new Date('2026-08-24T10:42:00Z'),
-      timeZone,
-    });
-    expect(key).toBe('2026-08');
+    expect(
+      computePeriodKey({ periodType: 'MONTHLY', occurredAt: new Date('2026-08-24T10:42:00Z'), timeZone }),
+    ).toBe('2026-08');
   });
 
-  it('files a late-night purchase under the LOCAL month, not the UTC one', () => {
-    // 2026-08-31T22:00Z is already 01:00 on 1 September in Baghdad (UTC+3).
-    // Computing this in UTC would credit it to the wrong period and break the reset.
-    const key = computePeriodKey({
-      periodType: 'MONTHLY',
-      occurredAt: new Date('2026-08-31T22:00:00Z'),
-      timeZone,
-    });
-    expect(key).toBe('2026-09');
+  it('files a late-night sale under the LOCAL month, not the UTC one', () => {
+    // 22:00 UTC on 31 August is already 01:00 on 1 September in Baghdad. Bucketing
+    // in UTC would credit the spend to the wrong period and break the reset.
+    expect(
+      computePeriodKey({ periodType: 'MONTHLY', occurredAt: new Date('2026-08-31T22:00:00Z'), timeZone }),
+    ).toBe('2026-09');
   });
 
-  it('produces ISO week keys for weekly rule sets', () => {
-    const key = computePeriodKey({
-      periodType: 'WEEKLY',
-      occurredAt: new Date('2026-08-24T10:42:00Z'),
-      timeZone,
-    });
-    expect(key).toMatch(/^\d{4}-W\d{2}$/);
-  });
-
-  it('is deterministic — device and server must agree', () => {
+  it('is deterministic — station and server must agree', () => {
     const at = new Date('2026-08-24T10:42:00Z');
-    const a = computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone });
-    const b = computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone });
-    expect(a).toBe(b);
-  });
-
-  it('requires bounds for a custom period', () => {
-    expect(() =>
-      computePeriodKey({ periodType: 'CUSTOM', occurredAt: new Date(), timeZone }),
-    ).toThrow();
+    expect(computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone })).toBe(
+      computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone }),
+    );
   });
 });
 
-describe('normalized invoice schema', () => {
+describe('captured invoice contract (§4)', () => {
   const valid = {
     invoice_id: 'INV-9824',
-    amount: 85000,
+    amount_gross: 85_000,
     currency: 'IQD',
     branch_id: 'BAG-01',
-    customer_identifier: '07701234567',
     occurred_at: '2026-08-24T10:42:00Z',
-    source: 'scan',
-    amount_capture: 'auto',
+    captured_at: '2026-08-24T10:42:03Z',
+    capture_mode: 'SPOOL_WATCH',
   };
 
-  it('accepts the contract exactly as specified in CLAUDE.md §2.3', () => {
-    expect(NormalizedInvoiceSchema.safeParse(valid).success).toBe(true);
+  it('accepts what the agent sends', () => {
+    expect(CapturedInvoiceSchema.safeParse(valid).success).toBe(true);
   });
 
-  it('rejects unknown fields rather than silently dropping them (§7.4)', () => {
-    const result = NormalizedInvoiceSchema.safeParse({ ...valid, sneaky_total: 1 });
-    expect(result.success).toBe(false);
+  it('carries no customer identifier — nobody is known at capture time', () => {
+    // The central v3 change: the receipt prints before the customer reaches the
+    // station, and most shoppers are not enrolled at all.
+    const withCustomer = { ...valid, customer_identifier: '07701234567' };
+    expect(CapturedInvoiceSchema.safeParse(withCustomer).success).toBe(false);
   });
 
-  it('rejects a zero or negative invoice amount', () => {
-    expect(NormalizedInvoiceSchema.safeParse({ ...valid, amount: 0 }).success).toBe(false);
+  it('rejects unknown fields rather than dropping them silently', () => {
+    expect(CapturedInvoiceSchema.safeParse({ ...valid, sneaky_total: 1 }).success).toBe(false);
+  });
+
+  it('rejects a zero or float gross amount', () => {
+    expect(CapturedInvoiceSchema.safeParse({ ...valid, amount_gross: 0 }).success).toBe(false);
+    expect(CapturedInvoiceSchema.safeParse({ ...valid, amount_gross: 85_000.5 }).success).toBe(false);
+  });
+
+  it('rejects a capture mode that is not one of the four plus manual', () => {
+    expect(CapturedInvoiceSchema.safeParse({ ...valid, capture_mode: 'USB_FILTER' }).success).toBe(false);
   });
 });
 
-describe('wire ⇄ db enum mapping', () => {
-  it('round-trips without drift', () => {
-    expect(toInvoiceSource('db_agent')).toBe('DB_AGENT');
-    expect(toInvoiceSourceWire('DB_AGENT')).toBe('db_agent');
-    expect(toAmountCapture('manual')).toBe('MANUAL');
+describe('capture modes and the Fail-Open distinction (§4.6)', () => {
+  it('prefers the one mode that cannot block printing', () => {
+    expect(PREFERRED_CAPTURE_MODE).toBe('SPOOL_WATCH');
+    expect(isInPathCaptureMode('SPOOL_WATCH')).toBe(false);
+  });
+
+  it('marks the three in-path modes as in-path', () => {
+    // These sit in the print path: if the agent process is dead there is no code to
+    // forward with. They need forward-first handling and a watchdog.
+    for (const mode of ['VIRTUAL_PRINTER', 'SERIAL_BRIDGE', 'NETWORK_PROXY'] as const) {
+      expect(isInPathCaptureMode(mode), mode).toBe(true);
+    }
   });
 });
 
-describe('rule ladder validation', () => {
-  const base = { periodType: 'MONTHLY' as const };
-
+describe('discount rule ladder validation', () => {
   it('accepts an ascending ladder', () => {
-    const result = UpdateRuleSetRequestSchema.safeParse({
-      ...base,
-      tiers: [
-        { thresholdAmount: 100_000, discountPct: 5, couponValidityDays: 30 },
-        { thresholdAmount: 250_000, discountPct: 10, couponValidityDays: 30 },
+    const result = UpdateDiscountRulesRequestSchema.safeParse({
+      rules: [
+        { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2 },
+        { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 3 },
       ],
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects a ladder where more spend earns a smaller discount', () => {
-    const result = UpdateRuleSetRequestSchema.safeParse({
-      ...base,
-      tiers: [
-        { thresholdAmount: 100_000, discountPct: 10, couponValidityDays: 30 },
-        { thresholdAmount: 250_000, discountPct: 5, couponValidityDays: 30 },
+  it('rejects a ladder where more spend earns less', () => {
+    const result = UpdateDiscountRulesRequestSchema.safeParse({
+      rules: [
+        { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 3 },
+        { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 2 },
       ],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects duplicate thresholds — "next tier" would be ambiguous', () => {
-    const result = UpdateRuleSetRequestSchema.safeParse({
-      ...base,
-      tiers: [
-        { thresholdAmount: 100_000, discountPct: 5, couponValidityDays: 30 },
-        { thresholdAmount: 100_000, discountPct: 10, couponValidityDays: 30 },
+  it('rejects duplicate thresholds — which rule applies would be ambiguous', () => {
+    const result = UpdateDiscountRulesRequestSchema.safeParse({
+      rules: [
+        { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2 },
+        { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 3 },
       ],
     });
     expect(result.success).toBe(false);

@@ -1,4 +1,4 @@
-import type { AuthTokens, LoginResponse } from '@walaa/shared-types';
+import { RoleSchema, type AuthTokens, type LoginResponse, type Role } from '@walaa/shared-types';
 import { unauthenticated } from '../lib/errors';
 import {
   ACCESS_TTL_SECONDS,
@@ -21,17 +21,30 @@ import { prisma } from '../lib/prisma';
 /** One deliberately vague message for every login failure. */
 const LOGIN_FAILED = 'اسم المستخدم أو كلمة المرور غير صحيحة';
 
+/**
+ * SQLite stores `role` as a plain string — the database will accept anything.
+ * Parse rather than cast, so a corrupted row fails loudly here instead of
+ * silently granting whatever permissions a typo happens to miss.
+ */
+function parseRole(value: string): Role {
+  const parsed = RoleSchema.safeParse(value);
+  if (!parsed.success) {
+    throw unauthenticated('دور المستخدم غير صالح');
+  }
+  return parsed.data;
+}
+
 async function issueTokens(user: {
   id: string;
   merchantId: string;
   branchId: string | null;
-  role: 'OWNER' | 'MANAGER' | 'ASSISTANT';
+  role: string;
 }): Promise<AuthTokens> {
   const accessToken = await signAccessToken({
     sub: user.id,
     merchantId: user.merchantId,
     branchId: user.branchId,
-    role: user.role,
+    role: parseRole(user.role),
   });
 
   const { token, hash } = generateRefreshToken();
@@ -77,7 +90,7 @@ export async function login(username: string, password: string): Promise<LoginRe
       id: user.id,
       name: user.name,
       username: user.username,
-      role: user.role,
+      role: parseRole(user.role),
       merchantId: user.merchantId,
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,
@@ -136,7 +149,7 @@ export async function refresh(presentedToken: string): Promise<LoginResponse> {
       id: user.id,
       name: user.name,
       username: user.username,
-      role: user.role,
+      role: parseRole(user.role),
       merchantId: user.merchantId,
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,

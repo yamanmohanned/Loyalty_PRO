@@ -1,4 +1,4 @@
-import { InvoiceIdSchema, type InvoiceBarcodeParser, type ParsedInvoiceBarcode } from './invoice';
+import { InvoiceIdSchema, type ParsedReceipt, type ReceiptParser } from './invoice';
 import { MAX_IQD } from './money';
 
 /**
@@ -13,7 +13,7 @@ import { MAX_IQD } from './money';
  * Two rules every parser must honour:
  *
  *  1. **The invoice number is mandatory; the amount is not.** Returning
- *     `amount: null` is a normal, expected result — it routes the assistant to
+ *     `amountGross: null` is a normal, expected result — it routes the assistant to
  *     manual entry, which is why the invoice screen renders both states
  *     (CLAUDE.md §6.7 #2).
  *  2. **A doubtful amount is worse than no amount.** If the amount cannot be
@@ -48,7 +48,7 @@ function coerceAmount(candidate: string): number | null {
  *
  * Amount is always null — the symbology simply does not carry it.
  */
-export const invoiceNumberParser: InvoiceBarcodeParser = {
+export const invoiceNumberParser: ReceiptParser = {
   id: 'invoice-number-only',
 
   canParse(raw: string): boolean {
@@ -58,11 +58,11 @@ export const invoiceNumberParser: InvoiceBarcodeParser = {
     return value.length > 0 && !value.includes('|') && InvoiceIdSchema.safeParse(value).success;
   },
 
-  parse(raw: string): ParsedInvoiceBarcode {
+  parse(raw: string): ParsedReceipt {
     const value = clean(raw);
     return {
       invoiceId: InvoiceIdSchema.parse(value),
-      amount: null,
+      amountGross: null,
       raw,
     };
   },
@@ -79,7 +79,7 @@ export const invoiceNumberParser: InvoiceBarcodeParser = {
  * but not a clean whole number, the invoice number is still returned and the
  * amount falls back to null — a partial read is better than a refused scan.
  */
-export const delimitedInvoiceParser: InvoiceBarcodeParser = {
+export const delimitedInvoiceParser: ReceiptParser = {
   id: 'pipe-delimited',
 
   canParse(raw: string): boolean {
@@ -87,12 +87,12 @@ export const delimitedInvoiceParser: InvoiceBarcodeParser = {
     return parts.length >= 2 && InvoiceIdSchema.safeParse(parts[0]).success;
   },
 
-  parse(raw: string): ParsedInvoiceBarcode {
+  parse(raw: string): ParsedReceipt {
     const parts = clean(raw).split('|');
     const [invoiceId, amountField] = parts;
     return {
       invoiceId: InvoiceIdSchema.parse(invoiceId),
-      amount: amountField ? coerceAmount(amountField) : null,
+      amountGross: amountField ? coerceAmount(amountField) : null,
       raw,
     };
   },
@@ -103,7 +103,7 @@ export const delimitedInvoiceParser: InvoiceBarcodeParser = {
  * must be offered the payload before the bare-number parser, which would
  * otherwise reject it for containing a delimiter.
  */
-export const INVOICE_BARCODE_PARSERS: readonly InvoiceBarcodeParser[] = [
+export const RECEIPT_PARSERS: readonly ReceiptParser[] = [
   delimitedInvoiceParser,
   invoiceNumberParser,
 ];
@@ -113,10 +113,10 @@ export const INVOICE_BARCODE_PARSERS: readonly InvoiceBarcodeParser[] = [
  * Returns null when no parser matches, which the UI surfaces as "unreadable
  * barcode — enter the invoice number manually" rather than as an error.
  */
-export function parseInvoiceBarcode(
+export function parseReceipt(
   raw: string,
-  parsers: readonly InvoiceBarcodeParser[] = INVOICE_BARCODE_PARSERS,
-): ParsedInvoiceBarcode | null {
+  parsers: readonly ReceiptParser[] = RECEIPT_PARSERS,
+): ParsedReceipt | null {
   for (const parser of parsers) {
     if (!parser.canParse(raw)) continue;
     try {

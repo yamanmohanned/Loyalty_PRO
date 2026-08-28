@@ -57,6 +57,10 @@ export function getNotificationProvider(): NotificationProvider {
 /**
  * Enqueues a notification by writing a PENDING row.
  *
+ * **WhatsApp is optional in v3** (§8). Nothing in the core loop depends on
+ * messaging: the customer holds a printed card and receives a printed slip. This
+ * runs only when the `whatsapp_integration` flag is on.
+ *
  * **Tradeoff (CLAUDE.md §3.2):** this is a database-backed queue rather than
  * BullMQ + Redis. Reasons: it needs no extra infrastructure, and — the part that
  * matters — the enqueue can join the same database transaction as the link it
@@ -80,8 +84,9 @@ export async function enqueueNotification(
       customerId: params.customerId,
       channel: 'WHATSAPP',
       template: params.template,
-      // Template variables only — never a token, never a credential (§7.6).
-      payload: params.variables as Prisma.InputJsonValue,
+      // Template variables only — never a token, never a credential. Serialized
+      // because SQLite has no Json column type.
+      payload: JSON.stringify(params.variables),
       status: 'PENDING',
     },
   });

@@ -1,37 +1,43 @@
 import { z } from 'zod';
-import { AmountCaptureWireSchema, InvoiceSourceWireSchema } from './enums';
+import { CaptureModeSchema } from './enums';
 import { CurrencySchema, PositiveIqdAmountSchema } from './money';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  THE NORMALIZED INVOICE SCHEMA — CLAUDE.md §2.3
+ *  THE CAPTURED INVOICE CONTRACT — CLAUDE_v3.md §4
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Every invoice source MUST emit this shape before entering the loyalty core.
- * The core does not know, and must never learn, how an invoice arrived: scanning
- * today (Tier 3 / Universal Mode), an accounting API or a local DB agent later.
- * That is the whole point of the Integration Gateway — sources are interchangeable
- * at the edges because they all narrow to this one object.
+ * Successor to v1's Normalized Invoice Schema. The Integration Gateway concept
+ * survives intact — every source narrows to one shape before entering the core —
+ * but the source changed: invoices now arrive from the **Print Capture Agent**
+ * intercepting a print job, not from an assistant scanning a barcode.
  *
- * This definition lives here and ONLY here. Web, mobile and backend import it.
+ * **The one structural difference, and it drives everything downstream:** there is
+ * no `customer_identifier`. At capture time nobody knows who the customer is — the
+ * receipt has just printed and the customer has not yet reached the Loyalty
+ * Station. Many invoices will never be attributed at all, because the shopper is
+ * not enrolled. An unattributed invoice is therefore a normal row, not an error,
+ * which is why `transaction.customerId` is nullable.
+ *
+ * The loyalty core still does not care how an invoice arrived. Today that is the
+ * agent; a future accounting-API integration would emit this same shape.
  */
 
 /**
  * The merchant's own invoice number, as printed on the receipt.
- * Together with (merchant_id, branch_id) this is the idempotency key — the single
- * value standing between the system and a double-credited customer (CLAUDE.md §0.2).
+ * With (merchant, branch) this is the idempotency key — the value standing between
+ * an agent network retry and a double-counted sale (§4.8).
  */
 export const InvoiceIdSchema = z
   .string()
   .trim()
   .min(1, 'رقم الفاتورة مطلوب')
   .max(64, 'رقم الفاتورة طويل جداً')
-  // Printed barcodes yield alphanumerics, dashes, underscores and slashes.
   .regex(/^[A-Za-z0-9_\-/]+$/, 'رقم الفاتورة يحتوي على رموز غير مسموحة');
 
 export type InvoiceId = z.infer<typeof InvoiceIdSchema>;
 
-/** Branch code as printed/configured, e.g. `BAG-01`. */
+/** Branch code as printed or configured, e.g. `BAG-01`. */
 export const BranchCodeSchema = z
   .string()
   .trim()
@@ -40,62 +46,70 @@ export const BranchCodeSchema = z
   .regex(/^[A-Za-z0-9_-]+$/, 'رمز الفرع يحتوي على رموز غير مسموحة');
 
 /**
- * The Normalized Invoice Schema.
+ * What the Print Capture Agent sends to the API.
  *
- * `.strict()` — unknown fields are rejected, not ignored (CLAUDE.md §7.4). A source
- * that starts sending an extra field should fail loudly at the gateway rather than
- * have that field silently dropped on the floor.
+ * `.strict()` — unknown fields are rejected, not ignored. An agent that starts
+ * sending an extra field should fail loudly at the gateway rather than have it
+ * silently dropped.
  */
-export const NormalizedInvoiceSchema = z
+export const CapturedInvoiceSchema = z
   .object({
-    /** Merchant's printed invoice number. */
     invoice_id: InvoiceIdSchema,
-    /** Whole Iraqi Dinars. Integer — never a float (CLAUDE.md §4.2). */
-    amount: PositiveIqdAmountSchema,
+    /** The invoice total exactly as the POS recorded it. Whole IQD, never a float. */
+    amount_gross: PositiveIqdAmountSchema,
     currency: CurrencySchema,
-    /** Branch code the sale happened at. */
     branch_id: BranchCodeSchema,
-    /**
-     * How the customer was identified — a signed QR token or a phone number.
-     * Resolved server-side; the core never trusts this as an identity by itself.
-     */
-    customer_identifier: z.string().trim().min(1, 'معرّف الزبون مطلوب').max(256),
-    /** When the purchase happened, ISO-8601 UTC. */
+    /** When the POS printed the receipt, ISO-8601 UTC. */
     occurred_at: z.string().datetime({ offset: true }),
-    /** Which tier of the Integration Gateway produced this invoice. */
-    source: InvoiceSourceWireSchema,
-    /** Whether the amount was read from the barcode or typed by a human. */
-    amount_capture: AmountCaptureWireSchema,
+    /** When the agent intercepted the print job. */
+    captured_at: z.string().datetime({ offset: true }),
+    capture_mode: CaptureModeSchema,
+    /**
+     * Client-generated id for this delivery attempt. An agent that retries after a
+     * dropped response reuses it, so the retry is recognised as the same capture.
+     */
+    idempotency_key: z.string().uuid().optional(),
+    /**
+     * The decoded receipt text the values were parsed from. Retained only when the
+     * merchant enables diagnostics — it is useful for tuning a parsing template and
+     * for the calibration flow (§4.7), but it is receipt content and should not be
+     * stored indefinitely by default.
+     */
+    raw_text: z.string().max(8192).optional(),
   })
   .strict();
 
-export type NormalizedInvoice = z.infer<typeof NormalizedInvoiceSchema>;
+export type CapturedInvoice = z.infer<typeof CapturedInvoiceSchema>;
 
 /**
- * Result of parsing a scanned invoice barcode.
+ * Result of parsing captured print data.
  *
- * The merchant's register encoding is not yet known (no sample receipt as of
- * 2026-08-24), so parsing is pluggable: a parser returns the invoice number always,
- * and the amount only when the symbology actually carries it. When `amount` is null
- * the assistant app falls back to manual entry — which is why the invoice screen
- * must render both states (CLAUDE.md §6.7 #2).
+ * Two rules bind every parser, carried forward from the v1 barcode work because
+ * they proved correct and the reasoning did not change:
+ *
+ *  1. **The invoice number is mandatory; the amount is not.** `amountGross: null`
+ *     is a normal result that routes to manual entry, not a failure.
+ *  2. **A doubtful amount is worse than no amount.** A wrong figure silently
+ *     corrupts a customer's balance and, worse under v3, could grant a discount
+ *     against a total that was never charged. Never guess.
  */
-export interface ParsedInvoiceBarcode {
+export interface ParsedReceipt {
   invoiceId: InvoiceId;
-  /** Whole IQD when the barcode encodes it; `null` forces manual entry. */
-  amount: number | null;
-  /** Raw scanned payload, retained for diagnostics when a parse looks wrong. */
+  /** Whole IQD when the receipt yields it confidently; null forces manual entry. */
+  amountGross: number | null;
+  /** The decoded text the values came from, for diagnostics and calibration. */
   raw: string;
 }
 
 /**
- * Contract every barcode parser implements. Registering a new merchant's format
- * means adding one of these — no change to the core loop.
+ * Contract every receipt parser implements. Supporting a new merchant's POS means
+ * adding a template, not a project — which is the point of keeping parsing
+ * external to the code (§4.5 #3).
  */
-export interface InvoiceBarcodeParser {
-  /** Stable identifier, e.g. `default-code128`. */
+export interface ReceiptParser {
+  /** Stable identifier, e.g. `al-bayan-default`. */
   readonly id: string;
-  /** Cheap check so the scanner can pick a parser without throwing. */
+  /** Cheap check so the agent can pick a parser without throwing. */
   canParse(raw: string): boolean;
-  parse(raw: string): ParsedInvoiceBarcode;
+  parse(raw: string): ParsedReceipt;
 }

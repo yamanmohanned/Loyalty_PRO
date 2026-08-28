@@ -39,3 +39,8 @@ Thumbs.db
 
 # test / coverage
 coverage/
+
+# SQLite database files — data, never source.
+apps/api/prisma/*.db
+apps/api/prisma/*.db-wal
+apps/api/prisma/*.db-shm

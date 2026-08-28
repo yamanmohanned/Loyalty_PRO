@@ -16,14 +16,18 @@ import { prisma } from '../lib/prisma';
 export const AUDIT_ACTIONS = {
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
-  TRANSACTION_LINKED_MANUAL_AMOUNT: 'transaction.linked.manual_amount',
-  COUPON_ISSUED: 'coupon.issued',
-  COUPON_REDEEMED: 'coupon.redeemed',
-  COUPON_SUPERSEDED: 'coupon.superseded',
-  RULES_UPDATED: 'rules.updated',
-  OVERRIDE_CREATED: 'rules.override.created',
-  OVERRIDE_UPDATED: 'rules.override.updated',
-  OVERRIDE_DELETED: 'rules.override.deleted',
+  CARD_REPRINTED: 'customer.card_reprinted',
+  INVOICE_CAPTURED: 'transaction.captured',
+  INVOICE_ATTRIBUTED: 'transaction.attributed',
+  MANUAL_AMOUNT_ENTERED: 'transaction.manual_amount',
+  VOUCHER_ISSUED: 'voucher.issued',
+  VOUCHER_REDEEMED: 'voucher.redeemed',
+  VOUCHER_VOIDED: 'voucher.voided',
+  DISCOUNT_RULES_UPDATED: 'discount.rules_updated',
+  DISCOUNT_SETTINGS_UPDATED: 'discount.settings_updated',
+  FEATURE_FLAG_TOGGLED: 'feature_flag.toggled',
+  BACKUP_COMPLETED: 'backup.completed',
+  BACKUP_RESTORED: 'backup.restored',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];
@@ -35,8 +39,9 @@ export interface AuditEntry {
   action: AuditAction;
   entityType: string;
   entityId: string;
-  before?: Prisma.InputJsonValue | null;
-  after?: Prisma.InputJsonValue | null;
+  /** Serialized to JSON on write — SQLite has no Json column type. */
+  before?: unknown;
+  after?: unknown;
 }
 
 /** Anything resembling a client — the real one, or a `$transaction` handle. */
@@ -55,8 +60,8 @@ export async function recordAudit(entry: AuditEntry, db: Db = prisma): Promise<v
       action: entry.action,
       entityType: entry.entityType,
       entityId: entry.entityId,
-      beforeJson: entry.before ?? undefined,
-      afterJson: entry.after ?? undefined,
+      beforeJson: entry.before === undefined ? null : JSON.stringify(entry.before),
+      afterJson: entry.after === undefined ? null : JSON.stringify(entry.after),
     },
   });
 }

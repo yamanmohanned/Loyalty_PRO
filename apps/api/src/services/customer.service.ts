@@ -1,14 +1,14 @@
-import type { Customer, Prisma } from '@prisma/client';
+import type { Customer } from '@prisma/client';
 import {
+  CustomerCategorySchema,
   normalizePhone,
   type CreateCustomerRequest,
   type Customer as CustomerDto,
-  type CustomerListQuery,
   type UpdateCustomerRequest,
 } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
 import { customerAlreadyExists, notFound, validationFailed } from '../lib/errors';
-import { generateQrToken, looksLikeQrToken, verifyQrToken } from '../lib/qr-token';
+import { generateBarcodeToken, looksLikeBarcodeToken, verifyBarcodeToken } from '../lib/barcode-token';
 import { isUniqueViolation, prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { enqueueNotification, NOTIFICATION_TEMPLATES } from './notification';
@@ -20,18 +20,21 @@ export function serializeCustomer(customer: Customer): CustomerDto {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
-    category: customer.category,
-    qrToken: customer.qrToken,
+    // SQLite stores category as a plain string, so parse rather than cast — a bad
+    // value should surface here, not leak into a response the UI trusts.
+    category: CustomerCategorySchema.parse(customer.category),
+    barcodeToken: customer.barcodeToken,
     createdAt: customer.createdAt.toISOString(),
   };
 }
 
 /**
- * Registers a customer and mints their permanent QR token.
+ * Registers a customer and mints their permanent card barcode.
  *
+ * Name and phone only (§6.2 #4): every extra field at the counter costs enrolment.
  * The phone arrives already normalised to E.164 by `PhoneInputSchema` at the
  * request boundary, which is what makes the per-merchant unique constraint mean
- * anything — see CLAUDE.md §13.4.
+ * anything — otherwise one person becomes two accounts.
  */
 export async function createCustomer(
   params: { merchantId: string; actorUserId: string },
@@ -45,7 +48,7 @@ export async function createCustomer(
           name: request.name,
           phone: request.phone,
           category: request.category,
-          qrToken: generateQrToken(env.QR_TOKEN_SECRET),
+          barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
         },
       });
 
@@ -61,14 +64,14 @@ export async function createCustomer(
         db,
       );
 
-      // Carries the QR to the customer's WhatsApp — the primary way they will
-      // present themselves at the register from now on.
+      // A non-fading backup of the card code. Thermal paper fades within weeks in
+      // Iraqi heat (§6.3), so the WhatsApp copy matters — when the module is on.
       await enqueueNotification(
         {
           merchantId: params.merchantId,
           customerId: created.id,
           template: NOTIFICATION_TEMPLATES.WELCOME,
-          variables: { name: created.name, qrToken: created.qrToken },
+          variables: { name: created.name, barcodeToken: created.barcodeToken },
         },
         db,
       );
@@ -84,13 +87,12 @@ export async function createCustomer(
 }
 
 /**
- * Resolves a customer at the register from a QR token or a phone number
- * (CLAUDE.md §1.4).
+ * Resolves a customer at the Loyalty Station from a scanned card token or a phone
+ * number (CLAUDE_v3.md §6.2).
  *
- * Name search is deliberately impossible here: a name is not unique, and picking
- * from a list of matches is far too slow with a queue waiting. The identifier is
- * either a signed QR token or a phone number, both of which resolve to exactly one
- * account or to nothing.
+ * A USB barcode scanner is a keyboard wedge: it types the code and presses Enter,
+ * so this receives exactly what was printed on the card. Phone lookup exists for
+ * card reprint, where the customer has lost the card they would otherwise scan.
  */
 export async function resolveCustomer(
   merchantId: string,
@@ -98,21 +100,21 @@ export async function resolveCustomer(
 ): Promise<CustomerDto> {
   const trimmed = identifier.trim();
 
-  if (looksLikeQrToken(trimmed)) {
-    // Signature first: a forged or corrupted scan is rejected without touching the
-    // database, which keeps the register fast and denies an enumeration oracle.
-    if (!verifyQrToken(trimmed, env.QR_TOKEN_SECRET)) {
-      throw notFound('رمز الزبون غير صالح');
+  if (looksLikeBarcodeToken(trimmed)) {
+    // Signature first: a forged or mis-scanned code is rejected without touching
+    // the database, which keeps the station fast and denies an enumeration oracle.
+    if (!verifyBarcodeToken(trimmed, env.QR_TOKEN_SECRET)) {
+      throw notFound('رمز البطاقة غير صالح');
     }
     const byToken = await prisma.customer.findFirst({
-      where: { qrToken: trimmed, merchantId },
+      where: { barcodeToken: trimmed, merchantId },
     });
     if (!byToken) throw notFound('الزبون غير موجود');
     return serializeCustomer(byToken);
   }
 
   const phone = normalizePhone(trimmed);
-  if (!phone) throw validationFailed('المعرّف يجب أن يكون رمز QR أو رقم هاتف صالح');
+  if (!phone) throw validationFailed('المعرّف يجب أن يكون رمز بطاقة أو رقم هاتف صالح');
 
   const byPhone = await prisma.customer.findUnique({
     where: { merchantId_phone: { merchantId, phone } },
@@ -168,52 +170,4 @@ export async function updateCustomer(
     if (isUniqueViolation(error)) throw customerAlreadyExists();
     throw error;
   }
-}
-
-/**
- * Dashboard listing. Sorting by cumulative spend reads the derived snapshot cache
- * rather than aggregating transactions per row, which is the whole reason the
- * cache exists (CLAUDE.md §8).
- */
-export async function listCustomers(
-  merchantId: string,
-  query: CustomerListQuery,
-  currentPeriodKey: string,
-): Promise<{ items: Array<CustomerDto & { cumulativeAmount: number }>; total: number; page: number; pageSize: number }> {
-  const where: Prisma.CustomerWhereInput = {
-    merchantId,
-    ...(query.category ? { category: query.category } : {}),
-    // Phone PREFIX matching only — never a name search (CLAUDE.md §1.4).
-    ...(query.phone ? { phone: { contains: query.phone.replace(/^0/, '') } } : {}),
-  };
-
-  const total = await prisma.customer.count({ where });
-
-  const customers = await prisma.customer.findMany({
-    where,
-    include: { balanceSnapshots: { where: { periodKey: currentPeriodKey }, take: 1 } },
-    orderBy:
-      query.sort === 'name'
-        ? { name: query.order }
-        : query.sort === 'cumulativeAmount'
-          ? { createdAt: query.order } // re-sorted below; the snapshot is a relation
-          : { createdAt: query.order },
-    skip: (query.page - 1) * query.pageSize,
-    take: query.pageSize,
-  });
-
-  const items = customers.map((customer) => ({
-    ...serializeCustomer(customer),
-    cumulativeAmount: customer.balanceSnapshots[0]?.cumulativeAmount ?? 0,
-  }));
-
-  if (query.sort === 'cumulativeAmount') {
-    items.sort((a, b) =>
-      query.order === 'asc'
-        ? a.cumulativeAmount - b.cumulativeAmount
-        : b.cumulativeAmount - a.cumulativeAmount,
-    );
-  }
-
-  return { items, total, page: query.page, pageSize: query.pageSize };
 }

@@ -1,6 +1,6 @@
 import { buildApp } from './app';
 import { loadEnv } from './config/env';
-import { prisma } from './lib/prisma';
+import { applySqlitePragmas, prisma } from './lib/prisma';
 
 /**
  * Process entry point.
@@ -12,6 +12,10 @@ import { prisma } from './lib/prisma';
 const env = loadEnv();
 
 async function main(): Promise<void> {
+  // Must run before the first query: WAL is what makes concurrent readers safe
+  // alongside the single writer (§12.5).
+  await applySqlitePragmas();
+
   const app = await buildApp();
 
   const shutdown = async (signal: string): Promise<void> => {
