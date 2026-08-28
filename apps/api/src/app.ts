@@ -7,8 +7,15 @@ import { prisma } from './lib/prisma';
 import { auth } from './plugins/auth';
 import { registerErrorHandler } from './plugins/error-handler';
 import { registerZodValidation } from './plugins/zod-validation';
+import { registerRealtime } from './plugins/realtime';
 import { authRoutes } from './routes/auth.routes';
 import { customerRoutes } from './routes/customers.routes';
+import { discountRoutes } from './routes/discount.routes';
+import { flagRoutes } from './routes/flags.routes';
+import { ingestRoutes } from './routes/ingest.routes';
+import { scanRoutes } from './routes/scan.routes';
+import { syncRoutes } from './routes/sync.routes';
+import { voucherRoutes } from './routes/vouchers.routes';
 
 const env = loadEnv();
 
@@ -102,6 +109,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await app.register(auth);
 
+  // Registered after auth so the global hook exists; the route marks itself public
+  // and authenticates its own handshake token (browsers cannot set headers on a
+  // WebSocket upgrade).
+  await registerRealtime(app);
+
   // Liveness/readiness. Public by necessity — a probe carries no token.
   app.get('/health', { config: { public: true } }, async () => {
     await prisma.$queryRaw`SELECT 1`;
@@ -112,9 +124,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     async (api) => {
       await api.register(authRoutes, { prefix: '/auth' });
       await api.register(customerRoutes, { prefix: '/customers' });
-      // V3-2 restores the rest on the instant-discount model: /ingest (agent
-      // capture), /scan (station attribution), /vouchers, /discount-rules,
-      // /reports, /sync, and the WebSocket broadcast layer.
+      await api.register(ingestRoutes, { prefix: '/ingest' });
+      await api.register(scanRoutes, { prefix: '/scan' });
+      await api.register(voucherRoutes, { prefix: '/vouchers' });
+      await api.register(discountRoutes, { prefix: '/discount' });
+      await api.register(flagRoutes, { prefix: '/flags' });
+      await api.register(syncRoutes, { prefix: '/sync' });
+      // Reports are rebuilt on the new metrics in V3-3 alongside the screens that
+      // consume them.
     },
     { prefix: API_PREFIX },
   );

@@ -76,6 +76,18 @@ export type CaptureMode = z.infer<typeof CaptureModeSchema>;
 /** The one mode that cannot block printing. Auto-detection tries it first (§4.6 #1). */
 export const PREFERRED_CAPTURE_MODE: CaptureMode = 'SPOOL_WATCH';
 
+/**
+ * Narrows a stored or received capture mode, defaulting rather than throwing.
+ *
+ * An unrecognised mode must not lose an invoice: the sale happened, and recording
+ * it with an imprecise capture label is strictly better than discarding it because
+ * an agent reported a mode this build has not heard of.
+ */
+export function toCaptureModeOrDefault(value: string, fallback: CaptureMode = 'MANUAL'): CaptureMode {
+  const parsed = CaptureModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : fallback;
+}
+
 /** Modes that sit in the print path and therefore need forward-first handling. */
 export const IN_PATH_CAPTURE_MODES: readonly CaptureMode[] = [
   'VIRTUAL_PRINTER',

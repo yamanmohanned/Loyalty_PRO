@@ -534,3 +534,56 @@ line as the operator's responsibility, not a phase gate.
 §9 remains **open**. `DiscountSettlementStrategy` is built with both implementations —
 `VoucherAsPaymentStrategy` (default) and `DailyPromotionalExpenseStrategy` (fallback) —
 and no phase waits on the answer.
+
+### 12.9 Instant-discount engine decisions (V3-2) — 2026-08-27
+
+**The crossing basket is itself discounted.** Cumulative spend is evaluated
+*including* the invoice being scanned. The alternative — evaluating on prior spend
+only — would mean the basket that reaches a threshold is the one basket that does
+not benefit from it, which no customer would accept as fair and no cashier could
+explain.
+
+**Progress is measured on gross, not net.** `computeCumulativeAmount` sums
+`amountGross`. Using the net figure would let each granted discount slightly retard
+progress toward the next tier — a quiet penalty for being a good customer.
+
+**Ingestion answers a duplicate with 200 and `duplicate: true`, not 409.** From the
+agent's point of view a retry that finds the capture already recorded has succeeded;
+its job was to make sure the invoice landed. A 409 would push a normal, expected
+event onto the agent's error path and risk it queueing the capture indefinitely.
+
+**Attribution claims the invoice with a conditional UPDATE** (`customerId: null` in
+the WHERE). Two stations scanning simultaneously cannot both claim one capture; the
+loser is told nothing is pending rather than being handed a second discount on one
+sale. The `@@unique([transactionId])` on `voucher` is the second guard behind it.
+
+**The voucher is written in the same transaction as the discount.** If the voucher
+cannot be persisted, the discount rolls back with it. There is deliberately no code
+path that reduces what a customer pays without creating the record that explains
+it — an unexplained shortfall in the drawer reads as theft and would wrongly
+implicate whoever was on the till (§0 rule 3, §9).
+
+**The settlement strategy is stamped on each voucher at issue time**, not read from
+settings at reconciliation. A manager switching strategy must not retroactively
+reinterpret slips already sitting in the cash drawer.
+
+**Rates outside the recommended band are warned about; rates outside the merchant's
+own configured min/max are rejected.** A merchant may knowingly run an aggressive
+promotion, but the bounds they set for themselves are a limit, and a bound that can
+be exceeded is not a bound. A `FIXED_AMOUNT` rule above the absolute cap is also
+rejected — the engine would silently cap it, and configuring a number the system
+ignores is worse than being told no.
+
+**Pending-invoice lookup is time-bounded** (30 minutes by default). Without a
+window, a stale capture from hours earlier would be handed to whoever scans next,
+attributing a stranger's basket to them and granting a discount on spending they
+never did.
+
+**WebSocket auth takes the token as a query parameter.** Browsers cannot set an
+Authorization header on a WebSocket handshake. This is a real tradeoff — tokens in
+URLs can reach logs — accepted because the access token is short-lived (~15m) and
+this is LAN-internal traffic (§7.1).
+
+**`publish()` never throws.** A dead socket must not fail the sale that triggered
+the event: the transaction is already committed, and a dashboard that missed an
+update catches up on its next read.

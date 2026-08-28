@@ -1,0 +1,88 @@
+import type { SettlementStrategy as SettlementStrategyName } from '@walaa/shared-types';
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  DISCOUNT SETTLEMENT — CLAUDE_v3.md §9 (OPEN BLOCKER)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The problem this interface exists for:
+ *
+ * Cashiers at this merchant are **not authorised to modify invoices**. That is a
+ * deliberate anti-fraud control and must be respected, not worked around. So the
+ * discount cannot be applied as a price reduction on the invoice itself — the POS
+ * total is fixed the moment it prints.
+ *
+ * Which leaves the question of how the customer actually pays less, and how the
+ * books still balance. Two answers are viable, and **which one is correct is not
+ * yet confirmed**, because it depends on whether Al-Bayan supports split payment on
+ * one invoice. So it is a strategy, selected from settings, rather than a hardcoded
+ * flow that would have to be torn out if the answer goes the other way.
+ *
+ * ── THE RULE THAT BINDS BOTH IMPLEMENTATIONS ───────────────────────────────
+ *
+ * **A cashier must never collect less cash than the POS recorded without a
+ * corresponding voucher record.** An unexplained shortfall in the drawer does not
+ * read as a discount in the books — it reads as theft, and it will wrongly
+ * implicate the person on the till. Every strategy therefore produces a voucher,
+ * atomically with the discount it settles. There is no code path that discounts
+ * without issuing one.
+ */
+
+export interface SettlementContext {
+  merchantId: string;
+  transactionId: string;
+  customerId: string;
+  customerName: string;
+  invoiceId: string;
+  /** The invoice total as the POS recorded it. Never modified. */
+  amountGross: number;
+  /** IQD discounted, already capped by the engine. */
+  discountValue: number;
+  /** What the customer actually pays. */
+  amountNet: number;
+  /** Human-readable rate, e.g. "3٪" or "7,500 د.ع". */
+  discountLabel: string;
+  issuedAt: Date;
+}
+
+/**
+ * What the strategy produces: the voucher to persist and the words to print.
+ *
+ * The instruction text is the strategy's real output. Both strategies discount the
+ * same amount; they differ in what the cashier is told to *do* with the slip, and
+ * getting that sentence wrong is what would create a cash discrepancy.
+ */
+export interface SettlementOutcome {
+  /** Short code printed on the slip for the cashier to match at reconciliation. */
+  code: string;
+  value: number;
+  strategy: SettlementStrategyName;
+  /** The instruction printed on the slip, pre-phrased so nobody must improvise. */
+  cashierInstruction: string;
+  /** One line explaining how this settles in the books, for the manager's reports. */
+  accountingNote: string;
+}
+
+export interface DiscountSettlementStrategy {
+  readonly name: SettlementStrategyName;
+  /** Arabic label for the settings UI. */
+  readonly label: string;
+  /** Whether this strategy needs the POS to support split payment. */
+  readonly requiresSplitPayment: boolean;
+  settle(context: SettlementContext): SettlementOutcome;
+}
+
+/**
+ * Voucher codes are short enough for a cashier to compare by eye against a list at
+ * end of day, and long enough not to collide within a merchant. Ambiguous glyphs
+ * (0/O, 1/I) are excluded — these are read off thermal paper, often in poor light.
+ */
+const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+export function generateVoucherCode(random: () => number = Math.random): string {
+  let code = '';
+  for (let i = 0; i < 8; i += 1) {
+    code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
+  }
+  return `${code.slice(0, 4)}-${code.slice(4)}`;
+}
