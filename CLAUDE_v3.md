@@ -587,3 +587,43 @@ this is LAN-internal traffic (§7.1).
 **`publish()` never throws.** A dead socket must not fail the sale that triggered
 the event: the transaction is already committed, and a dashboard that missed an
 update catches up on its next read.
+
+### 12.10 Manager Desktop decisions (V3-3) — 2026-08-27
+
+**The v2 Tauri conversion had never been performed.** CLAUDE_v3.md §1 classified
+`apps/manager-desktop` as KEEP, but the build had followed v1 straight from the API
+into a Next.js `apps/dashboard`. V3-3 therefore did the v2 conversion *and* the v3
+screens. `apps/dashboard` is left in place until its last reusable parts are
+confirmed ported, per the standing rule that nothing is deleted before its
+replacement works.
+
+**The nav rail is the FIRST child of the shell flex container.** Under `dir="rtl"`
+a flex container lays its main axis right-to-left, so the first child renders at the
+right edge — which is where §6.5 puts the rail. Writing it after `<main>`, the LTR
+habit, silently mirrors the whole layout the wrong way. Caught by measuring
+bounding boxes in the live app, not by reading the code.
+
+**The margin warning uses `assessMargin` imported from `@walaa/shared-types`** —
+the same function the API validates with. A separate frontend approximation could
+drift, and then the number a manager is shown while configuring would not be the
+number that governs at the till.
+
+**`HashRouter`, not `BrowserRouter`.** Tauri serves the frontend from the
+filesystem in production, so path-based routing 404s on a hard reload.
+
+**CORS needed the Tauri webview origin.** The API allowed only
+`http://localhost:3000`, left over from the Next.js dashboard. The Tauri 2 webview
+on Windows presents as `http://tauri.localhost`, and the Vite dev server as
+`http://localhost:5173`; both are now defaults in the config module so a fresh
+install works without editing `.env`. Found by the live browser test, which is the
+only place it could have surfaced.
+
+**Fonts are bundled and verified as such.** 28 woff2 files ship in the bundle and
+the built output contains no reference to `fonts.googleapis.com` or
+`fonts.gstatic.com`. §14 names the CDN font tag as a critical bug in a desktop app,
+so it is checked rather than assumed.
+
+**Capture and Backup screens state what is not yet built.** The Print Capture Agent
+lands in V3-5 and the Drive integration in V3-6, so those screens show "not
+installed" and "not connected" rather than a reassuring placeholder. A backup screen
+that looks healthy while backing nothing up is worse than no screen.

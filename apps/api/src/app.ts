@@ -13,6 +13,7 @@ import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
 import { flagRoutes } from './routes/flags.routes';
 import { ingestRoutes } from './routes/ingest.routes';
+import { reportRoutes } from './routes/reports.routes';
 import { scanRoutes } from './routes/scan.routes';
 import { syncRoutes } from './routes/sync.routes';
 import { voucherRoutes } from './routes/vouchers.routes';
@@ -129,9 +130,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(voucherRoutes, { prefix: '/vouchers' });
       await api.register(discountRoutes, { prefix: '/discount' });
       await api.register(flagRoutes, { prefix: '/flags' });
+      await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
-      // Reports are rebuilt on the new metrics in V3-3 alongside the screens that
-      // consume them.
     },
     { prefix: API_PREFIX },
   );

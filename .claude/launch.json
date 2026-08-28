@@ -2,10 +2,24 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dashboard",
+      "name": "api",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@walaa/dashboard", "dev"],
-      "port": 3000
+      "runtimeArgs": [
+        "--filter",
+        "@walaa/api",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "manager-desktop",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@walaa/manager-desktop",
+        "dev"
+      ],
+      "port": 5173
     }
   ]
 }

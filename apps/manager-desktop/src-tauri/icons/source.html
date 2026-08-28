@@ -1,0 +1,34 @@
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #icon {
+    width: 1024px; height: 1024px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cairo', 'Tahoma', sans-serif;
+  }
+</style>
+<!--
+  App icon source (CLAUDE_v2.md §5.1).
+
+  Brand brief: Deep Teal #0F6E56 fill, no gradients, no embossed texture, and a
+  single Arabic letterform — "و" from ولاء — rather than a full word, so it stays
+  legible at 16x16 in the Windows taskbar.
+
+  A rounded square rather than a circle: Windows renders app icons on a square
+  grid, and a squircle reads as a deliberate mark at small sizes where a circle
+  reads as a generic dot.
+-->
+<div id="icon">
+  <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    <rect x="64" y="64" width="896" height="896" rx="224" fill="#0F6E56" />
+      <!--
+      Optically centred, not geometrically. The "و" glyph carries its weight low
+      and to the right of its own box, so centring on the text origin leaves it
+      visibly sunk toward the corner. These offsets put the mark where the eye
+      reads the middle.
+    -->
+    <text x="530" y="345" text-anchor="middle" dominant-baseline="central"
+          font-family="Cairo, Tahoma, sans-serif" font-size="660" font-weight="700"
+          fill="#FFFFFF">و</text>
+  </svg>
+</div>

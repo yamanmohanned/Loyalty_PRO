@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: light; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* A desktop app should not feel like a web page: no rubber-banding, no
+       accidental text selection when clicking around a dashboard. */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    font-size: 1rem;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  /* Text the manager may genuinely want to copy — amounts, codes, phone numbers. */
+  .selectable, input, textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  h1, h2, h3, h4 { @apply font-display; letter-spacing: -0.01em; }
+
+  /* All money and numerals render monospace so digits align in tables. */
+  .amount { @apply font-mono font-bold tabular-nums; }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Motion is meaningful, and always optional. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Scrollbars styled to the palette rather than left as OS chrome. */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(17, 24, 39, 0.14);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(17, 24, 39, 0.24); background-clip: content-box; }
+}

@@ -1,0 +1,226 @@
+import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  HashRouter,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useNavigate,
+} from 'react-router-dom';
+import {
+  BadgePercent,
+  Boxes,
+  DatabaseBackup,
+  LayoutDashboard,
+  LogOut,
+  Printer,
+  Users,
+  BarChart3,
+} from 'lucide-react';
+import { setTokens, setUnauthenticatedHandler } from './lib/api';
+import { getApiUrl } from './lib/config';
+import { locale } from './lib/locale';
+import { cn } from './components/ui';
+import { SetupScreen } from './screens/Setup';
+import { LoginScreen, type SessionUser } from './screens/Login';
+import { OverviewScreen } from './screens/Overview';
+import { CustomersScreen } from './screens/Customers';
+import { CustomerDetailScreen } from './screens/CustomerDetail';
+import { DiscountsScreen } from './screens/Discounts';
+import { ModulesScreen } from './screens/Modules';
+import { CaptureScreen } from './screens/Capture';
+import { BackupScreen } from './screens/Backup';
+import { ReportsScreen } from './screens/Reports';
+
+/**
+ * Application shell.
+ *
+ * `HashRouter`, not `BrowserRouter`: Tauri serves the frontend from the filesystem
+ * in production, so path-based routing would 404 on a hard reload. Hash routing has
+ * no such dependency and costs nothing in a desktop app with no URLs to share.
+ *
+ * Boot order follows CLAUDE_v2.md §9.2 — if no server URL is configured, the
+ * first-run setup screen comes before login, because a login screen that cannot
+ * reach a server is a dead end with no explanation.
+ */
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // The dashboard is driven by a local API on the same LAN, so a short stale
+      // time is cheap and keeps the numbers close to live between WebSocket pushes.
+      staleTime: 15_000,
+      retry: 1,
+      refetchOnWindowFocus: true,
+    },
+  },
+});
+
+type BootState = 'loading' | 'needs-setup' | 'needs-login' | 'ready';
+
+const NAV_ITEMS = [
+  { to: '/', label: locale.nav.overview, icon: LayoutDashboard, end: true },
+  { to: '/customers', label: locale.nav.customers, icon: Users, end: false },
+  { to: '/discounts', label: locale.nav.discounts, icon: BadgePercent, end: false },
+  { to: '/reports', label: locale.nav.reports, icon: BarChart3, end: false },
+  { to: '/capture', label: locale.nav.capture, icon: Printer, end: false },
+  { to: '/backup', label: locale.nav.backup, icon: DatabaseBackup, end: false },
+  { to: '/modules', label: locale.nav.modules, icon: Boxes, end: false },
+];
+
+/** Fixed navigation rail on the RIGHT — the RTL reading position (§6.5). */
+function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  return (
+    <aside className="flex w-rail shrink-0 flex-col border-e border-border bg-surface">
+      <div className="border-b border-border px-6 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-lg font-bold text-white">
+            و
+          </div>
+          <div>
+            <p className="font-display text-lg font-bold leading-tight text-ink">{locale.appName}</p>
+            <p className="text-xs text-steel">{locale.appTagline}</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto p-3">
+        <ul className="space-y-1">
+          {NAV_ITEMS.map((item) => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    'flex min-h-control items-center gap-3 rounded-md px-3 text-base transition-colors duration-fast',
+                    isActive
+                      ? 'bg-accent-tint font-semibold text-accent'
+                      : 'text-steel hover:bg-canvas hover:text-ink',
+                  )
+                }
+              >
+                <item.icon size={20} strokeWidth={2} aria-hidden />
+                <span>{item.label}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="border-t border-border p-3">
+        <div className="mb-2 px-3">
+          <p className="truncate text-sm font-medium text-ink">{user.name}</p>
+          <p className="text-xs text-steel">{locale.roles[user.role] ?? user.role}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="flex min-h-control w-full items-center gap-3 rounded-md px-3 text-base text-steel transition-colors duration-fast hover:bg-canvas hover:text-danger"
+        >
+          <LogOut size={20} strokeWidth={2} aria-hidden />
+          <span>{locale.nav.logout}</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  return (
+    // min-h-[100dvh] never h-screen (§6.5).
+    //
+    // NavRail comes FIRST in the DOM deliberately. Under `dir="rtl"` a flex
+    // container lays its main axis right-to-left, so the first child renders at the
+    // RIGHT edge — which is where §6.5 puts the navigation rail. Ordering it after
+    // <main> (the LTR habit) silently mirrors the whole layout the wrong way.
+    <div className="flex min-h-[100dvh] max-h-[100dvh]">
+      <NavRail user={user} onLogout={onLogout} />
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-content px-8 py-8">
+          <Routes>
+            <Route path="/" element={<OverviewScreen />} />
+            <Route path="/customers" element={<CustomersScreen />} />
+            <Route path="/customers/:id" element={<CustomerDetailScreen />} />
+            <Route path="/discounts" element={<DiscountsScreen />} />
+            <Route path="/reports" element={<ReportsScreen />} />
+            <Route path="/capture" element={<CaptureScreen />} />
+            <Route path="/backup" element={<BackupScreen />} />
+            <Route path="/modules" element={<ModulesScreen />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Boot() {
+  const [state, setState] = useState<BootState>('loading');
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    void (async () => {
+      const url = await getApiUrl();
+      setState(url ? 'needs-login' : 'needs-setup');
+    })();
+  }, []);
+
+  useEffect(() => {
+    // A refresh that fails anywhere in the app returns the manager to login rather
+    // than leaving a screen half-populated with stale data.
+    setUnauthenticatedHandler(() => {
+      setUser(null);
+      setState('needs-login');
+      navigate('/');
+    });
+  }, [navigate]);
+
+  if (state === 'loading') {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center">
+        <p className="text-steel">{locale.common.loading}</p>
+      </div>
+    );
+  }
+
+  if (state === 'needs-setup') {
+    return <SetupScreen onConfigured={() => setState('needs-login')} />;
+  }
+
+  if (state === 'needs-login' || !user) {
+    return (
+      <LoginScreen
+        onAuthenticated={(session) => {
+          setUser(session);
+          setState('ready');
+        }}
+        onChangeServer={() => setState('needs-setup')}
+      />
+    );
+  }
+
+  return (
+    <Shell
+      user={user}
+      onLogout={() => {
+        setTokens(null);
+        setUser(null);
+        setState('needs-login');
+        queryClient.clear();
+      }}
+    />
+  );
+}
+
+export function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HashRouter>
+        <Boot />
+      </HashRouter>
+    </QueryClientProvider>
+  );
+}

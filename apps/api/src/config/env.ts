@@ -33,7 +33,9 @@ const EnvSchema = z.object({
   API_HOST: z.string().default('0.0.0.0'),
   API_CORS_ORIGINS: z
     .string()
-    .default('http://localhost:3000')
+    // Defaults cover the Tauri webview and the Vite dev server. A deployment on a
+    // LAN may need the manager machine's own address added.
+    .default('http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://localhost:4000')
     .transform((v) => v.split(',').map((s) => s.trim()).filter(Boolean)),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 

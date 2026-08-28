@@ -1,0 +1,21 @@
+<!doctype html>
+<!--
+  RTL is set on <html>, once, at the document root (CLAUDE.md §0.3). Every
+  component below uses Tailwind's logical utilities so mirroring is automatic.
+-->
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ولاء — إدارة المتجر</title>
+    <!--
+      NO font <link> tags. Fonts are bundled through @fontsource and imported in
+      main.tsx (CLAUDE_v2.md §3, §14). A desktop app may run with no internet at
+      all; a CDN font would silently fall back to a system face and render wrong.
+    -->
+  </head>
+  <body class="min-h-[100dvh] bg-canvas text-ink">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

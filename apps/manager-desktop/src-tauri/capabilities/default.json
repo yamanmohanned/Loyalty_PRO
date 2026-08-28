@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Least-privilege capabilities for the manager desktop app. The frontend has NO filesystem, shell or OS access beyond what is listed here (CLAUDE_v2.md §11).",
+  "windows": ["main"],
+  "permissions": ["core:default", "store:default", "opener:default"]
+}

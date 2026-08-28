@@ -1,0 +1,30 @@
+[package]
+name = "walaa-manager"
+version = "1.0.0"
+description = "Walaa — إدارة المتجر"
+authors = ["Walaa"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "walaa_manager_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-store = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# A smaller installer matters when it is sent over WhatsApp or a slow connection
+# (CLAUDE_v2.md §1).
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
