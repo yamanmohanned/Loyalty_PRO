@@ -20,6 +20,26 @@
         "dev"
       ],
       "port": 5173
+    },
+    {
+      "name": "station",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@walaa/station",
+        "dev"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "api-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@walaa/api",
+        "dev:alt"
+      ],
+      "port": 4001
     }
   ]
 }

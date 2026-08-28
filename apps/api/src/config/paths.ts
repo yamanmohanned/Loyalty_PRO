@@ -197,17 +197,33 @@ export function resolveStationDir(startDir: string = process.cwd()): string | nu
   const explicit = process.env[STATION_DIR_VAR];
   if (explicit && explicit.trim()) {
     const path = resolve(explicit.trim());
-    return existsSync(join(path, 'index.html')) ? path : null;
+    return isBuiltBundle(path) ? path : null;
   }
 
   let current = resolve(startDir);
   const { root } = parse(current);
 
   for (;;) {
-    for (const candidate of [join(current, 'station'), join(current, 'apps', 'station', 'dist')]) {
-      if (existsSync(join(candidate, 'index.html'))) return candidate;
+    for (const candidate of [join(current, 'apps', 'station', 'dist'), join(current, 'station')]) {
+      if (isBuiltBundle(candidate)) return candidate;
     }
     if (current === root) return null;
     current = dirname(current);
   }
+}
+
+/**
+ * A built bundle, not a source directory.
+ *
+ * `index.html` alone is not enough, and this was caught the hard way: Vite keeps one
+ * in the project root as its dev template, so walking up from `apps/api` matched
+ * `apps/station` and the API cheerfully served an HTML file whose only script tag
+ * points at `/src/main.tsx` — unbundled TypeScript no browser can run. In production
+ * the same weak check would have found the right directory, so the failure would
+ * have surfaced first on a merchant's tablet as a blank screen.
+ *
+ * A build always emits `assets/` beside the HTML. A source directory does not.
+ */
+function isBuiltBundle(candidate: string): boolean {
+  return existsSync(join(candidate, 'index.html')) && existsSync(join(candidate, 'assets'));
 }

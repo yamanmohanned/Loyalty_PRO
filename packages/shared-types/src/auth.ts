@@ -18,6 +18,15 @@ export const AuthUserSchema = z.object({
   username: z.string(),
   role: RoleSchema,
   merchantId: z.string().uuid(),
+  /**
+   * The shop's name, as it should appear on printed paper.
+   *
+   * Sent with the session because the Loyalty Station prints customer cards and
+   * discount slips, and a card with no shop name on it is a card a customer cannot
+   * place. Fetching it separately would be a second call on every boot for a string
+   * that never changes within a session.
+   */
+  merchantName: z.string(),
   /** Null for OWNER, who is not bound to a single branch. */
   branchId: z.string().uuid().nullable(),
   branchCode: z.string().nullable(),

@@ -214,10 +214,21 @@ After installing at a store, before leaving:
    wireless settings ("AP isolation", "client isolation", "guest network") before
    looking at anything in this repository.
 
-3. **The manager machine needs a stable address.** A DHCP lease that moves changes the
+3. **Enable kiosk printing on the station's browser.** Otherwise every discount slip
+   waits behind a print dialog somebody has to dismiss, with a customer at the
+   counter. Launch the station like this:
+
+   ```
+   chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4000
+   ```
+
+   Then set the station's thermal printer as the default and print one test slip to
+   confirm the paper width is right.
+
+4. **The manager machine needs a stable address.** A DHCP lease that moves changes the
    URL the Station is configured with. Reserve it on the router, or set it statically.
 
-4. **Nothing else may hold the API port.** A second install, or a developer's `pnpm dev`,
+5. **Nothing else may hold the API port.** A second install, or a developer's `pnpm dev`,
    takes 4000 and the service cannot bind.
 
    ```

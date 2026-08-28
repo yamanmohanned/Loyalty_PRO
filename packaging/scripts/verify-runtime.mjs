@@ -147,6 +147,43 @@ try {
     'migrations were applied at first boot, without the Prisma CLI',
   );
 
+  // The Loyalty Station, served by the API on its own port (§12.3). This is what the
+  // tablet browses to; if it 404s, the shop has a station with nothing to open.
+  const page = await fetch(`http://127.0.0.1:${PORT}/`);
+  const html = page.ok ? await page.text() : '';
+  check(
+    page.ok && html.includes('<div id="root">'),
+    'the API serves the Loyalty Station at /',
+    `HTTP ${page.status}`,
+  );
+
+  const assetMatch = /\/assets\/([A-Za-z0-9._-]+\.js)/.exec(html);
+  if (assetMatch) {
+    const asset = await fetch(`http://127.0.0.1:${PORT}/assets/${assetMatch[1]}`);
+    check(
+      asset.ok,
+      'its bundled assets are served too',
+      `${assetMatch[1]} -> HTTP ${asset.status}`,
+    );
+  } else {
+    check(false, 'the served page references a bundled asset', 'no /assets/*.js in the HTML');
+  }
+
+  // Fonts must be part of that bundle: a shop LAN has no outbound internet (§7.1),
+  // and a CDN font tag would silently fall back to a system face on the tablet.
+  check(
+    !html.includes('fonts.googleapis.com') && !html.includes('fonts.gstatic.com'),
+    'the station requests no fonts from the internet',
+  );
+
+  // Path traversal through the asset route must not escape the bundle.
+  const traversal = await fetch(`http://127.0.0.1:${PORT}/assets/..%2Fmanifest.json`);
+  check(
+    !traversal.ok,
+    'the asset route refuses to escape its directory',
+    `HTTP ${traversal.status}`,
+  );
+
   // A protected route must still be protected — the packaged build is not a
   // differently-configured build.
   const unauthorized = await fetch(`http://127.0.0.1:${PORT}/api/v1/customers`);

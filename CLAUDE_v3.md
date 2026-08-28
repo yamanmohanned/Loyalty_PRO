@@ -873,3 +873,68 @@ Implementation: `packages/shared-types/src/card.ts` (shape, normalisation, group
 `packages/shared-types/src/barcode.ts` (Code 128C, tested by decoding its own output),
 `apps/api/src/lib/barcode-token.ts` (minting and verification, the only place the
 secret is used).
+
+### 12.13 Loyalty Station decisions (V3-4) — 2026-08-28
+
+**The station is served by the API, and that removes its own setup screen.** §12.3
+already put the bundle behind the same port; the consequence only became clear while
+building it. If the app was served by the API, the origin the browser loaded *is* the
+server address, so `resolveApiUrl()` finds it and the operator is never asked to type
+an address they could not know. The setup screen survives for the case that guess
+fails — a developer on Vite's port, or a tablet pointed somewhere unusual — and
+nothing else in the app asks the operator to configure anything (§6.4).
+
+**The API declares `/` and `/assets/*` by hand rather than a static catch-all.** A
+wildcard would swallow unknown `/api/...` paths, and those currently reach the auth
+hook with no route config and return 401 — which is what denies route enumeration to
+an unauthenticated caller (§12.9). A public catch-all would have turned every one of
+those 401s into a 200 serving HTML. `HashRouter` in the station means the server only
+ever sees `/`, so no SPA fallback is needed to make deep links work.
+
+**A built bundle is identified by `assets/`, not by `index.html`.** Vite keeps an
+`index.html` in the project root as its dev template, whose only script tag points at
+`/src/main.tsx`. The first version of the resolver matched it and served unbundled
+TypeScript; in production the same weak check would have found the right directory,
+so the bug would have surfaced first as a blank screen on a merchant's tablet.
+
+**The scan field submits on Enter, on Tab, and on sixteen digits.** A form with one
+input and no submit button relies on implicit submission, which varies by browser and
+failed outright under test. Scanners can be configured to send Enter, Tab, or no
+terminator at all, and which one a particular shop's device does is not knowable from
+here — so the app stops depending on the answer. A complete card number is
+self-terminating.
+
+**A scan taken offline credits the spend and issues no discount.** The reasoning is
+in the commit and in `ScanOptions.issueDiscount`, and the short version is that the
+sale settles in cash before the queued scan replays, so a voucher issued then is one
+the drawer cannot produce at closing time (§0 rule 3). The station says so on screen
+rather than implying a slip is coming: the customer keeps their progress toward the
+next discount and loses this basket's. New outcome `LINKED_WITHOUT_DISCOUNT` keeps
+that distinguishable from a customer who simply had not spent enough.
+
+**The slip is composed by the server.** The cashier instruction comes from the
+settlement strategy, which is a merchant setting with accounting consequences (§9). A
+station phrasing its own would be business logic in the UI (§11) whose failure mode is
+a cashier told to take short payment.
+
+**Name search exists only in the reprint flow.** CLAUDE.md §1.4 forbids name lookup
+as an identification method and that ban stands where it was aimed — the scan hot
+path, where a queue is waiting. §6.2 #5 is a different problem: the customer is at
+the counter *without* the card that would identify them. The mitigations are tested,
+not assumed: masked phone numbers, a list bounded at eight that reports when it is
+truncated, and card numbers that a search never returns — those need a second,
+per-customer call.
+
+**Printing goes through the browser's print pipeline, not ESC/POS.** A web app cannot
+open a USB device, and a bridge service beside the station would be another thing to
+install and support in every shop. The printer is a normal Windows/Android printer and
+the print stylesheet shapes the page to 80 mm. **Field consequence:** the browser shows
+a print dialog unless kiosk printing is enabled, which belongs in the V3-6 setup guide
+and is already noted in `packaging/README.md`.
+
+**The refresh token lives in `sessionStorage`.** Memory alone logs the operator out on
+every accidental reload, which on a tablet wedged beside a till happens often and
+always at the worst moment. `localStorage` would leave a long-lived credential on the
+device after closing. `sessionStorage` survives a reload and dies with the tab, which
+is how the appliance is actually used — opened at the start of the day, closed at the
+end.

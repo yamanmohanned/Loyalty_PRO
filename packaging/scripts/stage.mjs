@@ -166,6 +166,24 @@ const nodeLicense = join(dirname(process.execPath), 'LICENSE');
 if (existsSync(nodeLicense)) cpSync(nodeLicense, join(STAGE, 'NODE-LICENSE.txt'));
 note(`node ${process.version} runtime (${mb(statSync(join(STAGE, 'node.exe')).size)})`);
 
+// ── 5b. The Loyalty Station ─────────────────────────────────────────────────────
+// Served by the API on its own port (§12.3), so the tablet browses to the manager
+// machine and there is no second web server to install. Staged as `station/`, which
+// is where `resolveStationDir` looks when the runtime directory is the working
+// directory.
+const stationDist = join(REPO, 'apps', 'station', 'dist');
+if (existsSync(join(stationDist, 'index.html')) && existsSync(join(stationDist, 'assets'))) {
+  cpSync(stationDist, join(STAGE, 'station'), { recursive: true });
+  note(`loyalty station bundle (${mb(directorySize(join(STAGE, 'station')))})`);
+} else {
+  console.warn(
+    '  WARNING: the Loyalty Station is not built — run `pnpm --filter @walaa/station build`.',
+  );
+  console.warn(
+    '           The installer will ship without it and the tablet will have nothing to open.',
+  );
+}
+
 // ── 6b. Service host ────────────────────────────────────────────────────────────
 // The shim that lets the Service Control Manager start Node at all, and that keeps
 // it running. Staged beside the runtime so one installer resource covers everything.

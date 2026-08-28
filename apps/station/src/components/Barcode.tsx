@@ -62,14 +62,7 @@ export function Barcode({
             viewBox is what guarantees they survive onto the paper. */}
         <rect x="0" y="0" width={symbol.totalModules} height="100%" fill="#fff" />
         {bars.map((bar, index) => (
-          <rect
-            key={index}
-            x={bar.x}
-            y="0"
-            width={bar.width}
-            height="100%"
-            fill="#000"
-          />
+          <rect key={index} x={bar.x} y="0" width={bar.width} height="100%" fill="#000" />
         ))}
       </svg>
       {showNumber ? (

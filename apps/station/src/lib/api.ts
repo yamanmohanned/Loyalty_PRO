@@ -1,4 +1,4 @@
-import type { ApiError } from '@walaa/shared-types';
+import type { ApiError, AuthUser } from '@walaa/shared-types';
 import { getStoredApiUrl } from './config';
 
 /**
@@ -74,9 +74,9 @@ async function parse<T>(response: Response): Promise<T> {
   );
 }
 
-async function attemptRefresh(base: string): Promise<boolean> {
+async function attemptRefresh(base: string): Promise<AuthUser | null> {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+  if (!refreshToken) return null;
 
   try {
     const response = await fetch(`${base}/api/v1/auth/refresh`, {
@@ -84,16 +84,19 @@ async function attemptRefresh(base: string): Promise<boolean> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!response.ok) return false;
+    if (!response.ok) return null;
 
-    const body = (await response.json()) as { tokens: Tokens };
+    // The refresh response already carries the user, so restoring a session after a
+    // reload costs one round trip rather than two — and needs no `/auth/me`
+    // endpoint whose only caller would be this line.
+    const body = (await response.json()) as { user: AuthUser; tokens: Tokens };
     setTokens(body.tokens);
-    return true;
+    return body.user;
   } catch {
     // A network failure during refresh is not an expired session. Say so by
     // failing the refresh without clearing the tokens, so going offline mid-shift
     // does not log the operator out.
-    return false;
+    return null;
   }
 }
 
@@ -151,8 +154,8 @@ export const api = {
 };
 
 /** Restores a session from a surviving refresh token after a page reload. */
-export async function restoreSession(): Promise<boolean> {
+export async function restoreSession(): Promise<AuthUser | null> {
   const base = getStoredApiUrl();
-  if (!base || !getRefreshToken()) return false;
+  if (!base || !getRefreshToken()) return null;
   return attemptRefresh(base);
 }

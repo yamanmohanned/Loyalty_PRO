@@ -90,6 +90,7 @@ export const locale = {
   reprint: {
     title: 'بحث وإعادة طباعة بطاقة',
     subtitle: 'ابحث برقم البطاقة أو رقم الهاتف أو الاسم',
+    queryLabel: 'بحث عن زبون',
     queryPlaceholder: 'رقم الهاتف أو الاسم',
     search: 'بحث',
     searching: 'جاري البحث…',

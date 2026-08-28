@@ -1,4 +1,9 @@
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -11,8 +16,7 @@ import { twMerge } from 'tailwind-merge';
  * nothing relies on a hover state that a touch screen does not have.
  */
 
-export const cn = (...classes: Array<string | undefined | false>): string =>
-  twMerge(clsx(classes));
+export const cn = (...classes: Array<string | undefined | false>): string => twMerge(clsx(classes));
 
 /* ── Button ────────────────────────────────────────────────────────────────── */
 

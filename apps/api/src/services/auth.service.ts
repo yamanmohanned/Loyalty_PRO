@@ -62,7 +62,7 @@ async function issueTokens(user: {
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const user = await prisma.user.findFirst({
     where: { username },
-    include: { branch: { select: { code: true } } },
+    include: { branch: { select: { code: true } }, merchant: { select: { name: true } } },
   });
 
   // Verify a dummy hash when the user does not exist, so a missing username and a
@@ -92,6 +92,7 @@ export async function login(username: string, password: string): Promise<LoginRe
       username: user.username,
       role: parseRole(user.role),
       merchantId: user.merchantId,
+      merchantName: user.merchant.name,
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,
     },
@@ -114,7 +115,9 @@ export async function refresh(presentedToken: string): Promise<LoginResponse> {
   const stored = await prisma.refreshToken.findUnique({
     where: { tokenHash },
     include: {
-      user: { include: { branch: { select: { code: true } } } },
+      user: {
+        include: { branch: { select: { code: true } }, merchant: { select: { name: true } } },
+      },
     },
   });
 
@@ -151,6 +154,7 @@ export async function refresh(presentedToken: string): Promise<LoginResponse> {
       username: user.username,
       role: parseRole(user.role),
       merchantId: user.merchantId,
+      merchantName: user.merchant.name,
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,
     },

@@ -7,6 +7,7 @@ import {
   findRepoEnvFile,
   resolveDataDir,
   resolveMigrationsDir,
+  resolveStationDir,
   sqlitePathFromUrl,
 } from '../config/paths';
 import {
@@ -217,6 +218,43 @@ describe('provisioning a database that does not exist yet', () => {
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'good'`,
     );
     expect(tables).toHaveLength(0);
+  });
+});
+
+describe('finding the built Loyalty Station', () => {
+  it('accepts a directory that holds a built bundle', () => {
+    const dir = scratch();
+    mkdirSync(join(dir, 'station', 'assets'), { recursive: true });
+    writeFileSync(join(dir, 'station', 'index.html'), '<!doctype html>');
+
+    expect(resolveStationDir(dir)).toBe(join(dir, 'station'));
+  });
+
+  it('refuses a SOURCE directory that merely has an index.html', () => {
+    // Vite keeps an index.html in the project root as its dev template, and its only
+    // script tag points at `/src/main.tsx` — unbundled TypeScript no browser can run.
+    // Matching on the HTML alone served that file in development, and in production
+    // would have surfaced as a blank screen on a merchant's tablet.
+    const dir = scratch();
+    mkdirSync(join(dir, 'apps', 'station', 'src'), { recursive: true });
+    writeFileSync(join(dir, 'apps', 'station', 'index.html'), '<script src="/src/main.tsx">');
+
+    expect(resolveStationDir(dir)).toBeNull();
+  });
+
+  it('prefers the build output when both exist', () => {
+    const dir = scratch();
+    mkdirSync(join(dir, 'apps', 'station', 'dist', 'assets'), { recursive: true });
+    writeFileSync(join(dir, 'apps', 'station', 'index.html'), '<script src="/src/main.tsx">');
+    writeFileSync(join(dir, 'apps', 'station', 'dist', 'index.html'), '<!doctype html>');
+
+    expect(resolveStationDir(dir)).toBe(join(dir, 'apps', 'station', 'dist'));
+  });
+
+  it('returns null when nothing is built — a normal state, not an error', () => {
+    // During development the Station runs on its own Vite server, and the API has no
+    // business serving a stale copy of it.
+    expect(resolveStationDir(scratch())).toBeNull();
   });
 });
 

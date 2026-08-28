@@ -16,6 +16,7 @@
     "test": "vitest run --passWithNoTests",
     "lint": "eslint .",
     "dev": "tsx watch src/server.ts",
+    "dev:alt": "dotenv -e ../../.env -v API_PORT=4001 -- tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsup src/server.ts --format esm --target node20 --clean"
   },
