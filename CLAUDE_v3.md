@@ -938,3 +938,59 @@ always at the worst moment. `localStorage` would leave a long-lived credential o
 device after closing. `sessionStorage` survives a reload and dies with the tab, which
 is how the appliance is actually used — opened at the start of the day, closed at the
 end.
+
+### 12.14 Print Capture Agent decisions (V3-5) — 2026-08-29
+
+**CP864 stores Arabic presentation forms, not base letters.** The single most
+consequential thing found in this phase, and it was found by a test rather than by
+reading. A CP864 receipt decodes to U+FE70–U+FEFF — the *shaped* glyphs — so a
+template whose label reads «الإجمالي» in ordinary letters matches nothing. In a store
+that would have presented as "the agent captures perfectly and never parses", at one
+merchant and not another, with no error anywhere. Labels are now NFKC-folded before
+matching, which Unicode defines as the inverse of that shaping.
+
+**Codepage detection scores the decoded result, never the printer's claim.** `ESC t n`
+means different things on different hardware. Worse, the first version of the scorer
+treated presentation forms as "unexpected high characters" and therefore *preferred a
+Windows-1256 misread of CP864 bytes* — the wrong codepage winning on the strength of
+its own mojibake. Detection now counts presentation forms as Arabic, which is what
+they are.
+
+**Forward-first is a shape in the code, not a comment.** `PrintRelay` reads, writes to
+the printer, flushes, and only then offers the bytes to a sink whose interface forbids
+throwing and blocking. `ForwardFirstTests` is the suite §4.6 rule 3 asks for by name:
+it breaks the capture side every realistic way — throws, out-of-memory, blocks forever,
+falls behind, consumer dies mid-run — and asserts each time that the receipt still
+reached the printer whole and in order.
+
+**The capture buffer drops rather than waits, and counts what it dropped.** The first
+version used `BoundedChannelFullMode.DropWrite`, which discards silently and returns
+true — so the agent could never report how many captures it lost. `Wait` plus
+`TryWrite` is the same non-blocking behaviour on the print path with an honest number
+attached.
+
+**A rejected capture is set aside, never deleted.** Found by an integration run: a
+schema mismatch (`raw_text: null` against a field the contract declares optional, not
+nullable) made the server reject every capture, and the agent — treating a 400 as
+settled — destroyed two real sales. Rejections now move to `queue/rejected/`, where
+nothing is lost and nothing blocks the queue behind it.
+
+**Auto-detection short-circuits on SPOOL_WATCH.** Not merely ranked first: if spool
+watching yields data the detector stops, so a store where it works never has an in-path
+mode started even momentarily. §4.6 rule 1 is about which risks a store carries, and
+the code makes the safe answer unreachable-by-accident rather than merely preferred.
+
+**Parsing rules are in `pos-template.json` and nothing else.** A test proves it by
+parsing an all-English receipt with a template that shares no vocabulary with the
+shipped one. Supporting a new POS is a file, not a build.
+
+**.NET restores to `E:`.** `C:` on the build machine reached zero bytes free and the
+default NuGet cache failed outright. Same relocation as §12.1, committed as
+`agent/NuGet.config` so a fresh clone builds without anyone knowing. **The underlying
+problem is unchanged and now acute** — §12.1 recommended the operator reclaim real
+space, and at zero bytes Windows itself is at risk.
+
+**Still open:** real Al-Bayan bytes (§12.6). The parser is built and tested against
+synthetic ESC/POS fixtures covering CP864 × Windows-1256 × Arabic-Indic × Western
+digits, emitted to `agent/fixtures/` as real byte files so the real capture can be put
+beside them and compared. Nothing in this phase waited on them.

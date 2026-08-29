@@ -20,6 +20,10 @@
     <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
     <!-- SERIAL_BRIDGE talks to COM ports. -->
     <PackageReference Include="System.IO.Ports" Version="9.0.0" />
+    <!-- Service lifetime, HTTP client factory, and the Windows event log the manager's
+         capture-health screen will read. -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.EventLog" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
