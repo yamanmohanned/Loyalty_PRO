@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Walaa.Agent/Walaa.Agent.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Walaa.Agent.Tests/Walaa.Agent.Tests.csproj" />
+  </Folder>
+</Solution>

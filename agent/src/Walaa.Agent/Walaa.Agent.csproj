@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Walaa.Agent</RootNamespace>
+    <AssemblyName>walaa-agent</AssemblyName>
+    <UserSecretsId>walaa-print-capture-agent</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Windows Service hosting, configuration, logging, DI. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.0" />
+    <!--
+      CP864 and Windows-1256 are not in .NET's default encoding set — only UTF-8 and
+      the system default are. Arabic thermal printers use exactly those two codepages
+      (§4.5), so without this package the agent decodes every Arabic receipt to
+      mojibake.
+    -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
+    <!-- SERIAL_BRIDGE talks to COM ports. -->
+    <PackageReference Include="System.IO.Ports" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="pos-template.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

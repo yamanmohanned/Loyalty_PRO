@@ -47,3 +47,7 @@ apps/api/prisma/*.db-shm
 
 # rust build output (tauri app shell, service host)
 target/
+
+# .NET build output (the Print Capture Agent)
+[Bb]in/
+[Oo]bj/

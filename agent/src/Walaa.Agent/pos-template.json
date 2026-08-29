@@ -1,0 +1,53 @@
+{
+  "name": "generic-arabic-thermal",
+  "version": 1,
+
+  // "auto" scores CP864, Windows-1256 and UTF-8 against the captured bytes and picks
+  // the one that yields a plausible Arabic receipt. Pin it once a store's printer is
+  // known — detection is good, but a fixed answer cannot be wrong on an odd receipt.
+  "codepage": "auto",
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  THIS FILE IS THE POINT OF THE AGENT (CLAUDE_v3.md §4.5).
+  //
+  //  Nothing about any particular POS is compiled into the binary. Supporting a new
+  //  merchant is a new copy of this file, produced by the calibration flow (§4.7) —
+  //  print a receipt, click the total, click the invoice number.
+  //
+  //  What ships here is a STARTING POINT built against synthetic fixtures. Real
+  //  Al-Bayan bytes have not been captured yet (§12.6), so expect calibration at the
+  //  first store to replace it.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  "invoiceId": {
+    // Written every way an Arabic POS tends to write it. Matching is done after
+    // Arabic normalisation, so hamza and tatweel variants of these do not need
+    // separate entries.
+    "labels": ["رقم الفاتورة", "فاتورة رقم", "رقم الوصل", "Invoice No", "Invoice", "INV"],
+    "where": "sameLine",
+    // An optional letter prefix, an optional dash, then the digits: INV-9824, INV9824,
+    // or 9824. Anchored on at least two digits so a stray "1" in the shop's address
+    // line cannot pass for an invoice number.
+    "pattern": "([A-Za-z]{0,6}-?[0-9]{2,})"
+  },
+
+  "totalAmount": {
+    // "المجموع" (sum) and "الإجمالي" (total) are both common, and some printers emit
+    // the English word alongside. "المبلغ" is deliberately absent: it also labels the
+    // amount tendered, which is not the invoice total.
+    "labels": ["الإجمالي", "المجموع", "الاجمالي", "اجمالي", "Total", "TOTAL", "Grand Total"],
+    "where": "sameLine",
+    // Digits with optional grouping. Arabic-Indic digits are folded to ASCII before
+    // this runs, so the pattern does not need to know about them.
+    "pattern": "([0-9][0-9.,\\u066C\\u066B ]*[0-9]|[0-9])"
+  },
+
+  "amount": {
+    "thousandsSeparators": [",", " ", "٬"],
+    "decimalSeparator": ".",
+    // IQD has no circulating minor unit (§5.4). `85000.00` parses as 85,000;
+    // `85000.50` is refused rather than guessed, because a wrong total silently
+    // corrupts a customer's balance while a missing one merely asks a human to look.
+    "allowFractional": false
+  }
+}
