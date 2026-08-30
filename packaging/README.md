@@ -299,6 +299,43 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
      drive; Windows updates, restore points and whatever else the machine is used for
      are. Re-check free space on any support visit.
 
+7. **Complete the backup key ceremony, and make sure the key leaves the building.**
+
+   The manager app will not open until this is done — on first run it shows the key
+   ceremony instead of the dashboard, and backups do not run until the key is confirmed.
+   That is deliberate. Walk the merchant through it before you leave, and use the print
+   button so there is paper.
+
+   **Say this to them in these words, and do not soften it:**
+
+   > **Without this key, the backups cannot be recovered. Full stop.**
+   >
+   > Not by us. Not by Google. Not by anyone, ever. The backups are encrypted, and this
+   > key is the only thing that opens them. If the shop's computer is stolen, burns, or
+   > its disk dies — and this key existed only on that computer — then every backup you
+   > have is a file nobody on earth can open. You will have done everything right and
+   > lost everything anyway.
+   >
+   > That is worse than having no backups, because you would have trusted them.
+
+   So the key must live somewhere the fire does not reach:
+
+   - Printed and kept where the shop keeps its important papers — not taped to the
+     machine, not in the drawer under it.
+   - A second copy with the accountant, or the owner's home, or a safe deposit box.
+   - **Not** only in a file on the same PC. **Not** only in a photo on a phone that is
+     backed up to nothing.
+
+   Write the **key fingerprint** (the short code the app shows, e.g. `1439846e8a17ed61`)
+   on the paper too. It is safe to share and it is how anyone later confirms they are
+   holding the right key for a given archive — the app says which fingerprint an archive
+   needs.
+
+   The confirmation is recorded in the audit trail with the name of the person who did
+   it and the date, so "who has the key" is answerable years later. If the key is ever
+   replaced, the ceremony reopens by itself and backups stop until it is confirmed
+   again — that is not a fault.
+
 ---
 
 ## Findings from the packaging spike

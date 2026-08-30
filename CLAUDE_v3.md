@@ -1124,10 +1124,20 @@ worse than no backup, because no backup at least tells the truth about itself.
 
 Binding on the V3-6 backup work:
 
-1. The backup routine **must** either run `PRAGMA wal_checkpoint(TRUNCATE)` before
-   copying, or capture `walaa.db`, `walaa.db-wal` and `walaa.db-shm` as one set. Best is
-   SQLite's own online backup API, which is consistent by construction. Never a naive
-   file copy of the `.db`.
+1. **The mechanism is `VACUUM INTO`, and nothing else.** *(specified 2026-08-30,
+   replacing this clause's original wording.)*
+
+   The original text offered `PRAGMA wal_checkpoint(TRUNCATE)` followed by a copy as an
+   acceptable option. **It is not, and no future session may implement it.** Checkpoint
+   and copy are two statements with a gap between them, and a sale committed in that gap
+   lands in a new WAL the copy does not include — the same silent loss with a smaller
+   window, on a machine that is busiest exactly when the scheduled backup runs.
+
+   `VACUUM INTO` is a single statement under a read transaction. Its output is a
+   complete, self-contained database at one consistent instant, WAL contents included,
+   with no sidecar of its own. There is no gap to race and nothing for a maintainer to
+   forget to copy. Also forbidden: a naive file copy of `walaa.db`, and any scheme that
+   requires capturing `-wal` and `-shm` alongside it.
 2. The **restore test is not complete unless it proves recency**: write a transaction,
    back up, restore, and assert that transaction is present. A restore test that only
    proves the file opens would pass against exactly this bug.
@@ -1197,12 +1207,19 @@ reports for itself and the run asks only whether at least one copy exists. A run
 as failed because a stick was in someone's pocket is a run whose reports nobody reads —
 and §7.3's own warning is that this is the most commonly skipped step.
 
-**Drive uses the `drive.file` scope**, which reaches only files this app created. The
-broader `drive` scope would have been marginally more convenient and would have handed a
-loyalty program the keys to a person's entire cloud storage. Consequence to know: the
-configured folder id must name a folder **this app created**, or be left unset. Raw REST
-rather than `googleapis`, which is tens of megabytes for three calls on a runtime already
-squeezing into a 30 MB installer.
+**Drive uses the `drive.file` scope, and requesting anything wider is PROHIBITED.**
+*(operator ruling, 2026-08-30 — not a preference.)* `drive.file` reaches only files this
+application itself created. **This system must never be able to read a merchant's own
+files** — their photos, their contracts, their family's documents. A loyalty program
+that can enumerate a shopkeeper's Google Drive has taken something it was never offered,
+and no convenience justifies asking for it: not folder discovery by name, not tidier
+setup, not a simpler consent screen. If a future requirement appears to need a broader
+scope, the requirement is wrong.
+
+Consequence to know: because the app cannot see folders it did not create, the configured
+folder id must name a folder **this app created**, or be left unset. Raw REST rather than
+`googleapis`, which is tens of megabytes for three calls on a runtime already squeezing
+into a 30 MB installer.
 
 **What is not verified.** The Drive destination **has never run against the real Google
 API** — that needs a Google Cloud project and OAuth client, which §7.3 itself names as a
@@ -1216,3 +1233,75 @@ thing to check is that Drive's real responses match the shapes those tests assum
 to a file and inspects it. Overwriting production is a decision with a human and a
 stopped service behind it, and every path a scheduler can reach must be incapable of
 destroying the thing it exists to protect.
+
+### 12.19 The backup key ceremony — 2026-08-30
+*(operator ruling, 2026-08-30: highest priority, blocking)*
+
+§12.18 built encrypted backup and flagged the danger in it. This is the answer.
+
+**A key that exists only on the machine being backed up is not a backup.** Fire, theft,
+ransomware, a dead disk — every failure backup exists to survive takes the key with the
+data. What is left is a folder of intact, encrypted, **permanently unrecoverable**
+archives sitting safely in Drive. Worse than having no backup, because a merchant with
+no backup knows it, arranges something else, and is not surprised.
+
+So the key is not a setting. Anything optional gets deferred and a deferral has no
+deadline:
+
+1. **First run shows the ceremony instead of the dashboard.** No close control, no
+   "later", no nav rail, no route around it. Verified in the running app: on login the
+   manager gets the ceremony, with zero links and two buttons.
+2. **Confirmation is re-entry, not a checkbox.** "I wrote it down" is a claim; typing 44
+   characters back is evidence. Compared in constant time, and a mismatch says only that
+   it did not match — anything more precise makes the box an oracle.
+3. **Backups refuse to run until confirmed.** `assertBackupsEnabled` gates `runBackup`
+   and `verifyRestore`, answering 409 `BACKUP_BLOCKED`. Producing an archive nobody can
+   open and reporting success is the deception this exists to prevent.
+4. **The confirmation is an audit row naming who and when**, so "who has the key" is
+   answerable years later.
+
+**The confirmation is bound to the key's fingerprint, and that is the load-bearing
+detail.** `entityId` on the audit row is the fingerprint, not a constant, so "confirmed"
+belongs to one specific key. Replace the key — a migration, a restore onto new hardware,
+a well-meaning edit of `walaa.env` — and the new fingerprint has no confirming row, so
+the ceremony reopens and backups stop. A boolean flag would have gone on vouching for a
+key nobody had ever written down.
+
+**A first run and a replaced key are treated differently**, and the distinction is
+`everConfirmed`. First run is a wall. A replaced key raises a standing, undismissible
+banner instead: the manager has done this before, is probably mid-migration, and locking
+them out of the whole dashboard at that moment would be a hazard of its own. Both states
+verified live.
+
+**Generation writes `BACKUP_KEY` into `walaa.env` and never replaces an existing value.**
+Two guards, because one silent overwrite orphans every archive a shop has ever taken:
+`ensureKeyGenerated` returns early if a key exists, and `setEnvValue` refuses a non-empty
+value without an explicit `overwrite`. Rotation is deliberately not implemented — it is a
+different act needing different warnings.
+
+The write is temp-then-rename **in the data directory**, which is safe for a specific
+reason worth recording: the installer runs `icacls /inheritance:r` on
+`%PROGRAMDATA%\Walaa` granting `(OI)(CI)(F)` to LocalSystem and Administrators, so a file
+created there inherits exactly those and the default `BUILTIN\Users:(RX)` cannot
+propagate. A temp file in `%TEMP%` would have been created under a different ACL and
+moved across volumes non-atomically.
+
+**The key never reaches a log, an error, or Drive metadata.** Audit rows carry
+fingerprints. `req.body.key` is in the Pino redaction list. Verified against the live
+API: after a full ceremony and two backups, the key does not appear anywhere in the
+captured server output.
+
+#### Two bugs the live run caught that no test would have
+
+**Backups failed with a generic 500 when the directory was unwritable.** Unelevated, the
+default backup directory is under `%PROGRAMDATA%\Walaa`, which the installer locks — so
+`mkdir` returned EPERM and the manager was told "حدث خطأ غير متوقع". The packaged service
+runs as LocalSystem and never hits it, but a misconfigured `BACKUP_LOCAL_DIR`, an absent
+USB path and a full disk all land there too. Now a 507 naming the directory.
+
+**A body-less POST answered 400.** Both web clients declared `content-type:
+application/json` on every request; Fastify parses by content-type, so a POST with no
+body handed the parser an empty string and it rejected a well-formed request. `POST
+/backup/key/reveal` takes no body, so the ceremony broke while every `curl` to the same
+endpoint worked — curl sends no content-type without `-d`. Fixed in the manager client
+where it bit, and in the Station client where it had not yet.
