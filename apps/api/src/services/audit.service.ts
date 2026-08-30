@@ -27,7 +27,18 @@ export const AUDIT_ACTIONS = {
   DISCOUNT_SETTINGS_UPDATED: 'discount.settings_updated',
   FEATURE_FLAG_TOGGLED: 'feature_flag.toggled',
   BACKUP_COMPLETED: 'backup.completed',
+  BACKUP_FAILED: 'backup.failed',
   BACKUP_RESTORED: 'backup.restored',
+  /**
+   * The sentinel of the §12.17 recency check.
+   *
+   * Written BEFORE the backup it verifies, which is the whole mechanism: the restored
+   * copy is searched for this exact row, so a backup that silently restores to an older
+   * day fails the check instead of passing it. Named for what it is — an attempt — so
+   * the trail stays truthful when the verification fails.
+   */
+  BACKUP_VERIFICATION_STARTED: 'backup.verification_started',
+  BACKUP_VERIFIED: 'backup.verified',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

@@ -79,6 +79,44 @@ const EnvSchema = z.object({
 
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   RATE_LIMIT_WINDOW: z.string().default('1 minute'),
+
+  /* ── Backup (§7.3) ─────────────────────────────────────────────────────────── */
+
+  /**
+   * 32 random bytes, base64, encrypting every archive.
+   *
+   * Optional, and absent means backup is not configured — reported plainly rather than
+   * defaulted to something, because a derivable key is not a key. See `backup/key.ts`
+   * for the rule that governs it: a key that exists only on the machine being backed up
+   * is not a backup.
+   */
+  BACKUP_KEY: z.string().optional(),
+  /** Defaults to `<data dir>/backups` when unset. */
+  BACKUP_LOCAL_DIR: z.string().optional(),
+  /** The removable drive of §7.3's third copy, e.g. `E:\walaa-backups`. */
+  BACKUP_USB_DIR: z.string().optional(),
+  /**
+   * How many archives each destination keeps.
+   *
+   * Fourteen daily backups is a fortnight of history, which covers "we noticed on
+   * Monday that something went wrong last week" without letting a directory grow without
+   * limit on the volume §12.15 is about.
+   */
+  BACKUP_KEEP: z.coerce.number().int().positive().default(14),
+
+  /**
+   * Google Drive, the off-machine copy of §7.3.
+   *
+   * All optional: Drive needs a Google Cloud project and an OAuth client, which §7.3
+   * flags as a one-time human setup. Absent, the destination is simply not registered
+   * and the Backup screen says "not connected" — never a placeholder implying a copy
+   * exists off the machine when none does.
+   */
+  GOOGLE_DRIVE_CLIENT_ID: z.string().optional(),
+  GOOGLE_DRIVE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_DRIVE_REFRESH_TOKEN: z.string().optional(),
+  /** Must name a folder THIS APP created — the `drive.file` scope sees no others. */
+  GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
@@ -106,6 +144,21 @@ export function loadEnv(): Env {
         'NOTIFICATION_PROVIDER=whatsapp يتطلب WHATSAPP_PHONE_NUMBER_ID و WHATSAPP_ACCESS_TOKEN',
       );
     }
+  }
+
+  // Partial Drive credentials are a typo, not a decision. Left to fall through, the
+  // destination would silently not register and the merchant would believe backups were
+  // going off-machine — §7.3's most costly failure, arrived at by a missing line in a
+  // config file.
+  const drive = [
+    parsed.data.GOOGLE_DRIVE_CLIENT_ID,
+    parsed.data.GOOGLE_DRIVE_CLIENT_SECRET,
+    parsed.data.GOOGLE_DRIVE_REFRESH_TOKEN,
+  ];
+  if (drive.some(Boolean) && !drive.every(Boolean)) {
+    throw new Error(
+      'إعداد Google Drive ناقص: يلزم GOOGLE_DRIVE_CLIENT_ID و GOOGLE_DRIVE_CLIENT_SECRET و GOOGLE_DRIVE_REFRESH_TOKEN معاً',
+    );
   }
 
   cached = parsed.data;

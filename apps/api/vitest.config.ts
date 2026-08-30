@@ -22,6 +22,11 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: testUrl,
+      // A fixed key so backup tests are deterministic. Real installations generate
+      // their own (see `services/backup/key.ts`); this one exists only here.
+      BACKUP_KEY: 'd2FsYWEtdGVzdC1iYWNrdXAta2V5LTMyLWJ5dGVzISE=',
+      // Keeps snapshots, archives and staging out of the developer's data directory.
+      BACKUP_LOCAL_DIR: fileURLToPath(new URL('./prisma/test-backups', import.meta.url)),
     },
   },
 });
