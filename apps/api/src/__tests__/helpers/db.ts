@@ -13,14 +13,45 @@ import type { PrismaClient } from '@prisma/client';
  *
  * SQLite makes this simpler than Postgres did: the "server" is a file, so setup is
  * deleting it and re-running migrations.
+ *
+ * **The file name is unique per run.** It used to be a fixed `walaa_test.db`, and two
+ * concurrent `pnpm test` invocations — a developer running the suite while one is
+ * already going in a terminal or an agent's background job — then truncated each other's
+ * rows mid-assertion. The failures land in whichever test happened to be running, look
+ * like flakes in unrelated code, and cost an afternoon before anyone suspects the
+ * database. The name comes from `vitest.config.ts` so the workers, the migrator here and
+ * the teardown all agree on it.
  */
 
 const API_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const TEST_DB_DIR = join(API_ROOT, 'prisma');
-const TEST_DB_FILE = join(TEST_DB_DIR, 'walaa_test.db');
+
+/** Set by `vitest.config.ts`; the fallback keeps a bare `vitest` invocation working. */
+const TEST_DB_NAME = process.env.WALAA_TEST_DB_NAME ?? `walaa_test_${process.pid}.db`;
+const TEST_DB_FILE = join(TEST_DB_DIR, TEST_DB_NAME);
 
 /** Prisma resolves a relative file: URL from the schema directory. */
-export const TEST_DATABASE_URL = 'file:./walaa_test.db';
+export const TEST_DATABASE_URL = `file:./${TEST_DB_NAME}`;
+
+/**
+ * Removes this run's database, its sidecars, and its backup staging directory.
+ *
+ * All of it here rather than in any one suite's `afterAll`: the backup directory is
+ * created by whichever test file happens to run first and added to by several, so a
+ * single file cleaning up leaves whatever the others wrote afterwards. Global teardown
+ * is the only point that is definitively last.
+ */
+export function dropTestDatabase(): void {
+  for (const suffix of ['', '-wal', '-shm']) {
+    const path = `${TEST_DB_FILE}${suffix}`;
+    if (existsSync(path)) rmSync(path, { force: true });
+  }
+
+  const backups = process.env.BACKUP_LOCAL_DIR;
+  if (backups && existsSync(backups)) {
+    rmSync(backups, { recursive: true, force: true });
+  }
+}
 
 /**
  * Recreates the test database from scratch and applies migrations.

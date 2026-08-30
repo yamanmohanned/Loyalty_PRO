@@ -21,6 +21,7 @@ import {
 } from '../services/backup/backup.service';
 import { LocalDirectoryDestination, archiveName } from '../services/backup/destinations';
 import { generateBackupKey, keyFingerprint, parseBackupKey } from '../services/backup/key';
+import { confirmKey } from '../services/backup/key-ceremony.service';
 import { checkFreeSpace, liveDatabasePath, takeSnapshot } from '../services/backup/snapshot';
 import { resetDatabase } from './helpers/db';
 import { createWorld, type World } from './helpers/fixtures';
@@ -50,11 +51,15 @@ const KEY = parseBackupKey(loadEnv().BACKUP_KEY)!;
 beforeEach(async () => {
   await resetDatabase(prisma);
   world = await createWorld(prisma);
+
+  // The §12.19 gate: backups do not run until a human has confirmed they hold the
+  // encryption key somewhere other than this machine. Completed here so these tests are
+  // about backup rather than about the ceremony, which has its own suite.
+  await confirmKey(world.merchantId, world.ownerId, loadEnv().BACKUP_KEY!);
 });
 
 afterAll(async () => {
   for (const dir of scratch) await rm(dir, { recursive: true, force: true });
-  await rm(join(process.cwd(), 'prisma', 'test-backups'), { recursive: true, force: true });
   await prisma.$disconnect();
 });
 
@@ -177,7 +182,8 @@ describe('taking a snapshot', () => {
   it('resolves the live database even from a relative Prisma URL', () => {
     const path = liveDatabasePath(loadEnv().DATABASE_URL);
     expect(path).toBeTruthy();
-    expect(path).toMatch(/walaa_test\.db$/);
+    // Per-run name (see vitest.config.ts), so this matches the family, not one file.
+    expect(path).toMatch(/walaa_test.*\.db$/);
   });
 
   it('produces a self-contained database that opens and reads', async () => {
@@ -298,7 +304,7 @@ describe('running a backup', () => {
 
   it('leaves no snapshot or archive behind in staging', async () => {
     const run = await runBackup(context(), destinations());
-    const staging = join(process.cwd(), 'prisma', 'test-backups', '.staging');
+    const staging = join(loadEnv().BACKUP_LOCAL_DIR!, '.staging');
 
     // The snapshot is a second copy of the whole database. Left behind, backups would
     // themselves become the thing that fills the disk (§12.15).

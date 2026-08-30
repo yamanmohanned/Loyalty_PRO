@@ -46,7 +46,7 @@ apps/api/prisma/*.db-wal
 apps/api/prisma/*.db-shm
 # Backup snapshots and archives the test suite stages (it cleans up after itself; this
 # catches an interrupted run, which would otherwise leave encrypted archives in the tree).
-apps/api/prisma/test-backups/
+apps/api/prisma/test-backups-*/
 
 # rust build output (tauri app shell, service host)
 target/
