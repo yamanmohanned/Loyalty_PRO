@@ -1135,3 +1135,84 @@ Binding on the V3-6 backup work:
 Until that work lands, the handover checklist in `packaging/README.md` says the same
 thing to whoever maintains the machine: the whole data directory is the backup target,
 and `walaa.db` alone is not one.
+
+**Amended 2026-08-30, after building it: the hazard above is stated more strongly than
+this stack's observed behaviour supports.** Trying to stage the loss in a test —
+checkpoint the WAL, commit a row through Prisma, copy `walaa.db` without its sidecar —
+did not lose the row. `walaa.db-wal` sits at **0 bytes** after a committed Prisma write,
+so writes reach the main database file almost immediately and a naive copy picks them
+up. One configuration, one probe; it does not prove the loss cannot happen on a busy
+till holding long-lived connections, and it is not a licence to copy the file naively.
+
+What it changes is the evidence, not the requirement. `VACUUM INTO` is correct by
+construction and costs nothing, so it stays. Requirement 2 stays for a stronger reason
+than the WAL: **a backup can be quietly behind for many causes**, and recency is the
+only assertion that catches any of them. That is now pinned by a test that stages a
+stored archive older than the sentinel and shows it passing decryption, checksum and
+`PRAGMA integrity_check` while failing verification.
+
+### 12.18 Backup engine decisions (V3-6 groundwork) — 2026-08-30
+
+Built ahead of the field validations because none of it depends on them (§7.3, §12.17).
+
+**`VACUUM INTO`, not checkpoint-then-copy.** The obvious reading of §12.17 is "checkpoint
+the WAL, then copy the file", and that is not a fix — it leaves a race in which a sale
+committed between the checkpoint and the copy lands in a new WAL the copy does not
+include. A shop is busiest exactly when a scheduled backup runs. `VACUUM INTO` is one
+statement taking a read transaction, so the output is a complete self-contained database
+at a single consistent instant, with no sidecar of its own. **The WAL question disappears
+rather than being managed** — nothing is left for a future maintainer to forget to copy.
+It also defragments, so the snapshot is smaller than the live file.
+
+**Refusing a backup for want of disk is right, where refusing a sale is wrong.** §12.16
+forbids the latter because the discount is already given and refusing manufactures a
+discrepancy. A backup inverts cleanly: the data is already safe in the live database, so
+declining loses nothing — and a backup is one of the few operations here that can itself
+fill the disk, writing a second copy of the database plus an archive. The gate is
+`max(3 × database size, 2 GB)`, the 2 GB being §12.15's CRITICAL threshold as an absolute
+floor so a small database cannot back itself up onto a nearly-full volume.
+
+**Archive format: gzip, then AES-256-GCM, with a plaintext authenticated header.** The
+header carries version, algorithm, timestamps, sizes, a plaintext SHA-256 and a key
+fingerprint — and deliberately **nothing identifying**. Whoever can see the file in Drive
+learns when a backup was taken and how big it was, not whose it is. It is plaintext so a
+recovery can list and triage archives without the key, and it is the GCM additional
+authenticated data so editing it fails decryption rather than quietly changing what the
+restore believes. The tag sits at the end, where a streaming cipher produces it; reading
+seeks to the last 16 bytes first. Everything streams — this file is a gigabyte in a few
+years, on a machine §12.15 is about.
+
+**A key that exists only on the machine being backed up is not a backup.** The failures
+backup exists to survive take the key with them. So it is 256 bits of `randomBytes` (a
+memorable passphrase is brute-forceable from a stolen archive; an unmemorable one ends up
+on a note beside the till), stored in `walaa.env` so scheduled runs are unattended, **and
+it must be recorded off the machine**. The archive header carries a key *fingerprint* so
+a wrong key fails as "this archive needs a different key" rather than as an
+indistinguishable-from-corruption authentication error — which is the difference between
+five minutes and an afternoon at the worst moment there is.
+
+**Partial success is the normal outcome, not a failure.** 3-2-1 means the USB stick is
+out of the machine most of the day and the internet drops for an hour. Each destination
+reports for itself and the run asks only whether at least one copy exists. A run reported
+as failed because a stick was in someone's pocket is a run whose reports nobody reads —
+and §7.3's own warning is that this is the most commonly skipped step.
+
+**Drive uses the `drive.file` scope**, which reaches only files this app created. The
+broader `drive` scope would have been marginally more convenient and would have handed a
+loyalty program the keys to a person's entire cloud storage. Consequence to know: the
+configured folder id must name a folder **this app created**, or be left unset. Raw REST
+rather than `googleapis`, which is tens of megabytes for three calls on a runtime already
+squeezing into a 30 MB installer.
+
+**What is not verified.** The Drive destination **has never run against the real Google
+API** — that needs a Google Cloud project and OAuth client, which §7.3 itself names as a
+prerequisite and which no code can conjure. Its protocol logic is tested against a fake
+transport, including the assertion that what crosses the wire is ciphertext: a real
+snapshot containing a customer's phone number in the clear is encrypted, uploaded, and
+the captured request body is checked for that number. When credentials arrive, the first
+thing to check is that Drive's real responses match the shapes those tests assume.
+
+**Restoring over the live database is deliberately not offered.** `restoreArchive` writes
+to a file and inspects it. Overwriting production is a decision with a human and a
+stopped service behind it, and every path a scheduler can reach must be incapable of
+destroying the thing it exists to protect.
