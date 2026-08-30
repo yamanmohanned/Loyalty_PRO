@@ -1305,3 +1305,90 @@ body handed the parser an empty string and it rejected a well-formed request. `P
 /backup/key/reveal` takes no body, so the ceremony broke while every `curl` to the same
 endpoint worked — curl sends no content-type without `-d`. Fixed in the manager client
 where it bit, and in the Station client where it had not yet.
+
+### 12.20 Testing gap: an endpoint is not exercised until a real client calls it — 2026-08-30
+*(recorded at the operator's instruction, after the key ceremony)*
+
+The backup key endpoints were tested two ways and both passed: a vitest suite against
+the service functions, and `curl` against the running API. The ceremony then failed on
+first use in the manager app.
+
+`POST /backup/key/reveal` takes no body. Both web clients set
+`content-type: application/json` on **every** request, so the browser sent that header
+with an empty body; Fastify parses a request by its content-type, handed the parser an
+empty string, and answered **400 on a perfectly well-formed request**. `curl` without
+`-d` sends no content-type at all, so it never reproduced it — the test that was supposed
+to be the realistic one was the one with the unrealistic client.
+
+**The pattern, stated generally: a test client that constructs requests differently from
+the real client is not testing the endpoint, it is testing a similar endpoint.** Header
+defaults, serialisation, empty bodies, and error parsing are all places the two can
+diverge, and every one of them fails in production and passes in the test.
+
+So, for anything a browser calls:
+
+1. **Exercise it through the real client at least once** — the app running, the actual
+   `api.post` involved. `curl` and service-level tests stay useful for breadth; they do
+   not close this class.
+2. Be suspicious of any endpoint that works in `curl` and fails in the app. The
+   difference is almost always in what the client added, not in what the server did.
+3. The same reasoning applies past HTTP. §12.14's CP864 finding is the same shape: a
+   codepage that decoded to mojibake and scored well against a check written for the
+   convenient case.
+
+This is also why V3-3 onwards runs the browser against a live API rather than trusting a
+green suite: three of the four bugs found in the last two phases — the CORS origin, the
+unwritable backup directory answering a generic 500, and this one — were invisible to
+every test that did not involve a real client.
+
+### 12.21 Scheduled backups, and the shape of a scheduler that can be trusted — 2026-08-30
+
+§7.3 asks for "daily after close + every 500 transactions". Four properties decided the
+implementation, and each answers a failure this project has already met in another guise.
+
+**A missed run happens late; it does not disappear.** *(operator requirement.)* A till
+switched off overnight is normal, and a scheduler built as a timer would back up nothing
+at all for a shop that closes before its own backup time — silently, for months. So
+nothing here fires on a timer. Every tick asks a question about *state*: is the most
+recent daily slot still uncovered? A machine started at nine in the morning finds last
+night's slot uncovered and backs up immediately. Verified live: history cleared, service
+restarted, and a backup appeared 30 seconds later with `reason: DAILY` and no human
+involved.
+
+**Dueness is measured from the last SUCCESS; backoff from the last ATTEMPT.** That pairing
+is what retries a failure without hammering it. Measuring both from attempts would mark a
+failed run as covering the slot; both from successes would re-run a full-disk failure
+every five minutes, each time doing a `VACUUM INTO` on a volume with no room for it.
+
+**It lives in the service process, not in `buildApp`.** Two reasons, and the second is
+the one that bites: the manager app is a window somebody closes, whereas the Windows
+Service survives a closed window and a logout (§12.3) — and `buildApp` is what the test
+suite constructs, so a scheduler started there would take real backups of the test
+database on every run.
+
+**It cannot collide with a manual run.** Both go through one in-process mutex in
+`backup.service`. Two backups share a staging directory, a snapshot filename and a
+`VACUUM INTO` destination, so the second would delete the first's snapshot out from under
+it. The scheduler *yields* rather than queues — a queued run behind a manual one would be
+a second backup of the same minute — and `verifyRestore` holds the lock across its whole
+round trip, because the archive it restores must be the one it just took. In-process is
+sufficient for one Windows Service and stops being sufficient the moment there are two,
+the same caveat as the rate limiter.
+
+**Every outcome is recorded, including the ones where nothing happened.** Success,
+failure, refusal for want of disk, and skip-because-one-was-running all write an audit
+row, and the Backup screen reads them. The failure shape this product keeps meeting is
+the quiet one — the agent capturing nothing while reporting healthy (§12.15), archives
+nobody can open (§12.19) — and every one of them was invisible because absence and
+"working fine" looked identical. A gap on that screen is now a fact with a date, not an
+inference.
+
+**History comes from `audit_log`, not a second table**, which would be one more thing to
+keep in step with the trail and would eventually disagree with it about whether last
+Tuesday's backup happened.
+
+**The first-run gate has a logout.** *(operator ruling.)* Undismissible means it cannot be
+bypassed *into the dashboard*, not that the session cannot be left. Leaving force-quit as
+the only exit teaches a manager that killing the process is how you get out of our
+screens, and that habit costs more later than the button does now. Logging out confirms
+nothing; the gate is waiting at the next login.
