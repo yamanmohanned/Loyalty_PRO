@@ -25,7 +25,8 @@
     "db:generate": "pnpm --filter @walaa/api db:generate",
     "db:seed": "pnpm --filter @walaa/api db:seed",
     "db:reset": "pnpm --filter @walaa/api db:reset",
-    "db:studio": "pnpm --filter @walaa/api db:studio"
+    "db:studio": "pnpm --filter @walaa/api db:studio",
+    "db:reset-ceremony": "pnpm --filter @walaa/api db:reset-ceremony"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

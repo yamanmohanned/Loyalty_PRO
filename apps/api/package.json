@@ -13,6 +13,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:verify": "tsx prisma/verify.ts",
+    "db:reset-ceremony": "tsx prisma/reset-ceremony.ts",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint .",
     "dev": "tsx watch src/server.ts",
