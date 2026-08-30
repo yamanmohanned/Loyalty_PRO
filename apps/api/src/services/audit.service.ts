@@ -39,6 +39,22 @@ export const AUDIT_ACTIONS = {
    */
   BACKUP_VERIFICATION_STARTED: 'backup.verification_started',
   BACKUP_VERIFIED: 'backup.verified',
+
+  /* ── The key ceremony (§12.19) ────────────────────────────────────────── */
+
+  BACKUP_KEY_GENERATED: 'backup.key_generated',
+  /**
+   * The manager typed the key back and it matched — the record that a human actually
+   * has it somewhere other than this machine.
+   *
+   * `entityId` is the key's FINGERPRINT, not a constant. That is what makes the
+   * confirmation belong to one specific key: replace the key and the new fingerprint
+   * has no confirming row, so the ceremony reopens by itself rather than a stale
+   * "confirmed" flag vouching for a key nobody has written down.
+   */
+  BACKUP_KEY_CONFIRMED: 'backup.key_confirmed',
+  /** Every time the key is displayed. A secret shown is a secret that left the vault. */
+  BACKUP_KEY_REVEALED: 'backup.key_revealed',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

@@ -30,6 +30,14 @@ export const ApiErrorCodeSchema = z.enum([
    * the alarm. Clients must fault the visible action, never show this as generic.
    */
   'STORAGE_UNAVAILABLE',
+  /**
+   * Backups are switched off because the encryption key has not been confirmed as
+   * recorded off the machine (CLAUDE_v3.md §12.19).
+   *
+   * Its own code because the dashboard must react to it specifically — by reopening the
+   * key ceremony, not by showing a failure the manager cannot act on.
+   */
+  'BACKUP_BLOCKED',
   'INTERNAL_ERROR',
 ]);
 
@@ -71,5 +79,6 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   // 507 Insufficient Storage. Specific enough that a proxy or a log filter can tell
   // it from a generic 500, and no client in this system special-cases it otherwise.
   STORAGE_UNAVAILABLE: 507,
+  BACKUP_BLOCKED: 409,
   INTERNAL_ERROR: 500,
 };

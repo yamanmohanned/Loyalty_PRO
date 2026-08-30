@@ -94,3 +94,11 @@ export const internalError = (cause?: unknown) =>
  */
 export const storageUnavailable = (cause?: unknown) =>
   new AppError('STORAGE_UNAVAILABLE', 'تعذّر حفظ العملية — أبلغ الإدارة فوراً', { cause });
+
+/**
+ * Backups are off until the key ceremony is completed (CLAUDE_v3.md §12.19).
+ *
+ * Its own code so the dashboard reopens the ceremony rather than showing a failure the
+ * manager cannot act on.
+ */
+export const backupBlocked = (message: string) => new AppError('BACKUP_BLOCKED', message);

@@ -10,6 +10,7 @@ import { registerZodValidation } from './plugins/zod-validation';
 import { registerRealtime } from './plugins/realtime';
 import { registerStation } from './plugins/station';
 import { authRoutes } from './routes/auth.routes';
+import { backupRoutes } from './routes/backup.routes';
 import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
 import { flagRoutes } from './routes/flags.routes';
@@ -51,6 +52,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           'req.headers.cookie',
           'req.body.password',
           'req.body.refreshToken',
+          // The backup encryption key, in either direction. §12.19: this key must never
+          // reach a log line — a log file is readable by anyone who can read the data
+          // directory, which is a wider set than the people who may hold the key.
+          'req.body.key',
+          'req.body.backupKey',
           'res.headers["set-cookie"]',
         ],
         remove: true,
@@ -135,6 +141,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(voucherRoutes, { prefix: '/vouchers' });
       await api.register(discountRoutes, { prefix: '/discount' });
       await api.register(flagRoutes, { prefix: '/flags' });
+      await api.register(backupRoutes, { prefix: '/backup' });
       await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
     },

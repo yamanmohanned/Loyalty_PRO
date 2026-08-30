@@ -164,3 +164,18 @@ export function loadEnv(): Env {
   cached = parsed.data;
   return cached;
 }
+
+/**
+ * Drops the cached configuration so the next `loadEnv()` re-reads it.
+ *
+ * Exactly one caller: the backup key ceremony, after it has generated a key and written
+ * it to the environment file. Without this the running process would keep reporting
+ * "backup not configured" until the service was restarted, and a merchant who had just
+ * completed the ceremony would be told it had not happened.
+ *
+ * Not a general-purpose reload. Everything else in this service reads its configuration
+ * once at boot, deliberately.
+ */
+export function resetEnvCache(): void {
+  cached = null;
+}

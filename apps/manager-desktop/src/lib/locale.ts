@@ -198,6 +198,60 @@ export const locale = {
     never: 'لم تُنفَّذ بعد',
   },
 
+  /**
+   * The key ceremony (CLAUDE_v3.md §12.19).
+   *
+   * The copy carries the whole weight of this feature. A manager who reads "احفظ
+   * المفتاح" and clicks past it has done nothing; a manager who reads that losing this
+   * key makes every backup permanently unopenable writes it down. So the wording states
+   * the consequence in full, and states it before the key is shown rather than after.
+   */
+  keyCeremony: {
+    title: 'مفتاح تشفير النسخ الاحتياطي',
+    subtitle: 'خطوة إلزامية لمرة واحدة — لا يمكن تخطّيها',
+
+    whyTitle: 'لماذا هذه الخطوة إلزامية',
+    why:
+      'النسخ الاحتياطية مشفّرة، ولا يمكن فتحها إلا بهذا المفتاح. المفتاح محفوظ على هذا الجهاز — وهو الجهاز نفسه الذي تحميك النسخ الاحتياطية من فقدانه.',
+    whyHard:
+      'إذا احترق هذا الجهاز أو سُرق أو تعطّل قرصه، وكان المفتاح موجوداً عليه فقط، فإن كل النسخ الاحتياطية تصبح غير قابلة للاستعادة نهائياً. لا يستطيع أحد فتحها — لا نحن ولا Google ولا أي شخص آخر.',
+    whyWorse: 'هذا أسوأ من عدم وجود نسخ احتياطية أصلاً، لأنك ستعتمد عليها.',
+
+    generate: 'توليد المفتاح',
+    generating: 'جاري التوليد…',
+    reveal: 'إظهار المفتاح',
+    revealing: 'جاري الإظهار…',
+
+    keyLabel: 'مفتاح التشفير',
+    keyHint: 'اكتبه على ورق واحفظه خارج هذا الجهاز — في خزنة، أو مع المحاسب، أو في أي مكان آمن لا يتأثر بما يصيب هذا الجهاز.',
+    fingerprintLabel: 'بصمة المفتاح',
+    fingerprintHint: 'رمز تعريف قصير للمفتاح. آمن للمشاركة، ولا يكشف المفتاح نفسه.',
+    print: 'طباعة المفتاح',
+
+    confirmTitle: 'أدخل المفتاح للتأكيد',
+    confirmHint:
+      'أعد كتابة المفتاح من الورقة التي كتبته عليها — لا نسخاً ولصقاً من الشاشة. الهدف هو التأكد من أنه محفوظ فعلاً خارج هذا الجهاز.',
+    confirmPlaceholder: 'الصق أو اكتب المفتاح هنا',
+    confirm: 'تأكيد الحفظ وتفعيل النسخ الاحتياطي',
+    confirming: 'جاري التأكيد…',
+    mismatch: 'المفتاح المُدخل لا يطابق المفتاح الحالي',
+
+    confirmedTitle: 'تم تفعيل النسخ الاحتياطي',
+    confirmedBy: 'أكّده',
+    confirmedAt: 'بتاريخ',
+
+    /** The persistent banner, shown anywhere in the app while backups are off. */
+    bannerTitle: 'النسخ الاحتياطي متوقف',
+    bannerUnconfirmed: 'لم يتم تأكيد حفظ مفتاح التشفير خارج هذا الجهاز. لا تعمل أي نسخة احتياطية حتى يتم ذلك.',
+    bannerUnconfigured: 'لم يتم إعداد مفتاح التشفير بعد. لا تعمل أي نسخة احتياطية.',
+    bannerAction: 'إكمال الخطوة الآن',
+
+    printTitle: 'مفتاح تشفير النسخ الاحتياطي — ولاء',
+    printWarning:
+      'بدون هذا المفتاح لا يمكن استعادة أي نسخة احتياطية. احفظ هذه الورقة في مكان آمن خارج جهاز الإدارة.',
+    printGeneratedAt: 'تاريخ الطباعة',
+  },
+
   reports: {
     title: 'التقارير',
     subtitle: 'أداء البرنامج وتسوية القسائم',

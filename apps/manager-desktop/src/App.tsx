@@ -32,6 +32,11 @@ import { ModulesScreen } from './screens/Modules';
 import { CaptureScreen } from './screens/Capture';
 import { BackupScreen } from './screens/Backup';
 import { ReportsScreen } from './screens/Reports';
+import {
+  BackupBlockedBanner,
+  KeyCeremonyScreen,
+  useKeyStatus,
+} from './screens/KeyCeremony';
 
 /**
  * Application shell.
@@ -128,6 +133,27 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
 }
 
 function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const navigate = useNavigate();
+  const keyStatus = useKeyStatus();
+
+  /**
+   * The backup key ceremony gate (CLAUDE_v3.md §12.19).
+   *
+   * On a **first run** — no key has ever been confirmed for this merchant — the ceremony
+   * replaces the dashboard entirely. There is no close control and no route around it,
+   * because the failure it prevents is invisible: archives that look healthy and cannot
+   * be opened by anyone once this machine is gone. An optional step here is a step that
+   * never happens.
+   *
+   * A key **replaced later** is treated differently, by `BackupBlockedBanner` below. The
+   * manager has done this before, is probably mid-migration, and locking them out of the
+   * whole dashboard at that moment would be a hazard of its own — so it is a standing,
+   * undismissible banner rather than a wall.
+   */
+  if (keyStatus.data && !keyStatus.data.everConfirmed) {
+    return <KeyCeremonyScreen onCompleted={() => void keyStatus.refetch()} />;
+  }
+
   return (
     // min-h-[100dvh] never h-screen (§6.5).
     //
@@ -138,6 +164,9 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
     <div className="flex min-h-[100dvh] max-h-[100dvh]">
       <NavRail user={user} onLogout={onLogout} />
       <main className="flex-1 overflow-y-auto">
+        {keyStatus.data ? (
+          <BackupBlockedBanner status={keyStatus.data} onFix={() => navigate('/backup')} />
+        ) : null}
         <div className="mx-auto max-w-content px-8 py-8">
           <Routes>
             <Route path="/" element={<OverviewScreen />} />

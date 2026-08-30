@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../../config/env';
 import { resolveDataDir } from '../../config/paths';
+import { AppError } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { readArchive, writeArchive, type ArchiveHeader } from './archive';
 import {
@@ -12,6 +13,7 @@ import {
   type StoredBackup,
 } from './destinations';
 import { driveCredentials, GoogleDriveDestination } from './drive';
+import { assertBackupsEnabled } from './key-ceremony.service';
 import { keyFingerprint, parseBackupKey } from './key';
 import { InsufficientSpaceError, takeSnapshot } from './snapshot';
 
@@ -59,15 +61,6 @@ export interface BackupContext {
   merchantId: string;
   /** Null for a scheduled run with no human behind it. */
   actorUserId: string | null;
-}
-
-/** Why backup cannot run, or null when it can. */
-export function backupUnavailableReason(): string | null {
-  const env = loadEnv();
-  if (!parseBackupKey(env.BACKUP_KEY)) {
-    return 'لم يتم إعداد مفتاح التشفير للنسخ الاحتياطي';
-  }
-  return null;
 }
 
 /** The configured key. Throws when backup is not set up, which callers check first. */
@@ -119,6 +112,34 @@ function stagingDirectory(): string {
 }
 
 /**
+ * Creates the staging directory, or fails with something a manager can act on.
+ *
+ * Found by running this against the live API: unelevated, the backup directory defaults
+ * under `%PROGRAMDATA%\Walaa`, which the installer locks to SYSTEM and Administrators,
+ * so `mkdir` returns EPERM. The packaged service runs as LocalSystem and does not hit it
+ * — but a misconfigured `BACKUP_LOCAL_DIR`, a USB path that vanished, or a full disk all
+ * land here too, and every one of them was answering "حدث خطأ غير متوقع".
+ *
+ * A backup that cannot start is not a bug the manager should be asked to shrug at. It is
+ * §7.3's mandatory safeguard not running, and it names the directory so somebody can fix
+ * it.
+ */
+async function prepareStaging(): Promise<string> {
+  const staging = stagingDirectory();
+  try {
+    await mkdir(staging, { recursive: true });
+    return staging;
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    throw new AppError(
+      'STORAGE_UNAVAILABLE',
+      `تعذّر تجهيز مجلد النسخ الاحتياطي (${code ?? 'خطأ'}): ${staging}`,
+      { cause: error },
+    );
+  }
+}
+
+/**
  * Takes a backup and pushes it to every configured destination.
  *
  * **A destination that fails does not fail the run.** §7.3's 3-2-1 means partial success
@@ -131,12 +152,17 @@ export async function runBackup(
   destinations: BackupDestination[] = resolveDestinations(),
   now: Date = new Date(),
 ): Promise<BackupRun> {
+  // The ceremony gate (§12.19). An archive encrypted with a key nobody has recorded off
+  // this machine is not a backup, and producing one while reporting success is exactly
+  // the deception the ceremony exists to prevent. Checked before any work, so a refusal
+  // costs nothing and cannot half-write anything.
+  await assertBackupsEnabled(context.merchantId);
+
   const env = loadEnv();
   const key = requireKey();
   const startedAt = now.toISOString();
 
-  const staging = stagingDirectory();
-  await mkdir(staging, { recursive: true });
+  const staging = await prepareStaging();
 
   const name = archiveName(now);
   const snapshotPath = join(staging, 'snapshot.db');
@@ -327,8 +353,9 @@ export async function verifyRestore(
   destinations: BackupDestination[] = resolveDestinations(),
   now: Date = new Date(),
 ): Promise<RestoreVerification> {
-  const staging = stagingDirectory();
-  await mkdir(staging, { recursive: true });
+  await assertBackupsEnabled(context.merchantId);
+
+  const staging = await prepareStaging();
 
   const sentinelId = `verify-${now.toISOString()}-${Math.random().toString(36).slice(2, 10)}`;
 
