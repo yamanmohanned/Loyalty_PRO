@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, CreditCard, Receipt, TrendingUp, WifiOff } from 'lucide-react';
+import { AlertOctagon, CheckCircle2, CreditCard, Receipt, TrendingUp, WifiOff } from 'lucide-react';
 import { looksLikeCardNumber, type ScanCardResponse } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale, money } from '../lib/locale';
@@ -35,6 +35,12 @@ type Phase =
   | { kind: 'working' }
   | { kind: 'result'; response: ScanCardResponse }
   | { kind: 'queued' }
+  /**
+   * The write reached the server and was not stored (CLAUDE_v3.md §12.16). Separate
+   * from `error` because it is separate to the operator: nothing is retrying, nothing
+   * is queued, and the sale is unrecorded until a human intervenes.
+   */
+  | { kind: 'notSaved'; storage: boolean }
   | { kind: 'error'; message: string };
 
 export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
@@ -93,6 +99,11 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
             payload: { barcodeToken: scanned },
           });
           setPhase({ kind: 'queued' });
+        } else if (error instanceof ApiRequestError && error.isUnsavedWrite) {
+          // NOT queued, and deliberately so. The server answered; retrying against a
+          // datastore that cannot write would bury the failure under a spinner while
+          // every following sale went unrecorded too.
+          setPhase({ kind: 'notSaved', storage: error.isStorageFailure });
         } else {
           setPhase({
             kind: 'error',
@@ -204,6 +215,26 @@ function Outcome({
         <p className="text-base text-ink">
           سيتم احتساب المشتريات في رصيد الزبون عند عودة الاتصال — لا توجد قسيمة خصم لهذه الفاتورة.
         </p>
+        <Button variant="ghost" onClick={onReset}>
+          {locale.scan.again}
+        </Button>
+      </Card>
+    );
+  }
+
+  if (phase.kind === 'notSaved') {
+    return (
+      <Card className="space-y-3 border-danger/30 bg-danger-tint text-center">
+        <AlertOctagon className="mx-auto text-danger" size={40} aria-hidden />
+        <p className="text-xl font-bold text-danger">{locale.notSaved.title}</p>
+        {/* Three things a generic error never says: what did not happen, that waiting
+            will not fix it, and what to do now. The offline card above promises the
+            opposite outcome, so the two must never read alike (§12.16). */}
+        <p className="text-base text-ink">{locale.notSaved.detail}</p>
+        <p className="text-base font-bold text-ink">{locale.notSaved.instruction}</p>
+        {phase.storage ? (
+          <p className="text-sm text-steel">{locale.notSaved.storageHint}</p>
+        ) : null}
         <Button variant="ghost" onClick={onReset}>
           {locale.scan.again}
         </Button>

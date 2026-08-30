@@ -57,6 +57,28 @@ export class ApiRequestError extends Error {
   get isNetworkFailure(): boolean {
     return this.status === 0 && this.code === 'NETWORK_ERROR';
   }
+
+  /**
+   * True when a write reached the server and was not stored (CLAUDE_v3.md §12.16).
+   *
+   * The offline queue must NOT swallow these. A network failure is benign — the
+   * operation is queued and settles later. This is the opposite: the server answered
+   * and the sale is gone, and retrying against a datastore that cannot write would
+   * only bury the fact.
+   *
+   * Any 5xx counts, not only `STORAGE_UNAVAILABLE`. The API's storage detection reads
+   * driver message text and can miss a signature, so the honest failure the operator
+   * sees must not depend on that classification being right — only the extra hint
+   * does. Erring the other way, a bug shown as "not saved" is a true statement.
+   */
+  get isUnsavedWrite(): boolean {
+    return this.status >= 500 || this.code === 'STORAGE_UNAVAILABLE';
+  }
+
+  /** The server named storage as the cause, so the message can say so. */
+  get isStorageFailure(): boolean {
+    return this.code === 'STORAGE_UNAVAILABLE';
+  }
 }
 
 async function parse<T>(response: Response): Promise<T> {

@@ -137,6 +137,24 @@ export const locale = {
     unexpected: 'حدث خطأ غير متوقّع',
     sessionExpired: 'انتهت الجلسة — سجّل الدخول مرة أخرى',
   },
+
+  /**
+   * A write that reached the server and was NOT stored (CLAUDE_v3.md §12.16).
+   *
+   * Deliberately not folded into `errors`. This is not a message about a request —
+   * it is a message about a sale that did not get recorded, and it has to say three
+   * things a generic error never says: what did not happen, that waiting will not
+   * fix it, and what the operator must do now. The offline copy above promises the
+   * opposite ("it will be counted when the connection returns"), so these two must
+   * never be confusable.
+   */
+  notSaved: {
+    title: 'لم تُحفظ العملية',
+    detail: 'وصل الطلب إلى الخادم ولم يُسجَّل. لم تُحتسب المشتريات ولن تُحتسب لاحقاً.',
+    instruction: 'أبلغ الإدارة فوراً — المشكلة في الخادم وليست في هذا الجهاز.',
+    /** Shown when the server named storage as the cause: actionable for the manager. */
+    storageHint: 'الخادم غير قادر على الحفظ — تحقّق من المساحة الفارغة على قرص جهاز الإدارة.',
+  },
 } as const;
 
 /** IQD, grouped, with the unit a cashier reads: `85,000 د.ع`. */

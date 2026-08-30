@@ -97,3 +97,43 @@ export const isBusyError = (error: unknown): boolean => {
   if (prismaErrorCode(error) === SQLITE_BUSY) return true;
   return error instanceof Error && error.message.includes('SQLITE_BUSY');
 };
+
+/**
+ * Signatures of a datastore that could not accept a write for want of storage.
+ *
+ * Matched on message text, which is not how anything else in this file works and
+ * needs the reason stated: Prisma has no dedicated error code for a full disk. It
+ * surfaces the driver's message, so the driver's words are the only thing to match.
+ *
+ * **The Station's honest-failure behaviour does not depend on this list being
+ * complete.** A storage failure that slips through is still a 5xx, and the Station
+ * treats any failed write as unsaved (§12.16). Matching only sharpens the wording
+ * and the server-side log; missing a signature costs precision, not safety.
+ */
+const STORAGE_FAILURE_SIGNATURES = [
+  'SQLITE_FULL',
+  'database or disk is full',
+  'SQLITE_IOERR',
+  'disk I/O error',
+  'ENOSPC',
+  'no space left on device',
+  // SQLite reports a database it cannot write to — including one whose WAL cannot be
+  // extended — as readonly. A permissions fault produces the same words, and both
+  // mean the same thing to a cashier: this sale was not saved.
+  'attempt to write a readonly database',
+  'SQLITE_READONLY',
+];
+
+/** True when a write failed because the datastore could not store it (§12.15). */
+export function isStorageFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const haystack = [
+    error instanceof Error ? error.message : '',
+    String((error as { code?: unknown }).code ?? ''),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return STORAGE_FAILURE_SIGNATURES.some((signature) => haystack.includes(signature.toLowerCase()));
+}

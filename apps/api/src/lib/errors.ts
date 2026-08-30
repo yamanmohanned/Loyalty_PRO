@@ -83,3 +83,14 @@ export const customerAlreadyExists = (message = 'يوجد زبون مسجّل ب
 
 export const internalError = (cause?: unknown) =>
   new AppError('INTERNAL_ERROR', 'حدث خطأ غير متوقع', { cause });
+
+/**
+ * The datastore refused a write — a full disk, in the case this exists for
+ * (CLAUDE_v3.md §12.15).
+ *
+ * The message names the consequence rather than the cause, because the person who
+ * reads it is a cashier with a customer waiting and the only useful thing they can
+ * do is raise the alarm. The cause goes in the log, where the manager will look.
+ */
+export const storageUnavailable = (cause?: unknown) =>
+  new AppError('STORAGE_UNAVAILABLE', 'تعذّر حفظ العملية — أبلغ الإدارة فوراً', { cause });

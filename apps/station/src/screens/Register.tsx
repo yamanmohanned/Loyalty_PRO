@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserPlus } from 'lucide-react';
+import { AlertOctagon, UserPlus } from 'lucide-react';
 import { formatCardNumber, type Customer } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
@@ -24,6 +24,13 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A registration the server accepted the request for and did not store
+   * (CLAUDE_v3.md §12.16). Held apart from `error` because it is not a field problem
+   * the operator can correct by retyping — the card was not created and retrying will
+   * not create it.
+   */
+  const [notSaved, setNotSaved] = useState<{ storage: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Customer | null>(null);
   const print = usePrint();
@@ -43,6 +50,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
     event.preventDefault();
     setError(null);
     setBusy(true);
+    setNotSaved(null);
 
     try {
       const response = await api.post<{ customer: Customer }>('/customers', { name, phone });
@@ -53,6 +61,8 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
         // Not a dead end: the person already has a card and probably lost it, which
         // is the reprint flow one tap away.
         setError(locale.register.duplicate);
+      } else if (error_ instanceof ApiRequestError && error_.isUnsavedWrite) {
+        setNotSaved({ storage: error_.isStorageFailure });
       } else if (error_ instanceof ApiRequestError) {
         setError(error_.fields?.[0]?.message ?? error_.message);
       } else {
@@ -100,6 +110,22 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
           </span>
           <h1 className="text-2xl font-bold">{locale.register.title}</h1>
         </div>
+
+        {notSaved ? (
+          <Notice tone="error">
+            <div className="space-y-2 text-right">
+              <p className="flex items-center gap-2 text-lg font-bold">
+                <AlertOctagon size={20} aria-hidden />
+                {locale.notSaved.title}
+              </p>
+              <p className="text-base text-ink">{locale.notSaved.detail}</p>
+              <p className="text-base font-bold text-ink">{locale.notSaved.instruction}</p>
+              {notSaved.storage ? (
+                <p className="text-sm text-steel">{locale.notSaved.storageHint}</p>
+              ) : null}
+            </div>
+          </Notice>
+        ) : null}
 
         <form onSubmit={submit} className="space-y-5">
           <Field label={locale.register.name}>

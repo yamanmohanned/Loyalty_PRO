@@ -19,6 +19,17 @@ export const ApiErrorCodeSchema = z.enum([
   'CUSTOMER_REQUIRED',
   'CUSTOMER_ALREADY_EXISTS',
   'RATE_LIMITED',
+  /**
+   * The write reached the server and the server could not store it — a full disk
+   * being the case this was added for (CLAUDE_v3.md §12.15).
+   *
+   * Distinct from INTERNAL_ERROR because the two demand different things of the
+   * operator. A bug is ours to fix and the till can carry on; a datastore that
+   * cannot accept writes means every sale from now until someone frees space is
+   * unrecorded, and the person standing at the till is the only one who can raise
+   * the alarm. Clients must fault the visible action, never show this as generic.
+   */
+  'STORAGE_UNAVAILABLE',
   'INTERNAL_ERROR',
 ]);
 
@@ -57,5 +68,8 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   CUSTOMER_REQUIRED: 422,
   CUSTOMER_ALREADY_EXISTS: 409,
   RATE_LIMITED: 429,
+  // 507 Insufficient Storage. Specific enough that a proxy or a log filter can tell
+  // it from a generic 500, and no client in this system special-cases it otherwise.
+  STORAGE_UNAVAILABLE: 507,
   INTERNAL_ERROR: 500,
 };

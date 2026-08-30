@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors';
-import { isUniqueViolation } from '../lib/prisma';
+import { isStorageFailure, isUniqueViolation } from '../lib/prisma';
 
 /**
  * The single exit point for every failure (CLAUDE.md §9).
@@ -69,6 +69,24 @@ export function registerErrorHandler(app: FastifyInstance): void {
         error: {
           code: 'RATE_LIMITED',
           message: 'عدد كبير من المحاولات — انتظر قليلاً ثم أعد المحاولة',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // A datastore that cannot store. Checked before the generic 500 because the two
+    // demand different things: a bug is ours and the till carries on, whereas a full
+    // disk means every sale from now on is unrecorded and the only person who can
+    // raise the alarm is the operator looking at this response (§12.15, §12.16).
+    // Logged at error with the cause, because the message the client gets deliberately
+    // does not carry it.
+    if (isStorageFailure(error)) {
+      request.log.error({ err: error }, 'datastore could not accept a write');
+      reply.status(507).send({
+        error: {
+          code: 'STORAGE_UNAVAILABLE',
+          message: 'تعذّر حفظ العملية — أبلغ الإدارة فوراً',
           requestId: request.id,
         },
       });
