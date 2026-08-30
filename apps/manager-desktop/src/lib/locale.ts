@@ -196,6 +196,33 @@ export const locale = {
     restoreHint: 'نسخة احتياطية لم تُختبر ليست نسخة احتياطية. اختبرها شهرياً.',
     lastBackup: 'آخر نسخة',
     never: 'لم تُنفَّذ بعد',
+
+    runNow: 'أخذ نسخة الآن',
+    running: 'جاري النسخ…',
+    verifyNow: 'اختبار الاستعادة الآن',
+    verifying: 'جاري الاختبار…',
+    nextRun: 'النسخة المجدولة القادمة',
+    scheduleDaily: (at: string) => `يومياً الساعة ${at} بتوقيت المتجر`,
+    scheduleCounter: (n: number) => `وبعد كل ${n} عملية`,
+    sinceLastBackup: (n: number) => `${n} عملية منذ آخر نسخة`,
+    scheduleOff: 'الجدولة متوقفة',
+
+    historyTitle: 'سجل النسخ',
+    historyHint: 'كل محاولة تُسجَّل — نجحت أو فشلت أو تخطّت.',
+    historyEmpty: 'لم تُسجَّل أي محاولة بعد',
+    outcomeCompleted: 'تمت',
+    outcomeFailed: 'فشلت',
+    outcomeSkipped: 'تُخطّيت',
+    scheduledRun: 'مجدولة',
+    outOfSpace: 'مساحة غير كافية',
+
+    verifiedAt: 'آخر اختبار استعادة ناجح',
+    neverVerified: 'لم يُجرَ اختبار استعادة بعد',
+    verifyPassed: 'نجح الاختبار — النسخة تحتوي على أحدث العمليات',
+    verifyFailed: 'فشل الاختبار',
+    /** The §12.17 assertion, named on screen so it is not mistaken for "the file opened". */
+    recencyProven: 'تم التحقق من أن النسخة تحتوي على عملية سُجّلت قبل أخذها مباشرة',
+    integrity: 'فحص سلامة قاعدة البيانات',
   },
 
   /**
