@@ -63,6 +63,16 @@ export const AUDIT_ACTIONS = {
   BACKUP_KEY_CONFIRMED: 'backup.key_confirmed',
   /** Every time the key is displayed. A secret shown is a secret that left the vault. */
   BACKUP_KEY_REVEALED: 'backup.key_revealed',
+
+  /**
+   * Free space on the database volume crossed a threshold (§12.15).
+   *
+   * A system action with no actor, written on the CHANGE only. It exists because a disk
+   * that filled overnight and was cleared before anyone arrived otherwise leaves no
+   * trace at all — the banner is gone, the log has rotated, and the outage that nearly
+   * happened is unanswerable. "Twice this month" is what buys a bigger drive.
+   */
+  STORAGE_LEVEL_CHANGED: 'storage.level_changed',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

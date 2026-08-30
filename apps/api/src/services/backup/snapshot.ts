@@ -1,9 +1,9 @@
-import { statfsSync } from 'node:fs';
 import { rm, stat } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
-import { sqlitePathFromUrl } from '../../config/paths';
+import { liveDatabasePath } from '../../config/paths';
+import { CRITICAL_FREE_BYTES, readFreeSpace } from '../storage.service';
 
 /**
  * Taking a consistent copy of a live SQLite database (CLAUDE_v3.md §12.17).
@@ -55,9 +55,12 @@ const REQUIRED_FREE_MULTIPLE = 3;
  *
  * A 20 MB database on a volume with 200 MB left passes a purely proportional check and
  * still leaves the machine one Windows update away from the outage §12.15 describes.
- * This is the CRITICAL threshold from §12.15, used as an absolute gate.
+ * This is the CRITICAL threshold from §12.15, imported from the module that samples it
+ * rather than restated here: the number that raises the manager's banner and the number
+ * that refuses a backup have to be the same number, or the banner is a warning about a
+ * limit that is not the limit.
  */
-const MINIMUM_FREE_BYTES = 2 * 1024 * 1024 * 1024;
+const MINIMUM_FREE_BYTES = CRITICAL_FREE_BYTES;
 
 export interface FreeSpace {
   freeBytes: number;
@@ -78,29 +81,14 @@ export class InsufficientSpaceError extends Error {
 const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(2)} GB`;
 
 /**
- * Absolute path to the live SQLite file, or null when the datasource is not a file.
- *
- * The installed service is always handed an absolute path by the service host (§12.11),
- * so the relative branch is development and tests — where Prisma resolves a relative
- * `file:` URL from the schema directory rather than from the working directory. Getting
- * that wrong would look like a missing database rather than a misresolved path.
- */
-export function liveDatabasePath(databaseUrl: string): string | null {
-  const raw = sqlitePathFromUrl(databaseUrl);
-  if (!raw) return null;
-  return isAbsolute(raw) ? raw : resolve(process.cwd(), 'prisma', raw);
-}
-
-/**
  * Checks that a snapshot has somewhere to go.
  *
- * `statfsSync` reports the filesystem holding `path`, so a backup targeted at a second
- * drive is measured against that drive rather than against `C:` — which matters, because
- * the USB copy §7.3 requires is precisely a different volume.
+ * `readFreeSpace` reports the filesystem holding `path`, so a backup targeted at a second
+ * drive is measured against that drive rather than against the system drive — which
+ * matters, because the USB copy §7.3 requires is precisely a different volume.
  */
 export function checkFreeSpace(databaseBytes: number, path: string): FreeSpace {
-  const stats = statfsSync(path);
-  const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+  const { freeBytes } = readFreeSpace(path);
   const requiredBytes = Math.max(databaseBytes * REQUIRED_FREE_MULTIPLE, MINIMUM_FREE_BYTES);
   return { freeBytes, requiredBytes, databaseBytes };
 }

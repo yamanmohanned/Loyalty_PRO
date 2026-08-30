@@ -18,6 +18,7 @@ import { ingestRoutes } from './routes/ingest.routes';
 import { reportRoutes } from './routes/reports.routes';
 import { scanRoutes } from './routes/scan.routes';
 import { syncRoutes } from './routes/sync.routes';
+import { systemRoutes } from './routes/system.routes';
 import { voucherRoutes } from './routes/vouchers.routes';
 
 const env = loadEnv();
@@ -144,6 +145,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(backupRoutes, { prefix: '/backup' });
       await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
+      await api.register(systemRoutes, { prefix: '/system' });
     },
     { prefix: API_PREFIX },
   );

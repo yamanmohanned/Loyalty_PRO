@@ -3,6 +3,7 @@ import { configSource, loadEnv } from './config/env';
 import { ensureDatabaseReady } from './lib/migrate';
 import { prisma } from './lib/prisma';
 import { startBackupScheduler } from './services/backup/schedule.service';
+import { startStorageSampler } from './services/storage.service';
 
 /**
  * Process entry point.
@@ -41,6 +42,12 @@ async function main(): Promise<void> {
   // that it survives a closed manager window.
   const stopScheduler = startBackupScheduler(app.log);
 
+  // Free-space sampling (§12.15). In the process for the same two reasons as the
+  // scheduler: `buildApp` is what the test suite constructs, and this belongs to the
+  // machine rather than to the HTTP app — the disk keeps filling whether or not anybody
+  // has the manager window open.
+  const stopSampler = startStorageSampler(app.log);
+
   // Both stdin events below can fire for the same close, and a signal can arrive
   // while a shutdown is already unwinding. Closing twice is not harmful so much as
   // confusing in a log a support call is reading.
@@ -51,6 +58,7 @@ async function main(): Promise<void> {
     app.log.info({ signal }, 'shutting down');
     try {
       stopScheduler();
+      stopSampler();
       await app.close();
       await prisma.$disconnect();
       process.exit(0);

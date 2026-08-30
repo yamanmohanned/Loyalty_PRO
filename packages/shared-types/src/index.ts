@@ -20,6 +20,7 @@ export * from './invoice-parsers';
 export * from './money';
 export * from './period';
 export * from './phone';
+export * from './storage';
 export * from './sync';
 export * from './transaction';
 export * from './voucher';

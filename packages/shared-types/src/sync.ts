@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CreateCustomerRequestSchema } from './customer';
 import { ApiErrorCodeSchema } from './errors';
+import { StorageLevelSchema } from './storage';
 import { CapturedInvoiceSchema } from './invoice';
 import { ScanCardRequestSchema } from './transaction';
 
@@ -124,6 +125,23 @@ export const RealtimeEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('VOUCHER_ISSUED'), voucherId: z.string().uuid(), value: z.number().int(), at: z.string() }),
   z.object({ type: z.literal('CUSTOMER_REGISTERED'), customerId: z.string().uuid(), at: z.string() }),
   z.object({ type: z.literal('AGENT_STATUS'), agentId: z.string(), online: z.boolean(), captureMode: z.string(), at: z.string() }),
+  /**
+   * Free space on the manager machine crossed a threshold (§12.15).
+   *
+   * Pushed on a CHANGE of verdict, never on every reading — a sampler that broadcast
+   * once a minute would be a heartbeat nobody reads, and the point of this event is
+   * that its arrival means something. A client that connects after the change learns
+   * the current state from `GET /system/storage` instead; the two together are what
+   * make the banner correct for a dashboard opened at any moment.
+   */
+  z.object({
+    type: z.literal('STORAGE_LEVEL_CHANGED'),
+    level: StorageLevelSchema,
+    previousLevel: StorageLevelSchema,
+    freeBytes: z.number().int().nonnegative().nullable(),
+    path: z.string(),
+    at: z.string(),
+  }),
 ]);
 
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

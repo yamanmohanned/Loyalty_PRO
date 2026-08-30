@@ -308,6 +308,25 @@ export const locale = {
     averageBasket: 'متوسط قيمة الفاتورة',
   },
 
+  /**
+   * The free-space banner (CLAUDE_v3.md §12.15).
+   *
+   * The copy names the consequence rather than the condition. "Low disk space" is a
+   * message every Windows user has learned to close; "sales will stop being recorded"
+   * is one a shop owner acts on. §12.15's failure is that a full drive looks like an
+   * application bug, so the wording has to make the connection for them.
+   */
+  storage: {
+    warnTitle: 'المساحة الحرة على القرص منخفضة',
+    warnBody: 'إذا امتلأ القرص ستتوقف عمليات البيع عن التسجيل. فرّغ مساحة على هذا الجهاز.',
+    criticalTitle: 'المساحة الحرة على القرص شبه منتهية',
+    criticalBody:
+      'تسجيل المبيعات قد يتوقف في أي لحظة. فرّغ مساحة على هذا الجهاز الآن — الفواتير التي لا تُسجَّل لا يمكن استرجاعها لاحقاً.',
+    unknownTitle: 'تعذّرت قراءة المساحة الحرة',
+    unknownBody: 'لم يستطع الخادم قياس المساحة على قرص قاعدة البيانات. تحقّق من الجهاز.',
+    freeLabel: 'المساحة المتبقية',
+  },
+
   roles: { OWNER: 'مالك', MANAGER: 'مدير', STATION: 'محطة' },
   categories: { REGULAR: 'عادي', WHOLESALE: 'جملة', VIP: 'مميّز' },
   voucherStatus: { ISSUED: 'صادرة', REDEEMED: 'مستخدَمة', VOID: 'ملغاة' },

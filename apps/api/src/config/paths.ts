@@ -172,6 +172,20 @@ export function ensureSqliteDirectory(databaseUrl: string): void {
   mkdirSync(dirname(path), { recursive: true });
 }
 
+/**
+ * Absolute path to the live SQLite file, or null when the datasource is not a file.
+ *
+ * The installed service is always handed an absolute path by the service host (§12.11),
+ * so the relative branch is development and tests — where Prisma resolves a relative
+ * `file:` URL from the schema directory rather than from the working directory. Getting
+ * that wrong would look like a missing database rather than a misresolved path.
+ */
+export function liveDatabasePath(databaseUrl: string): string | null {
+  const raw = sqlitePathFromUrl(databaseUrl);
+  if (!raw) return null;
+  return isAbsolute(raw) ? raw : resolve(process.cwd(), 'prisma', raw);
+}
+
 /** Explicit path to the built Loyalty Station bundle. */
 const STATION_DIR_VAR = 'WALAA_STATION_DIR';
 

@@ -299,6 +299,14 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
      drive; Windows updates, restore points and whatever else the machine is used for
      are. Re-check free space on any support visit.
 
+     The service watches it too, and the manager dashboard raises a standing banner
+     below 5 GB (amber) and below 2 GB (red) — the §12.15 thresholds, sampled once a
+     minute. Tell the merchant what that banner means before they see it, because the
+     one thing it asks for is exactly the thing that is hard to explain afterwards: the
+     till stops recording sales when this drive fills. Every crossing is also written to
+     the audit trail, so a drive that filled overnight and was cleared by morning is
+     still answerable on a later support call.
+
 7. **Complete the backup key ceremony, and make sure the key leaves the building.**
 
    The manager app will not open until this is done — on first run it shows the key

@@ -19,9 +19,11 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { setTokens, setUnauthenticatedHandler } from './lib/api';
+import { startRealtime } from './lib/realtime';
 import { getApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { cn } from './components/ui';
+import { StorageBanner, useStorageStatus } from './components/StorageBanner';
 import { SetupScreen } from './screens/Setup';
 import { LoginScreen, type SessionUser } from './screens/Login';
 import { OverviewScreen } from './screens/Overview';
@@ -135,6 +137,16 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
 function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const navigate = useNavigate();
   const keyStatus = useKeyStatus();
+  const storage = useStorageStatus();
+
+  /**
+   * One socket for the whole session (§7.2).
+   *
+   * Opened here rather than in any screen: it has to survive route changes, and the
+   * free-space banner below is in the shell precisely because it is not any one screen's
+   * business. Mounted after login, so there is a token for the handshake to carry.
+   */
+  useEffect(() => startRealtime(), []);
 
   /**
    * The backup key ceremony gate (CLAUDE_v3.md §12.19).
@@ -180,6 +192,12 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
     <div className="flex min-h-[100dvh] max-h-[100dvh]">
       <NavRail user={user} onLogout={onLogout} />
       <main className="flex-1 overflow-y-auto">
+        {/*
+          Above the backup banner deliberately. Both are standing warnings, but this one
+          is about an outage that may start with the next scan, and the backup one is
+          about a risk that has been standing for as long as it has been ignored.
+        */}
+        <StorageBanner status={storage.data} />
         {keyStatus.data ? (
           <BackupBlockedBanner
             status={keyStatus.data}

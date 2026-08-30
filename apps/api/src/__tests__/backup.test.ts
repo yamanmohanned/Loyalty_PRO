@@ -22,7 +22,8 @@ import {
 import { LocalDirectoryDestination, archiveName } from '../services/backup/destinations';
 import { generateBackupKey, keyFingerprint, parseBackupKey } from '../services/backup/key';
 import { confirmKey } from '../services/backup/key-ceremony.service';
-import { checkFreeSpace, liveDatabasePath, takeSnapshot } from '../services/backup/snapshot';
+import { liveDatabasePath } from '../config/paths';
+import { checkFreeSpace, takeSnapshot } from '../services/backup/snapshot';
 import { resetDatabase } from './helpers/db';
 import { createWorld, type World } from './helpers/fixtures';
 

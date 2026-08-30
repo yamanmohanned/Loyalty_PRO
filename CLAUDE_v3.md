@@ -1426,3 +1426,77 @@ bypassed *into the dashboard*, not that the session cannot be left. Leaving forc
 the only exit teaches a manager that killing the process is how you get out of our
 screens, and that habit costs more later than the button does now. Logging out confirms
 nothing; the gate is waiting at the next login.
+
+### 12.22 The free-space warning, and the two bugs a real client found — 2026-08-31
+
+§12.15 fixed the thresholds (OK ≥ 5 GB, WARN < 5 GB, CRITICAL < 2 GB, re-arming about
+20% above each edge) and left the runtime reporting to be built. This is that: a sampler
+in the service, an authenticated endpoint, a push on the existing realtime channel, and
+a standing banner in the manager shell.
+
+**The warning goes where the manager already looks.** §12.15's failure is quiet and its
+symptom lies — SQLite refuses writes cleanly and goes on serving reads, so the dashboard
+renders every number correctly while each scan at the till errors. §12.16 makes that
+visible at the moment it happens; this makes it visible while clearing a few gigabytes is
+still a five-minute job. The copy names the consequence rather than the condition: "low
+disk space" is a message every Windows user has learned to close, and "sales will stop
+being recorded" is one a shop owner acts on.
+
+**Not on `/health`.** `/health` is public by necessity — a probe carries no token — and
+free space on the machine holding every sale this business has recorded is not owed to an
+unauthenticated caller on the shop wifi. `GET /api/v1/system/storage` is dashboard-roles
+only. The Station has no action to take on a low disk and §12.16 already faults its writes
+when storage actually fails; the push still reaches it, because warning the till *before*
+its next scan fails is a plausible future and the event already being there makes that a
+UI change with no API change.
+
+**Worsening is immediate; recovery has to clear the re-arm bar.** The hysteresis is
+asymmetric on purpose. A disk that has just fallen below 2 GB is CRITICAL on that sample,
+not two samples later — a late alarm costs the outage, an alarm that lingers costs a
+banner nobody minds. Recovery climbs the ladder one rung at a time, so freeing 20 GB
+clears the banner in one sample while creeping over 2 GB does not.
+
+**A volume that cannot be measured is UNKNOWN, never OK**, and **UNKNOWN → OK is not
+news.** The first is the same bug as an agent reporting healthy while capturing nothing.
+The second is what keeps the audit trail readable: without it every service restart would
+write a "storage level changed" row, and a trail that fills with boot noise stops being
+read. UNKNOWN → WARN and UNKNOWN → CRITICAL still announce, so a machine that boots
+already in trouble says so on its first pass.
+
+**One classifier, two delivery paths, and they need each other.** The server classifies;
+no client re-derives a level from `freeBytes`, or the two would disagree at exactly the
+boundary where disagreement is most confusing. Events fire on change only — a per-minute
+broadcast is a heartbeat nobody reads — and the endpoint answers for the present, because
+a dashboard opened after a transition would otherwise never learn of it.
+
+**The 2 GB floor is now one constant.** `backup/snapshot.ts` imports `CRITICAL_FREE_BYTES`
+rather than restating it. The number that raises the banner and the number that refuses a
+backup have to be the same number, or the banner warns about a limit that is not the
+limit. `liveDatabasePath` moved to `config/paths.ts` to keep that import acyclic, which is
+also where a path resolver belonged.
+
+**Two bugs, both found by driving the real client, neither visible in the code review that
+preceded it.** §12.20's rule earned its keep again.
+
+- **An orphaned WebSocket per remount.** Resolving the server address is asynchronous —
+  it lives in the Tauri store — so there is a gap between deciding to connect and holding
+  a socket, and a stop landing in that gap has nothing to close. React StrictMode's
+  mount/unmount/mount showed it immediately: the API log had *two* `/realtime` upgrades
+  for one dashboard. The first connection completed after its own stop had run, assigned
+  itself to `socket`, and was overwritten by the second — leaving an authenticated socket
+  open with nothing referencing it, delivering every event twice. Fixed with a generation
+  counter bumped on every start and stop, so a connection that finishes after its run has
+  ended closes itself. One upgrade per dashboard, verified in the log.
+- **The banner never re-synced after a dropped socket.** Transitions are announced once,
+  so anything that changed while the connection was down — the service restarting is the
+  ordinary case — was simply missed, and the banner would hold a stale verdict until the
+  query went stale *and* something refocused the window. On a dashboard left open on a
+  back-office monitor that could be days. A reconnect now re-reads, which is the mirror
+  image of the Station flushing its queue on the same signal.
+
+Verified live against the manager app with the API restarting underneath it: CRITICAL
+(red) → WARN (amber) → cleared, each transition arriving without a page reload.
+
+*Not reproduced: a genuinely full NTFS volume. The state machine is driven through an
+injected reader, and one test measures the real volume so `monitoredPath` cannot silently
+resolve to something `statfs` will not answer for.*
