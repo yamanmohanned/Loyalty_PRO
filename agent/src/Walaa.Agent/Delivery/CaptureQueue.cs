@@ -81,11 +81,39 @@ public sealed class CaptureQueue(string directory, ILogger<CaptureQueue> logger)
 
     public void EnsureCreated() => System.IO.Directory.CreateDirectory(Directory);
 
-    /// <summary>Writes a capture to disk. Returns the file it was written to.</summary>
-    public async Task<string> EnqueueAsync(CapturedInvoice invoice, CancellationToken cancellationToken)
+    /// <summary>
+    /// Writes a capture to disk. Returns the file it was written to, or <c>null</c> if
+    /// the write failed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This method does not throw on an I/O failure, and that is a correctness
+    /// requirement rather than a convenience</b> (CLAUDE_v3.md §4.6 rule 3, §12.15).
+    /// Two callers, two different disasters, both reproduced in
+    /// <c>StorageFailureTests</c> against the unguarded version:
+    /// </para>
+    /// <para>
+    /// From <c>ExecuteAsync</c>'s startup, an escaping exception faults the hosted
+    /// service before either loop runs, .NET's default
+    /// <c>BackgroundServiceExceptionBehavior.StopHost</c> stops it, and the SCM restarts
+    /// it into the same failure. For the three in-path capture modes that crash-loop is
+    /// a repeating window in which a print job can be lost.
+    /// </para>
+    /// <para>
+    /// From the parse loop mid-shift it is quieter and harder to find: only the parsing
+    /// task faults, <c>ExecuteAsync</c> is still awaiting <c>Task.WhenAll</c> on a
+    /// delivery loop that never ends, so the host never notices. The service stays up,
+    /// reports healthy, keeps forwarding print jobs — and captures nothing ever again.
+    /// </para>
+    /// <para>
+    /// The capture itself is genuinely lost when this returns null: there is nowhere to
+    /// put it. It is lost as a log line carrying the invoice number and the amount,
+    /// because the paper receipt is still in the cashier's hand and that line is what
+    /// makes the sale re-enterable by a human.
+    /// </para>
+    /// </remarks>
+    public async Task<string?> EnqueueAsync(CapturedInvoice invoice, CancellationToken cancellationToken)
     {
-        EnsureCreated();
-
         // The idempotency key names the file, so re-enqueueing the same capture — a
         // spool file seen twice, say — overwrites rather than duplicates.
         var path = Path.Combine(Directory, $"{invoice.IdempotencyKey}.json");
@@ -94,9 +122,41 @@ public sealed class CaptureQueue(string directory, ILogger<CaptureQueue> logger)
         // crash left behind would be parsed on restart as a corrupt capture, and this
         // agent's whole job is not losing sales quietly.
         var temporary = path + ".tmp";
-        await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(invoice, Json), cancellationToken)
-            .ConfigureAwait(false);
-        File.Move(temporary, path, overwrite: true);
+
+        try
+        {
+            EnsureCreated();
+
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(invoice, Json), cancellationToken)
+                .ConfigureAwait(false);
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // Cancellation is deliberately NOT caught: it is the shutdown path, and the
+            // parse loop already treats it as an orderly stop rather than a failure.
+            logger.LogError(
+                error,
+                "could not queue invoice {InvoiceId} ({Amount} IQD) — capture lost. Check free space on {Directory}",
+                invoice.InvoiceId,
+                invoice.AmountGross,
+                Directory);
+
+            // A partial temporary file is the last thing an already-full volume needs,
+            // and `Pending()` only reads `*.json` so leaving one would be invisible
+            // rather than harmless. Best-effort by necessity — the disk that just
+            // refused a write may refuse this too.
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(cleanup, "could not remove the partial capture {File}", temporary);
+            }
+
+            return null;
+        }
 
         logger.LogInformation("queued invoice {InvoiceId} ({Amount} IQD)", invoice.InvoiceId, invoice.AmountGross);
         return path;

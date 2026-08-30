@@ -30,7 +30,24 @@ public sealed class AgentWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        queue.EnsureCreated();
+        // Not fatal if it fails, and this is THE §4.6 rule 3 breach the storage work
+        // found (§12.15). Unguarded, this line sits above every await in ExecuteAsync,
+        // so a full disk raised straight out of StartAsync: the service never came up,
+        // the SCM restarted it immediately by design, and it failed again. Each restart
+        // of an in-path capture mode is a window in which a print job can be lost — a
+        // full disk on the cashier PC could stop the till printing, by a route with no
+        // visible connection to a loyalty agent.
+        //
+        // Every enqueue retries the creation and reports its own failure, so the agent
+        // keeps forwarding print jobs and says plainly what it cannot store.
+        try
+        {
+            queue.EnsureCreated();
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            logger.LogError(error, "could not create the queue directory {Directory}", queue.Directory);
+        }
 
         var template = LoadTemplate();
         var parser = new ReceiptParser(template);
@@ -170,36 +187,58 @@ public sealed class AgentWorker(
         {
             await foreach (var job in sink.Jobs.ReadAllAsync(token).ConfigureAwait(false))
             {
-                var result = parser.Parse(job);
-
-                if (!result.Success)
+                // Per job, and catching everything that is not cancellation.
+                //
+                // `EnqueueAsync` no longer throws on a full disk, which was the failure
+                // that prompted this guard (§12.15). The guard is wider than that one
+                // bug on purpose, and the reason is what the reproduction showed: an
+                // exception escaping HERE does not stop the host at all. It faults only
+                // the parsing task, and `ExecuteAsync` goes on awaiting `Task.WhenAll`
+                // against a delivery loop that never ends — so the service stays up,
+                // reports healthy, and silently captures nothing for the rest of the
+                // machine's uptime. Nothing restarts it because nothing knows.
+                //
+                // Closing one instance of that and leaving the class open would be the
+                // same mistake again, one release later.
+                try
                 {
-                    // Not queued, and said plainly in the log: an invoice with no total
-                    // cannot be ingested, and guessing one would corrupt a balance
-                    // (§4.5). This is the signal the calibration flow acts on.
-                    logger.LogWarning(
-                        "capture not parsed ({Failure}); {Bytes} bytes, codepage {Codepage}",
-                        result.Failure,
-                        job.Length,
-                        result.Codepage);
-                    continue;
-                }
+                    var result = parser.Parse(job);
 
-                var now = DateTimeOffset.UtcNow;
-                await queue.EnqueueAsync(
-                    new CapturedInvoice
+                    if (!result.Success)
                     {
-                        InvoiceId = result.InvoiceId!,
-                        AmountGross = result.AmountGross!.Value,
-                        BranchId = settings.BranchCode,
-                        OccurredAt = now.ToString("O"),
-                        CapturedAt = now.ToString("O"),
-                        CaptureMode = ToWireMode(mode),
-                        // Generated once, here. Every later retry reuses it (§4.8).
-                        IdempotencyKey = Guid.NewGuid().ToString(),
-                        RawText = settings.RetainReceiptText ? result.Text : null,
-                    },
-                    token).ConfigureAwait(false);
+                        // Not queued, and said plainly in the log: an invoice with no
+                        // total cannot be ingested, and guessing one would corrupt a
+                        // balance (§4.5). This is the signal the calibration flow acts on.
+                        logger.LogWarning(
+                            "capture not parsed ({Failure}); {Bytes} bytes, codepage {Codepage}",
+                            result.Failure,
+                            job.Length,
+                            result.Codepage);
+                        continue;
+                    }
+
+                    var now = DateTimeOffset.UtcNow;
+                    await queue.EnqueueAsync(
+                        new CapturedInvoice
+                        {
+                            InvoiceId = result.InvoiceId!,
+                            AmountGross = result.AmountGross!.Value,
+                            BranchId = settings.BranchCode,
+                            OccurredAt = now.ToString("O"),
+                            CapturedAt = now.ToString("O"),
+                            CaptureMode = ToWireMode(mode),
+                            // Generated once, here. Every later retry reuses it (§4.8).
+                            IdempotencyKey = Guid.NewGuid().ToString(),
+                            RawText = settings.RetainReceiptText ? result.Text : null,
+                        },
+                        token).ConfigureAwait(false);
+                }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    // One capture is lost and the next one is still handled. The
+                    // alternative — letting this reach the host — costs print jobs.
+                    logger.LogError(error, "capture could not be processed; {Bytes} bytes", job.Length);
+                }
             }
         }
         catch (OperationCanceledException)
