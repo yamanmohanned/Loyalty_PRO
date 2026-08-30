@@ -141,7 +141,12 @@ export async function apiFetch<T>(
     response = await fetch(`${base}/api/v1${path}`, {
       ...init,
       headers: {
-        'content-type': 'application/json',
+        // Only when there is a body to describe. Fastify parses by content-type, so
+        // declaring JSON on a body-less POST hands the parser an empty string and it
+        // answers 400 for a well-formed request. Every call from this app currently
+        // sends a body, so this is prevention rather than a fix — the manager app hit
+        // exactly this and the failure looked like a broken endpoint.
+        ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         ...(init.headers ?? {}),
       },

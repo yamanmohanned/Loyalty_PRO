@@ -85,7 +85,14 @@ export async function apiFetch<T>(
   const response = await fetch(`${base}/api/v1${path}`, {
     ...init,
     headers: {
-      'content-type': 'application/json',
+      // Only when there is actually a body to describe.
+      //
+      // Fastify parses a request by its content-type, so declaring JSON on a body-less
+      // POST hands the parser an empty string and it answers 400 — for a request that is
+      // perfectly well formed. Found the hard way: `POST /backup/key/reveal` takes no
+      // body, and the key ceremony failed with "الطلب غير صالح" while every curl call to
+      // the same endpoint worked, because curl sends no content-type without `-d`.
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
       ...(init.headers ?? {}),
     },
