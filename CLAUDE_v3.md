@@ -1500,3 +1500,110 @@ Verified live against the manager app with the API restarting underneath it: CRI
 *Not reproduced: a genuinely full NTFS volume. The state machine is driven through an
 injected reader, and one test measures the real volume so `monitoredPath` cannot silently
 resolve to something `statfs` will not answer for.*
+
+### 12.23 Security and performance pass over V3-2…V3-6 — 2026-08-31
+
+A review of everything added since V3-1 against v1 §7 and §8: agent ingestion, the
+Station endpoints, backup and its key ceremony, the scheduler, and the realtime channel.
+Seven defects, and the pattern among them is worth more than the list: **not one was a
+missing control. Every one was a control that had stopped matching the system around
+it.**
+
+#### Security
+
+**A live access token was being written to the log in cleartext.** The WebSocket
+handshake carries its token as a query parameter, because a browser cannot set a header
+on an upgrade — a tradeoff §12.9 documented and mitigated with a short TTL. The
+mitigation addressed the wrong risk. Fastify logs `req.url`, so every reconnect wrote a
+bearer token into `api.log`, on the same volume as the database, readable by anyone who
+can read the data directory — a wider set than the people who may hold a session.
+Fifteen minutes of validity is not "safe"; it is fifteen minutes during which reading a
+file is enough. A serializer now redacts the parameter and keeps the rest of the URL,
+which a support call still needs. Found by reading the service's own log during the
+free-space work, not by reviewing the code that wrote it.
+
+**The content security policy was switched off with a comment saying this service
+returns only JSON.** True when written; false since §12.3 made this process serve the
+Station's HTML and JavaScript on the same port. A policy is now set, and
+`upgrade-insecure-requests` is explicitly *removed* rather than left to helmet's default
+— §7.1 makes LAN traffic deliberately plain HTTP, so the default would have every tablet
+rewrite its requests to `https://` against a service that does not answer there. A
+hardening header taking the Station off the air is a real way to lose a shop's morning.
+
+**Six routes were authenticated but named no roles**, which means every role. That was
+harmless while "any role" and "the Station's roles" were the same set — and this same
+pass added a fourth role. Every route now names its roles; `/auth/me` and
+`/auth/logout-all` are the two documented exceptions, because reading back who you are
+and dropping your own sessions belong to every caller. `rbac-matrix.test.ts` pins the
+whole table, and pins the route inventory too, so a route added later cannot slip past
+the matrix without failing a test.
+
+**The Print Capture Agent now has its own role.** Its password sits in cleartext in
+`agent-settings.json` on the cashier PC — the machine a shop's staff use all day and the
+one running three of four capture modes inside the print path. Until now the only account
+it could use was a Station login, so that file carried the ability to register customers,
+redeem vouchers, search customers by name and read card numbers. `AGENT` can post a
+capture and nothing else; the agent's client calls exactly two endpoints, so the
+narrowing costs it nothing. `INGEST_ROLES` keeps OWNER, because §12.15 accepts losing a
+capture on a full disk on the grounds that the invoice reaches the log and the paper
+receipt is in the cashier's hand — which only helps if somebody may re-enter it.
+
+**The manager app's login was a deny-list.** It refused `role === 'STATION'`, so the new
+role would have been let in to meet a wall of 403s with no explanation. It is an
+allow-list now, matching the Station's own login and the rule the API states on every
+route. It also stopped duplicating the `Role` union and imports it, which is why the two
+drifted.
+
+**A query parameter could produce a 500.** `/vouchers/reconciliation?date=` accepted any
+string and handed `new Date(...)` to Prisma; a typo produced an Invalid Date, an
+unserialisable filter and a 500 that reads as a server fault and invites a retry. §7.4
+says Zod on every boundary, and a `z.string()` that validates nothing satisfies the
+letter of that and none of the point.
+
+#### Correctness, found while reviewing settlement
+
+**End-of-day reconciliation bucketed by the UTC day.** In Baghdad (UTC+3) a voucher
+issued before 03:00 local was filed under the previous day — §13.1's error, in the one
+place §13.1 had not been applied. It survived because the shop is shut at that hour,
+which is a fact about opening times rather than about the code, and stops holding for a
+merchant who trades late or sits in another zone. A reconciliation report that disagrees
+with the drawer by one day of vouchers is worse than no report: it sends somebody looking
+for a theft that did not happen. `localDayBounds` in `shared-types/period.ts` now owns
+the arithmetic, and takes a local date key as well as an instant — a caller handed a
+calendar date has no instant to convert, and every hour it might invent is wrong in some
+timezone.
+
+#### Performance
+
+**`audit_log` had no index on `action`, and three hot reads filter by it.** The Backup
+screen's history, the scheduler's dueness check every five minutes, and `keyStatus` —
+which the dashboard calls on every window focus. All three walked the merchant's entire
+trail. The shape of that is the point: the scan grows with the gap since the last
+successful backup, so **the query degrades in exact proportion to how long backups have
+been broken** — slowest precisely when someone is looking at the screen that exists to
+tell them so. Fixed with `@@index([merchantId, action, createdAt])`, and `keyStatus`'s
+`count` became an existence check, since the question is settled by the first row.
+
+**Money aggregates above Int32 were checked rather than assumed.** §13.5 permits `Int`
+for per-row money and warns that aggregates are not bounded. The report path was tested
+against a customer summing to 3,000,000,000 IQD and returns it correctly — the JavaScript
+reduce and the SQL `groupBy` both. Recorded so the next person does not have to re-derive
+it.
+
+**Rate-limit buckets are per authenticated user, not per address** — verified, not
+assumed. The registration order of the limiter and the auth hook made it look as though
+`request.auth` could not be set in time; it is, because @fastify/rate-limit attaches per
+route and route hooks run after instance hooks. Now pinned by a test, because the
+failure mode is silent and expensive: one client recovering from an outage throttling the
+till mid-sale.
+
+#### Recorded, not fixed
+
+- **`getOverview` loads every transaction in the range** and reduces in JavaScript,
+  because the timeseries buckets by the merchant's local day and SQLite cannot do that
+  without hardcoding an offset. At 30 days that is a few thousand rows; at 365 it is
+  closer to 180,000. Acceptable at one supermarket's volume and worth revisiting before
+  it is not.
+- **There is still no way to create a user in the field.** The seed makes them, and the
+  installer does not. Adding `AGENT` sharpens a gap that already existed for every other
+  role, and provisioning has to be solved before an installation can be handed over.

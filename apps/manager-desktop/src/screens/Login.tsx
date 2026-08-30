@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isDashboardRole, type Role } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
@@ -7,7 +8,8 @@ export interface SessionUser {
   id: string;
   name: string;
   username: string;
-  role: 'OWNER' | 'MANAGER' | 'STATION';
+  /** The shared union, not a copy of it — see the login check below. */
+  role: Role;
   merchantId: string;
   branchId: string | null;
   branchCode: string | null;
@@ -45,8 +47,14 @@ export function LoginScreen({
     try {
       const response = await api.post<LoginResponse>('/auth/login', { username, password });
 
-      if (response.user.role === 'STATION') {
-        setError('هذا الحساب مخصّص لمحطة الولاء وليس للوحة التحكم');
+      // An allow-list, not a deny-list. This read `role === 'STATION'` until the V3-6
+      // security pass added `AGENT`, at which point a role nobody had considered would
+      // have been let into the dashboard to meet a wall of 403s with no explanation.
+      // The Station's own login has always checked membership rather than exclusion, and
+      // this is the same rule the API's `roles` config now states on every route: a role
+      // added later must not inherit access by default.
+      if (!isDashboardRole(response.user.role)) {
+        setError(locale.login.wrongApp);
         setSubmitting(false);
         return;
       }

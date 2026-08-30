@@ -1,4 +1,10 @@
-import { formatIqd, type VoucherReconciliation } from '@walaa/shared-types';
+import {
+  DEFAULT_MERCHANT_TIMEZONE,
+  formatIqd,
+  localDateKey,
+  localDayBounds,
+  type VoucherReconciliation,
+} from '@walaa/shared-types';
 import { AppError, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
@@ -116,15 +122,27 @@ export async function voidVoucher(params: {
  * that were never collected. A persistent gap means either the cashier is not
  * taking them or the customers are not handing them over, and either way the
  * drawer will not match what the system believes was discounted.
+ *
+ * **The day is the merchant's local day, not the UTC one.** This bucketed by
+ * `setUTCHours(0,0,0,0)` until the V3-6 review, which in Baghdad (UTC+3) files anything
+ * issued before 03:00 local under the previous day — the same class of error §13.1
+ * settled for loyalty periods. It was invisible only because the shop is shut at that
+ * hour, which is a coincidence of opening times rather than a property of the code, and
+ * it stops holding for a merchant who trades late or sits in another zone. A
+ * reconciliation report that disagrees with the drawer by one day's vouchers is worse
+ * than no report: it sends someone looking for a theft that did not happen.
  */
 export async function reconcileDay(
   merchantId: string,
-  day: Date = new Date(),
+  /** An instant to take the local day of, or a local `YYYY-MM-DD` to report on. */
+  day: Date | string = new Date(),
 ): Promise<VoucherReconciliation> {
-  const start = new Date(day);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  const merchant = await prisma.merchant.findUnique({
+    where: { id: merchantId },
+    select: { timezone: true },
+  });
+  const timeZone = merchant?.timezone ?? DEFAULT_MERCHANT_TIMEZONE;
+  const { start, end } = localDayBounds(day, timeZone);
 
   const vouchers = await prisma.voucher.findMany({
     where: { merchantId, issuedAt: { gte: start, lt: end } },
@@ -139,7 +157,9 @@ export async function reconcileDay(
   const outstanding = vouchers.filter((v) => v.status === 'ISSUED');
 
   return {
-    date: start.toISOString().slice(0, 10),
+    // The local calendar date the window belongs to — `start` in UTC is the previous
+    // day's evening for any zone east of Greenwich.
+    date: localDateKey(start, timeZone),
     issuedCount: issued.length,
     issuedValue: sum(issued),
     redeemedCount: redeemed.length,

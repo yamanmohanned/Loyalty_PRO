@@ -410,5 +410,12 @@ model AuditLog {
 
   @@index([merchantId, createdAt])
   @@index([entityType, entityId])
+  /// The trail is also the backup history and the key-ceremony record (§12.19, §12.21),
+  /// and every one of those reads filters by `action`. Without this they walk the
+  /// merchant's whole trail: the Backup screen scans backwards past every scan of every
+  /// day since the last successful backup, and the scheduler's dueness check does the
+  /// same every five minutes. Both get slower in exact proportion to how long backups
+  /// have been broken — the query degrades precisely in the case it exists to reveal.
+  @@index([merchantId, action, createdAt])
   @@map("audit_log")
 }

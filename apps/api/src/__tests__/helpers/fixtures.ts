@@ -25,6 +25,7 @@ export interface World {
   ownerId: string;
   managerId: string;
   stationUserId: string;
+  agentUserId: string;
   customerId: string;
   customerPhone: string;
   customerBarcode: string;
@@ -92,6 +93,18 @@ export async function createWorld(
       branchId: branch.id,
     },
   });
+  // The Print Capture Agent's account. Its whole point is what it cannot do, so the
+  // suite needs one to prove the difference — see `rbac-matrix.test.ts`.
+  const agent = await prisma.user.create({
+    data: {
+      merchantId: merchant.id,
+      name: 'وكيل الالتقاط',
+      username: 'agent',
+      passwordHash,
+      role: 'AGENT',
+      branchId: branch.id,
+    },
+  });
 
   await prisma.discountSettings.create({
     data: {
@@ -130,6 +143,7 @@ export async function createWorld(
     ownerId: owner.id,
     managerId: manager.id,
     stationUserId: station.id,
+    agentUserId: agent.id,
     customerId: customer.id,
     customerPhone: customer.phone,
     customerBarcode: customer.barcodeToken,

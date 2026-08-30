@@ -58,6 +58,8 @@ export const locale = {
     submit: 'دخول',
     submitting: 'جارٍ الدخول…',
     changeServer: 'تغيير الخادم',
+    /** Shown when the credentials are valid but belong to another app entirely. */
+    wrongApp: 'هذا الحساب ليس مخصّصاً للوحة التحكم',
   },
 
   overview: {
@@ -327,7 +329,7 @@ export const locale = {
     freeLabel: 'المساحة المتبقية',
   },
 
-  roles: { OWNER: 'مالك', MANAGER: 'مدير', STATION: 'محطة' },
+  roles: { OWNER: 'مالك', MANAGER: 'مدير', STATION: 'محطة', AGENT: 'وكيل الالتقاط' },
   categories: { REGULAR: 'عادي', WHOLESALE: 'جملة', VIP: 'مميّز' },
   voucherStatus: { ISSUED: 'صادرة', REDEEMED: 'مستخدَمة', VOID: 'ملغاة' },
   captureModes: {

@@ -1,5 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { IngestInvoiceRequestSchema, type IngestInvoiceRequest } from '@walaa/shared-types';
+import {
+  INGEST_ROLES,
+  IngestInvoiceRequestSchema,
+  type IngestInvoiceRequest,
+} from '@walaa/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { ingestInvoice } from '../services/ingestion.service';
 
@@ -9,12 +13,18 @@ import { ingestInvoice } from '../services/ingestion.service';
  * Rate limit is generous: a store that was offline may flush a backlog the moment
  * the network returns, and throttling that would delay exactly the recovery the
  * queue exists for.
+ *
+ * **AGENT and OWNER only.** The agent's password sits in cleartext on the cashier PC,
+ * so the account it names must be able to do this and nothing else — see
+ * `INGEST_ROLES`. Notably this excludes STATION: the Station scans cards, it does not
+ * declare sales, and an endpoint that mints transactions is the last one to leave open
+ * to a tablet on the shop floor.
  */
 export async function ingestRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/invoice',
     {
-      config: { rateLimit: { max: 300, timeWindow: '1 minute' } },
+      config: { roles: INGEST_ROLES, rateLimit: { max: 300, timeWindow: '1 minute' } },
       schema: { body: IngestInvoiceRequestSchema },
     },
     async (request, reply) => {

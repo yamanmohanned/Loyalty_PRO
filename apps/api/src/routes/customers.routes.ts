@@ -32,7 +32,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/resolve',
     {
-      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      config: { roles: STATION_ROLES, rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: { querystring: ResolveCustomerQuerySchema },
     },
     async (request) => {
@@ -85,16 +85,20 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  /** Registration. Assistants may register customers — it is part of the core loop. */
-  app.post('/', { schema: { body: CreateCustomerRequestSchema } }, async (request, reply) => {
-    const auth = requireAuth(request);
-    const customer = await createCustomer(
-      { merchantId: auth.merchantId, actorUserId: auth.sub },
-      request.body as CreateCustomerRequest,
-    );
-    reply.status(201);
-    return { customer };
-  });
+  /** Registration. The Station may register customers — it is part of the core loop. */
+  app.post(
+    '/',
+    { config: { roles: STATION_ROLES }, schema: { body: CreateCustomerRequestSchema } },
+    async (request, reply) => {
+      const auth = requireAuth(request);
+      const customer = await createCustomer(
+        { merchantId: auth.merchantId, actorUserId: auth.sub },
+        request.body as CreateCustomerRequest,
+      );
+      reply.status(201);
+      return { customer };
+    },
+  );
 
   /** Customer detail. V3-2 adds transactions, vouchers and rule origin. */
   app.get(

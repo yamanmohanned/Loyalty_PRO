@@ -18,14 +18,32 @@ import { z } from 'zod';
  * v1's `ASSISTANT` is gone with the Expo app it belonged to. `STATION` replaces it:
  * the Loyalty Station operator (CLAUDE_v3.md §6.2), who may scan, register a
  * customer and print — and who must never see a settings screen (§6.4).
+ *
+ * `AGENT` is the Print Capture Agent, and it exists for one reason: its credentials
+ * live in cleartext in `agent-settings.json` on the cashier PC. That is the least
+ * trusted machine on the network — it is the one a shop's staff use all day, and the
+ * one running three of the four capture modes inside the print path. Whatever that
+ * file holds is what an attacker who reaches that machine holds, so it must be the
+ * narrowest account this system has: post a capture, and nothing else. Giving the
+ * agent a Station login instead would hand that file the ability to register
+ * customers, redeem vouchers, search customers by name and read card numbers.
  */
-export const RoleSchema = z.enum(['OWNER', 'MANAGER', 'STATION']);
+export const RoleSchema = z.enum(['OWNER', 'MANAGER', 'STATION', 'AGENT']);
 export type Role = z.infer<typeof RoleSchema>;
 
 /** Roles permitted to use the manager desktop app. */
 export const DASHBOARD_ROLES: readonly Role[] = ['OWNER', 'MANAGER'];
 /** Roles permitted to operate the Loyalty Station. */
 export const STATION_ROLES: readonly Role[] = ['OWNER', 'MANAGER', 'STATION'];
+/**
+ * Roles permitted to submit a captured invoice.
+ *
+ * The OWNER stays on the list deliberately. §12.15 accepts that a capture is lost when
+ * the cashier PC's disk fills, on the grounds that the invoice number and amount reach
+ * the log and the paper receipt is in the cashier's hand — which only makes the sale
+ * re-enterable if somebody is allowed to re-enter it.
+ */
+export const INGEST_ROLES: readonly Role[] = ['OWNER', 'AGENT'];
 
 export const isDashboardRole = (role: Role): boolean => DASHBOARD_ROLES.includes(role);
 export const isStationRole = (role: Role): boolean => STATION_ROLES.includes(role);

@@ -73,10 +73,14 @@ function currentKey(): Buffer | null {
 }
 
 export async function keyStatus(merchantId: string): Promise<KeyStatus> {
+  // An existence check, not a count. The question is "has any key ever been confirmed",
+  // and `count` has to visit every matching row to answer a question that is settled by
+  // the first one. This runs on every dashboard focus and on every scheduler tick.
   const everConfirmed =
-    (await prisma.auditLog.count({
+    (await prisma.auditLog.findFirst({
       where: { merchantId, action: AUDIT_ACTIONS.BACKUP_KEY_CONFIRMED },
-    })) > 0;
+      select: { id: true },
+    })) !== null;
 
   const key = currentKey();
   if (!key) {

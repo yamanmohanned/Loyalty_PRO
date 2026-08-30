@@ -77,6 +77,13 @@ it, or map `LPT1:` to the shared printer with `net use`.
    }
    ```
 
+   **The account must have the `AGENT` role**, and nothing else on this system should
+   use it. Its password is sitting in cleartext in that file, on the machine a shop's
+   staff use all day — so whatever the account can do, an attacker who reaches this PC
+   can do. An `AGENT` can post a capture and read nothing: not the customer list, not a
+   card number, not a voucher. Configuring a Station login here instead would hand that
+   file all three, which is why `/api/v1/ingest/invoice` refuses `STATION` outright.
+
    `"mode": null` runs auto-detection at startup. **Print a test receipt while it
    runs** — detection cannot manufacture a print job, and a mode that sees nothing has
    not been proven unusable, only unexercised.

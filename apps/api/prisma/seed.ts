@@ -196,6 +196,12 @@ async function seed(db: PrismaClientType): Promise<void> {
     // The Loyalty Station operator (§6.2). Scans, registers and prints — and never
     // sees a settings screen.
     { username: 'station', name: 'محطة الولاء — الكرادة', role: 'STATION', branchId: branch.id },
+    // The Print Capture Agent. `agent/README.md` has always told the installer to
+    // configure this username; until the V3-6 security pass there was no such account
+    // and no role for it, so the only way to run an agent was to hand it a Station
+    // login — which is precisely what `INGEST_ROLES` now prevents. Its password lives in
+    // cleartext on the cashier PC, so this account can post a capture and nothing else.
+    { username: 'agent', name: 'وكيل الالتقاط — الصندوق ١', role: 'AGENT', branchId: branch.id },
   ];
 
   for (const s of staff) {

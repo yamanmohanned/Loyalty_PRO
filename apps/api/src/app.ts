@@ -25,6 +25,33 @@ const env = loadEnv();
 
 export const API_PREFIX = '/api/v1';
 
+/**
+ * Removes the access token from a URL before it is logged.
+ *
+ * The WebSocket handshake carries its token as a query parameter, because a browser
+ * cannot set headers on an upgrade (§12.9). The plugin documented that tradeoff and
+ * mitigated it with a short TTL — but the mitigation missed where the token actually
+ * ends up: Fastify's request log records `req.url`, so every reconnect wrote a live
+ * bearer token in cleartext into `api.log`, on the same volume as the database, readable
+ * by anyone who can read the data directory. Found by reading the service's own log
+ * during the free-space work.
+ *
+ * Fifteen minutes of validity is not "safe"; it is fifteen minutes during which anything
+ * that can read a log file holds a session. The redaction is here, in the serializer,
+ * rather than in `redact` paths, because the whole URL is worth keeping — a support call
+ * needs to see which endpoint was called.
+ */
+export function redactUrlToken(url: string): string {
+  const separator = url.indexOf('?');
+  if (separator === -1) return url;
+
+  const query = new URLSearchParams(url.slice(separator + 1));
+  if (!query.has('token')) return url;
+
+  query.set('token', '[redacted]');
+  return `${url.slice(0, separator)}?${query.toString()}`;
+}
+
 export interface BuildAppOptions {
   /**
    * Enable rate limiting. Defaults to on.
@@ -46,6 +73,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       ...(env.NODE_ENV === 'development'
         ? { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss', ignore: 'pid,hostname' } } }
         : {}),
+      serializers: {
+        // Fastify's default request serializer, with the URL passed through the
+        // redaction above. Written out rather than wrapped, because the default is not
+        // exported and a wrapper that silently stopped applying would be invisible.
+        req(request) {
+          return {
+            method: request.method,
+            url: redactUrlToken(request.url),
+            host: request.host,
+            remoteAddress: request.ip,
+            remotePort: request.socket?.remotePort,
+          };
+        },
+      },
       redact: {
         // Secrets and tokens never reach the log (CLAUDE.md §7.6, §11).
         paths: [
@@ -76,8 +117,39 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(helmet, {
     // HSTS (CLAUDE.md §7.3). Two years, subdomains included, preload-eligible.
     hsts: { maxAge: 63_072_000, includeSubDomains: true, preload: true },
-    contentSecurityPolicy: false, // this service returns JSON, never HTML
-    // DENY rather than helmet's SAMEORIGIN default: a JSON API is never framed.
+    /**
+     * A content security policy, because this service is no longer JSON-only.
+     *
+     * It used to be, and the option was switched off with a comment saying so. §12.3
+     * then made this process serve the Loyalty Station's own HTML and JavaScript on the
+     * same port, and the comment stopped being true without anybody noticing — which is
+     * the ordinary way a security header goes missing.
+     *
+     * The bundle is entirely self-hosted (fonts included, §14), so `'self'` is the whole
+     * policy. `'unsafe-inline'` is granted to styles only: React writes inline `style`
+     * attributes, and no HTML here comes from user input.
+     */
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        fontSrc: ["'self'", 'data:'],
+        // The Station's own WebSocket, on this origin.
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        // Removed, not defaulted. §7.1 makes LAN traffic deliberately plain HTTP, and
+        // helmet's default `upgrade-insecure-requests` would have the tablet rewrite
+        // every request to https:// against a service that does not speak it — turning a
+        // hardening header into a total outage of the Station.
+        upgradeInsecureRequests: null,
+      },
+    },
+    // DENY rather than helmet's SAMEORIGIN default: nothing here is ever framed.
     frameguard: { action: 'deny' },
   });
 

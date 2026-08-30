@@ -9,6 +9,12 @@ import { login, logout, refresh, revokeAllForUser } from '../services/auth.servi
  * `/login` and `/refresh` are public by necessity — they are how a caller obtains
  * a token in the first place — and carry a tighter rate limit than the rest of the
  * API because they are the endpoints worth brute-forcing (CLAUDE.md §7.5).
+ *
+ * `/me` and `/logout-all` carry no `roles` list, and that is a decision rather than an
+ * omission: they are the two things every authenticated caller must be able to do
+ * regardless of role — read back who it is holding this token, and throw all of its own
+ * sessions away. Every other route in this API names its roles explicitly, so that a
+ * role added later cannot quietly inherit access to anything.
  */
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(

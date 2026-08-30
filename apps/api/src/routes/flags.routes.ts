@@ -1,17 +1,18 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES, FeatureFlagKeySchema } from '@walaa/shared-types';
+import { DASHBOARD_ROLES, FeatureFlagKeySchema, STATION_ROLES } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import { getAllFlags, setFlag } from '../services/feature-flags.service';
 
 /**
  * Feature flags (CLAUDE_v3.md §8).
  *
- * Reading is open to any authenticated client — the Station needs to know whether
- * card printing is on. Writing is manager-only.
+ * Reading is open to the Station as well as the dashboard — the Station needs to know
+ * whether card printing is on. Writing is manager-only. The Agent is on neither list: it
+ * posts captures and reads nothing.
  */
 export async function flagRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/', async (request) => {
+  app.get('/', { config: { roles: STATION_ROLES } }, async (request) => {
     const auth = requireAuth(request);
     return { flags: await getAllFlags(auth.merchantId) };
   });

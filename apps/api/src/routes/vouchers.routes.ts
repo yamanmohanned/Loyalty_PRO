@@ -57,7 +57,25 @@ export async function voucherRoutes(app: FastifyInstance): Promise<void> {
     '/reconciliation',
     {
       config: { roles: DASHBOARD_ROLES },
-      schema: { querystring: z.object({ date: z.string().optional() }).strict() },
+      schema: {
+        querystring: z
+          .object({
+            /**
+             * A local calendar date, `YYYY-MM-DD`.
+             *
+             * Validated rather than passed through: `new Date('anything')` yields an
+             * Invalid Date, which reaches Prisma as a filter it cannot serialise and
+             * `toISOString()` as a RangeError. A query parameter that turns a typo into
+             * a 500 is validation in name only (§7.4).
+             */
+            date: z
+              .string()
+              .regex(/^\d{4}-\d{2}-\d{2}$/, 'التاريخ يجب أن يكون بصيغة YYYY-MM-DD')
+              .refine((value) => !Number.isNaN(Date.parse(value)), 'تاريخ غير صالح')
+              .optional(),
+          })
+          .strict(),
+      },
     },
     async (request, reply) => {
       const auth = requireDashboardRole(request);
@@ -74,7 +92,9 @@ export async function voucherRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { date } = request.query as { date?: string };
-      return { reconciliation: await reconcileDay(auth.merchantId, date ? new Date(date) : new Date()) };
+      // Passed through as the calendar date it is. Converting it to an instant here
+      // would mean choosing an hour, and every choice is wrong in some timezone.
+      return { reconciliation: await reconcileDay(auth.merchantId, date ?? new Date()) };
     },
   );
 }

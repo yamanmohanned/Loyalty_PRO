@@ -58,6 +58,93 @@ function zonedParts(instant: Date, timeZone: string): ZonedParts {
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
+/** The calendar date an instant falls on in a timezone, as `YYYY-MM-DD`. */
+export function localDateKey(instant: Date, timeZone: string): string {
+  const { year, month, day } = zonedParts(instant, timeZone);
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+/**
+ * The instant at which a local calendar day begins, and the one at which it ends.
+ *
+ * The same rule as §13.1, applied to a day instead of a period: **a day boundary is
+ * local, never UTC.** Baghdad is UTC+3, so a UTC day begins at 03:00 local and a sale
+ * made in the first three hours of a local day is filed under the previous one. Today
+ * that error is hidden by opening hours rather than prevented by anything, and it stops
+ * being hidden the moment a shop trades late or a merchant is in another timezone.
+ *
+ * Takes either an instant — "whatever day this moment falls on, locally" — or a local
+ * date key, `YYYY-MM-DD`. The second form exists because a caller that has been *given*
+ * a calendar date has no instant to convert, and inventing one is where this goes wrong:
+ * picking midnight UTC lands in the previous day west of Greenwich, and picking noon
+ * lands in the next one at UTC+13. A date key is used as what it is, with no instant in
+ * the middle.
+ *
+ * Built by adding one to the local calendar day rather than 24 hours to the instant,
+ * which is the difference that matters on a day a zone changes offset.
+ */
+export function localDayBounds(
+  when: Date | string,
+  timeZone: string,
+): { start: Date; end: Date } {
+  const { year, month, day } =
+    typeof when === 'string' ? parseDateKey(when) : zonedParts(when, timeZone);
+  return {
+    start: localMidnight(year, month, day, timeZone),
+    // `Date.UTC` rolls a day past the end of a month over for us, so day + 1 is safe on
+    // the 28th of February as well as the 31st of January.
+    end: localMidnight(year, month, day + 1, timeZone),
+  };
+}
+
+/** `YYYY-MM-DD` into calendar parts. */
+function parseDateKey(key: string): ZonedParts {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) throw new Error(`تاريخ غير صالح: ${key}`);
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+/** The instant of local midnight starting the given local calendar date. */
+function localMidnight(year: number, month: number, day: number, timeZone: string): Date {
+  const naive = Date.UTC(year, month - 1, day);
+  // The zone's offset is read at roughly the right instant and then applied. One
+  // correction is enough for every zone whose offset moves by less than a day.
+  const offset = zoneOffsetMs(new Date(naive), timeZone);
+  return new Date(naive - offset);
+}
+
+/** A zone's UTC offset at an instant, in milliseconds. */
+function zoneOffsetMs(instant: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instant);
+
+  const read = (type: string): number => {
+    const found = parts.find((p) => p.type === type);
+    if (!found) throw new Error(`تعذر حساب الوقت للمنطقة الزمنية ${timeZone}`);
+    // `hour12: false` can render midnight as 24; Date.UTC handles the rollover.
+    return Number.parseInt(found.value, 10);
+  };
+
+  return (
+    Date.UTC(
+      read('year'),
+      read('month') - 1,
+      read('day'),
+      read('hour'),
+      read('minute'),
+      read('second'),
+    ) - instant.getTime()
+  );
+}
+
 /**
  * ISO-8601 week number and week-year for a calendar date.
  * Weeks start Monday; week 1 is the week containing the first Thursday of the year.
