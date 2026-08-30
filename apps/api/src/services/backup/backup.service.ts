@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../../config/env';
 import { resolveDataDir } from '../../config/paths';
-import { AppError } from '../../lib/errors';
+import { AppError, backupBlocked } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { readArchive, writeArchive, type ArchiveHeader } from './archive';
 import {
@@ -106,6 +106,39 @@ export function resolveDestinations(): BackupDestination[] {
   return destinations;
 }
 
+/**
+ * The one-backup-at-a-time lock.
+ *
+ * Two backups running together share a staging directory, a snapshot filename and a
+ * `VACUUM INTO` destination — the second would delete the first's snapshot out from
+ * under it and both would produce nonsense. The realistic collision is not two managers
+ * clicking at once; it is the nightly scheduled run starting while somebody is part-way
+ * through a manual one, or through a restore verification.
+ *
+ * In-process, which is sufficient and will stop being sufficient if this ever runs as
+ * more than one instance — the same caveat as the rate limiter (§12.9). A single Windows
+ * Service on the manager PC is the deployment (§12.3), and both the scheduler and the
+ * HTTP route live inside it, so one lock covers every caller there is.
+ */
+let inFlight: Promise<unknown> | null = null;
+
+/** Whether a backup or verification is running right now. */
+export const isBackupRunning = (): boolean => inFlight !== null;
+
+async function withBackupLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (inFlight) {
+    throw backupBlocked('هناك نسخة احتياطية قيد التنفيذ بالفعل');
+  }
+
+  const task = operation();
+  inFlight = task;
+  try {
+    return await task;
+  } finally {
+    inFlight = null;
+  }
+}
+
 /** Scratch space for the snapshot and the archive being built. */
 function stagingDirectory(): string {
   return join(localBackupDirectory(), '.staging');
@@ -151,6 +184,15 @@ export async function runBackup(
   context: BackupContext,
   destinations: BackupDestination[] = resolveDestinations(),
   now: Date = new Date(),
+): Promise<BackupRun> {
+  return withBackupLock(() => runBackupUnlocked(context, destinations, now));
+}
+
+/** The body of a backup, assuming the caller holds the lock. */
+async function runBackupUnlocked(
+  context: BackupContext,
+  destinations: BackupDestination[],
+  now: Date,
 ): Promise<BackupRun> {
   // The ceremony gate (§12.19). An archive encrypted with a key nobody has recorded off
   // this machine is not a backup, and producing one while reporting success is exactly
@@ -353,6 +395,19 @@ export async function verifyRestore(
   destinations: BackupDestination[] = resolveDestinations(),
   now: Date = new Date(),
 ): Promise<RestoreVerification> {
+  return withBackupLock(() => verifyRestoreUnlocked(context, destinations, now));
+}
+
+/**
+ * The verification body. Holds the lock across the whole round trip rather than only
+ * across its backup: the archive it restores must be the one it just took, and a manual
+ * backup landing in between would prune or replace it.
+ */
+async function verifyRestoreUnlocked(
+  context: BackupContext,
+  destinations: BackupDestination[],
+  now: Date,
+): Promise<RestoreVerification> {
   await assertBackupsEnabled(context.merchantId);
 
   const staging = await prepareStaging();
@@ -370,8 +425,9 @@ export async function verifyRestore(
     after: { startedAt: now.toISOString() },
   });
 
-  // (2) A real backup to the real destinations.
-  const run = await runBackup(context, destinations, now);
+  // (2) A real backup to the real destinations. The unlocked form: this function
+  // already holds the lock, and calling the public one would deadlock against itself.
+  const run = await runBackupUnlocked(context, destinations, now);
 
   const landed = run.destinations.find((o) => o.ok && o.id);
   if (!landed?.id) {

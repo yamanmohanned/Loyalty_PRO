@@ -104,6 +104,25 @@ const EnvSchema = z.object({
    */
   BACKUP_KEEP: z.coerce.number().int().positive().default(14),
 
+  /* ── Scheduling (§7.3: daily after close + every 500 transactions) ───────── */
+
+  BACKUP_SCHEDULE_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
+  /**
+   * Local wall-clock time, in the merchant's timezone — "after close", not a UTC hour.
+   *
+   * A backup at 23:30 UTC is 02:30 in Baghdad, which is neither after close nor before
+   * open; it is the middle of the night on the wrong day, and on the first of the month
+   * it lands in the wrong period (CLAUDE.md §13.1 made the same point about bucketing).
+   */
+  BACKUP_DAILY_AT: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'BACKUP_DAILY_AT يجب أن يكون بصيغة HH:MM')
+    .default('23:30'),
+  BACKUP_EVERY_TRANSACTIONS: z.coerce.number().int().positive().default(500),
+
   /**
    * Google Drive, the off-machine copy of §7.3.
    *

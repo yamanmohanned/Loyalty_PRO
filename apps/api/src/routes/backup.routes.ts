@@ -9,6 +9,8 @@ import {
   revealKey,
 } from '../services/backup/key-ceremony.service';
 import { listBackups, runBackup, verifyRestore } from '../services/backup/backup.service';
+import { recentBackupHistory } from '../services/backup/history.service';
+import { scheduleStatus } from '../services/backup/schedule.service';
 
 /**
  * Backup, and the key ceremony that gates it (CLAUDE_v3.md §7.3, §12.19).
@@ -86,12 +88,22 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
 
   /* ── Backups ────────────────────────────────────────────────────────────── */
 
+  /**
+   * Everything the Backup screen needs, in one call.
+   *
+   * One request rather than four because a manager opening this screen is usually asking
+   * a single question — "is this working" — and answering it from four independently
+   * loading panels invites reading a green tick beside a stale number.
+   */
   app.get('/', { config: { roles: DASHBOARD_ROLES } }, async (request) => {
     const auth = requireDashboardRole(request);
-    return {
-      key: await keyStatus(auth.merchantId),
-      destinations: await listBackups(),
-    };
+    const [key, destinations, schedule, history] = await Promise.all([
+      keyStatus(auth.merchantId),
+      listBackups(),
+      scheduleStatus(auth.merchantId),
+      recentBackupHistory(auth.merchantId),
+    ]);
+    return { key, destinations, schedule, history };
   });
 
   /**

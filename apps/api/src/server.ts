@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { configSource, loadEnv } from './config/env';
 import { ensureDatabaseReady } from './lib/migrate';
 import { prisma } from './lib/prisma';
+import { startBackupScheduler } from './services/backup/schedule.service';
 
 /**
  * Process entry point.
@@ -33,6 +34,13 @@ async function main(): Promise<void> {
     );
   }
 
+  // Scheduled backups (§7.3, §12.21). Started HERE rather than in `buildApp` on
+  // purpose: `buildApp` is what the test suite constructs, and a scheduler firing
+  // mid-suite would take real backups of the test database. It also belongs to the
+  // process rather than to the HTTP app — the point of putting it in the service is
+  // that it survives a closed manager window.
+  const stopScheduler = startBackupScheduler(app.log);
+
   // Both stdin events below can fire for the same close, and a signal can arrive
   // while a shutdown is already unwinding. Closing twice is not harmful so much as
   // confusing in a log a support call is reading.
@@ -42,6 +50,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     app.log.info({ signal }, 'shutting down');
     try {
+      stopScheduler();
       await app.close();
       await prisma.$disconnect();
       process.exit(0);

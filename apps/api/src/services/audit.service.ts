@@ -28,6 +28,14 @@ export const AUDIT_ACTIONS = {
   FEATURE_FLAG_TOGGLED: 'feature_flag.toggled',
   BACKUP_COMPLETED: 'backup.completed',
   BACKUP_FAILED: 'backup.failed',
+  /**
+   * A scheduled run stood down because one was already in progress.
+   *
+   * Recorded rather than merely logged: "the nightly backup did not happen" must never
+   * be answerable only by absence. The Backup screen reads these rows, so a manager can
+   * see the difference between a skip and a scheduler that stopped running months ago.
+   */
+  BACKUP_SKIPPED: 'backup.skipped',
   BACKUP_RESTORED: 'backup.restored',
   /**
    * The sentinel of the §12.17 recency check.
