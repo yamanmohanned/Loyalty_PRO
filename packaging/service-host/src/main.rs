@@ -58,6 +58,13 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// Rotate the API log at this size. A shop runs for years; an unbounded log is a
 /// disk-full outage waiting for a quiet Tuesday.
 const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
+/// How often the supervisor re-checks the API log's size while the API is running.
+///
+/// The cap used to be enforced only at spawn, which meant it was not a cap at all: a
+/// service that starts at boot and runs for months never re-checks, and the log grows
+/// without limit on the same volume as the database (§12.15). One `stat` a minute is
+/// nothing next to that.
+const LOG_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -165,11 +172,44 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 }
 
 /// Renames the API log aside once it passes the size cap, keeping one generation.
+///
+/// Only correct before the child is spawned, when nothing holds the file open. While the
+/// API is running, use [`rotate_running_if_large`].
 fn rotate_if_large(path: &Path) {
     if let Ok(metadata) = fs::metadata(path) {
         if metadata.len() > LOG_ROTATE_BYTES {
             let _ = fs::rename(path, path.with_extension("log.1"));
         }
+    }
+}
+
+/// Caps the API log while the API is still writing to it.
+///
+/// Copy-then-truncate rather than rename, and the difference is not stylistic. The child
+/// inherited an append handle to this file; a rename moves the *name*, not the handle, so
+/// the child would go on appending to `api.log.1` while `api.log` never reappeared —
+/// rotation that renames the growing file rather than stopping it growing. Truncating in
+/// place is the one operation that reaches the bytes the child is actually writing.
+///
+/// This depends on the handle being opened in APPEND mode (see `spawn_api`): append
+/// writes go to end-of-file, which after truncation is zero. A plain write handle would
+/// keep its old offset and leave a multi-megabyte sparse hole instead.
+///
+/// The cost is a race — lines written between the copy and the truncation are lost. For a
+/// log that is the right trade against an unbounded file on the volume that holds the
+/// database.
+fn rotate_running_if_large(path: &Path, limit: u64) {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.len() > limit => {}
+        _ => return,
+    }
+
+    if fs::copy(path, path.with_extension("log.1")).is_err() {
+        return;
+    }
+
+    if let Ok(file) = OpenOptions::new().write(true).open(path) {
+        let _ = file.set_len(0);
     }
 }
 
@@ -238,6 +278,8 @@ fn stop_child(child: &mut Child, paths: &Paths) {
 /// Keeps the API running until `stop` fires. Returns when the stop is complete.
 fn supervise(paths: &Paths, stop: Receiver<()>) {
     let mut backoff = Duration::from_secs(2);
+    let api_log = paths.logs.join("api.log");
+    let mut last_log_check = Instant::now();
 
     loop {
         let started = Instant::now();
@@ -268,6 +310,11 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
                     return;
                 }
                 Err(RecvTimeoutError::Timeout) => {}
+            }
+
+            if last_log_check.elapsed() >= LOG_CHECK_INTERVAL {
+                rotate_running_if_large(&api_log, LOG_ROTATE_BYTES);
+                last_log_check = Instant::now();
             }
 
             match child.try_wait() {
@@ -822,4 +869,73 @@ fn ctrlc_handler(sender: mpsc::Sender<()>) {
         let _ = std::io::stdin().read_line(&mut line);
         let _ = sender.send(());
     });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────────
+//  Tests
+// ─────────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// The load-bearing assumption behind [`rotate_running_if_large`].
+    ///
+    /// The API child holds an inherited APPEND handle to `api.log` for its whole life.
+    /// This asserts that truncating the file underneath that handle actually shrinks it
+    /// and that subsequent writes resume at zero — rather than leaving a multi-megabyte
+    /// sparse hole, which is what would happen through a plain write handle that kept its
+    /// old offset. It is Windows file-handle behaviour, not something the type system
+    /// checks, so it is pinned here.
+    #[test]
+    fn truncating_under_an_open_append_handle_resets_the_file() {
+        let dir = std::env::temp_dir().join(format!("walaa-rotate-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("api.log");
+
+        // Stand in for the child: an append handle held open across the rotation.
+        let mut held = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)
+            .unwrap();
+
+        held.write_all(&vec![b'x'; 4096]).unwrap();
+        held.flush().unwrap();
+
+        rotate_running_if_large(&log, 1024);
+
+        // The previous generation was kept ...
+        assert_eq!(fs::metadata(log.with_extension("log.1")).unwrap().len(), 4096);
+        // ... and the live file was emptied, not renamed away.
+        assert_eq!(fs::metadata(&log).unwrap().len(), 0);
+
+        // The handle the "child" still holds keeps working, and writes land at the start
+        // of the truncated file rather than 4 KB into a sparse one.
+        held.write_all(b"after").unwrap();
+        held.flush().unwrap();
+        assert_eq!(fs::metadata(&log).unwrap().len(), 5);
+        assert_eq!(fs::read_to_string(&log).unwrap(), "after");
+
+        drop(held);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A log under the cap is left alone — no spurious generation, no lost lines.
+    #[test]
+    fn a_small_log_is_not_rotated() {
+        let dir = std::env::temp_dir().join(format!("walaa-rotate-small-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("api.log");
+        fs::write(&log, "short").unwrap();
+
+        rotate_running_if_large(&log, 1024);
+
+        assert_eq!(fs::read_to_string(&log).unwrap(), "short");
+        assert!(!log.with_extension("log.1").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
