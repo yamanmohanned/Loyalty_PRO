@@ -189,7 +189,41 @@ stays** — deleting a shop's customers is a decision for a human with a backup 
 bench and wrong in a shop, and each one presents as "the Station is broken" rather than
 as itself.
 
-After installing at a store, before leaving:
+### Before the installer runs — free space on the system drive
+
+**Check this first.** It is the only item on this list that can stop the shop rather
+than merely keep the Station from connecting. The database lives at
+`C:\ProgramData\Walaa\walaa.db`, on the system drive, and there is no second copy of it
+running anywhere. A full `C:` does not degrade this product — it halts it: writes fail,
+so scans fail, discounts fail and sales are not recorded, at a till with a customer
+standing at it. Reads keep working, so the dashboard still looks alive while every
+scan errors. That is what makes it hard to recognise from the symptom.
+
+```powershell
+Get-PSDrive C | Select-Object @{n='FreeGB';e={[math]::Round($_.Free/1GB,2)}}
+```
+
+| Free on `C:` | Verdict                                                            |
+| ------------ | ------------------------------------------------------------------ |
+| **≥ 20 GB**  | install                                                            |
+| 10–20 GB     | install, and tell the merchant it needs attention within the year  |
+| **< 10 GB**  | **do not install.** Reclaim space first, then re-check.            |
+
+Those numbers are not set by this product's appetite, which is small — roughly 110 MB
+to install, and a database growing on the order of **200 MB a year** at 500 invoices a
+day. They are set by what Windows needs in order to keep working around it: update
+staging alone wants several GB, and below roughly 2 GB free Windows itself begins
+failing in ways that present as application bugs. A machine installed at 9 GB free is
+not broken today; it is scheduled to break on a Tuesday in eighteen months, with no
+warning and no obvious cause.
+
+**The same check applies to the cashier PC** before the Print Capture Agent is
+installed there. Its queue is at `C:\ProgramData\Walaa\agent\queue`, and a full disk on
+that machine is the worse of the two: captures stop, and for the three in-path capture
+modes an agent that fails in the print path costs print jobs, not just loyalty records
+(`agent/README.md`, §4.6 rule 3).
+
+### After installing at a store, before leaving
 
 1. **The network profile must be Private or Domain.** The firewall rule does not apply
    on a Public network, so the Station silently cannot connect while the manager PC
@@ -234,6 +268,36 @@ After installing at a store, before leaving:
    ```
    netstat -ano | findstr :4000
    ```
+
+6. **Write down where the data lives and leave it with whoever maintains the machine.**
+   Nobody monitors a path they were never told about, and none of these have a second
+   copy.
+
+   | Machine    | Path                                        | Contents                                                 |
+   | ---------- | ------------------------------------------- | -------------------------------------------------------- |
+   | Manager PC | `C:\ProgramData\Walaa\walaa.db`             | every customer, transaction and voucher                  |
+   | Manager PC | `C:\ProgramData\Walaa\walaa.env`            | this installation's secrets — never paste into a ticket  |
+   | Manager PC | `C:\ProgramData\Walaa\logs\`                | `api.log`, `service.log`                                 |
+   | Cashier PC | `C:\ProgramData\Walaa\agent\queue\`         | captures not yet delivered                               |
+   | Cashier PC | `C:\ProgramData\Walaa\agent\queue\rejected\` | captures the server refused — **a human must look here** |
+
+   The data directory is locked to SYSTEM and Administrators, so listing it needs an
+   elevated prompt. That is deliberate, and it is why the merchant's IT needs the path
+   written down rather than expecting to stumble on it.
+
+   ```powershell
+   Get-ChildItem C:\ProgramData\Walaa -Force | Select-Object Name, Length, LastWriteTime
+   ```
+
+   Two things to say out loud while handing this over:
+
+   - **The whole data directory is the backup target**, and `walaa.db` alone is not a
+     backup. SQLite runs in WAL mode, so the most recent transactions live in
+     `walaa.db-wal` until a checkpoint folds them in. Copy the database without its
+     `-wal` sidecar and you have silently restored to an older day.
+   - **Growth is slow and free space is not.** The database is not what fills this
+     drive; Windows updates, restore points and whatever else the machine is used for
+     are. Re-check free space on any support visit.
 
 ---
 

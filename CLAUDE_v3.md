@@ -994,3 +994,144 @@ space, and at zero bytes Windows itself is at risk.
 synthetic ESC/POS fixtures covering CP864 × Windows-1256 × Arabic-Indic × Western
 digits, emitted to `agent/fixtures/` as real byte files so the real capture can be put
 beside them and compared. Nothing in this phase waited on them.
+
+### 12.15 Free space on the system drive is an install prerequisite — 2026-08-30
+*(thresholds confirmed by the operator, 2026-08-30)*
+
+§12.1 and §12.14 treated a full `C:` as a build-machine nuisance and worked around it
+by relocating toolchains to `E:`. That framing was too small. §12.3 put the SQLite
+database on the system drive of the merchant's manager PC, at
+`C:\ProgramData\Walaa\walaa.db`, with no replica anywhere — so at a merchant a full
+`C:` is not a tooling problem, it is an **outage**: writes fail, and with them scans,
+discounts and the recording of sales.
+
+The failure is hard to recognise from its symptom. SQLite fails writes cleanly rather
+than corrupting, and reads keep working, so the dashboard renders normally while every
+scan at the till errors. §12.16 exists because of that asymmetry.
+
+**This product is not what fills the drive.** ~110 MB to install; a database growing on
+the order of 200 MB a year at 500 invoices a day. The thresholds are therefore set by
+what Windows needs around it — update staging wants several GB, and below roughly 2 GB
+free Windows itself starts failing in ways that look like application bugs.
+
+| Free on `C:` | Verdict                                     |
+| ------------ | ------------------------------------------- |
+| ≥ 20 GB      | install                                     |
+| 10–20 GB     | install, flag for attention within the year |
+| < 10 GB      | do not install                              |
+
+Runtime states, for anything that reports on free space: **OK ≥ 5 GB, WARN < 5 GB,
+CRITICAL < 2 GB**, re-arming about 20% above each edge so a volume sitting on a
+boundary does not flap.
+
+**The install gate applies to both machines.** The cashier PC gets the same check
+before the Print Capture Agent is installed: its queue is at
+`C:\ProgramData\Walaa\agent\queue`, and that machine runs three of the four capture
+modes inside the print path.
+
+#### Two defects found while writing this up, both fixed
+
+**The agent let a storage failure escape into the capture path.** `EnqueueAsync` threw
+`IOException` on an unwritable queue, and nothing caught it. Reproduced against the
+unfixed code in `agent/tests/.../StorageFailureTests.cs`, it turned out to be two
+different disasters depending on timing:
+
+- **At startup**, `queue.EnsureCreated()` sat above every `await` in `ExecuteAsync`, so
+  the exception came straight out of `StartAsync`. The service never came up, the SCM
+  restarted it immediately by design, and it failed again. **Each restart of an in-path
+  capture mode is a window in which a print job can be lost** — so a full disk on the
+  cashier PC could stop the till printing, by a route with no visible connection to a
+  loyalty agent. This is the §4.6 rule 3 breach.
+- **Mid-shift**, the throw came from the parse loop and faulted only the parsing task.
+  `ExecuteAsync` was still awaiting `Task.WhenAll` on a delivery loop that never ends,
+  so the host never noticed. **The service stayed up, reported healthy, kept forwarding
+  print jobs, and captured nothing ever again** — no crash, no restart, no event-log
+  entry, silent until someone rebooted the till.
+
+Fixed by making `EnqueueAsync` report a storage failure as `null` rather than throwing,
+guarding the startup creation, and guarding the parse loop per job. **A capture is
+still lost when the disk is full — that is honest, there is nowhere to put it — but it
+is lost as a log line carrying the invoice number and amount**, because the paper
+receipt is in the cashier's hand and that line is what makes the sale re-enterable.
+
+*Not reproduced: a genuinely exhausted NTFS volume. The tests raise the same exception
+type at the same call sites by putting a file where the queue directory belongs.*
+
+**The API log cap was not a cap.** `LOG_ROTATE_BYTES` is 8 MB, but `rotate_if_large`
+was called only from `spawn_api` — so the limit was enforced when the API process
+started and at no other time. A service that starts at boot and runs for months wrote
+an unbounded log onto the same volume as the database: this project authoring the
+failure mode it spent the phase defending against. The supervisor now re-checks every
+60 seconds and rotates by **copy-then-truncate**, because the child holds an inherited
+append handle — renaming would move the name and leave the child appending to
+`api.log.1` forever. The append-mode dependency is pinned by a test.
+
+Recorded operationally in `packaging/README.md` → *Field setup checklist*, which also
+documents every data path so the merchant's IT can monitor them.
+
+### 12.16 A failed write is faulted at the visible action, and never refused — 2026-08-30
+*(operator-confirmed, 2026-08-30; standing invariants)*
+
+Two rules, both about the same asymmetry: this system's storage failures are quiet.
+
+**1. The API never refuses a write because storage is running low. Absolute.**
+
+It is tempting to "harden" a low-disk state by rejecting writes below a threshold. It
+is wrong, and the reason is §0 rule 3. By the time a scan reaches the API the discount
+has already been given at the register — refusing to record it does not free a single
+byte and does not protect anything; it manufactures precisely the cash-versus-POS
+discrepancy this product exists to prevent. **Write until SQLite says no, and warn
+early enough that it never gets there.** No future session may turn this into a refusal.
+
+The same logic retired the idea of the agent refusing to queue below a threshold. A
+capture is ~500 bytes and fits until the last block; a store offline all day at 500
+invoices holds ~250 KB. Refusing manufactures the loss it claims to prevent. The queue
+is not what fills a disk. The only thing the agent may decline to write under pressure
+is `RetainReceiptText`, which is diagnostic and unbounded — never the capture record.
+
+**2. A write that reached the server and was not stored is faulted at the visible
+action, never as a background state.**
+
+The manager dashboard rendering normally while every scan at the till errors is the
+exact shape to design against. So:
+
+- The API answers a storage failure as **507 `STORAGE_UNAVAILABLE`**, distinct from
+  `INTERNAL_ERROR`, because the two demand different things of the operator — a bug is
+  ours and the till carries on, whereas a datastore that cannot write means every sale
+  from now on is unrecorded. Detection matches driver message text, since Prisma has no
+  code for a full disk.
+- The Station shows an honest, specific card: **what did not happen, that waiting will
+  not fix it, and what to do now** — "لم تُحفظ العملية … أبلغ الإدارة فوراً". It must
+  never read like the offline card, which promises the opposite ("counted when the
+  connection returns"). A failed write is **not** queued: the server answered, and
+  retrying against a datastore that cannot write would bury the failure under a spinner.
+- **The Station's honest message does not depend on the classification being right.**
+  Any 5xx on a write gets the same treatment; naming storage as the cause only adds a
+  hint for the manager. A missed signature costs precision, not safety.
+
+**No standing low-disk banner on the Station.** It has zero settings by design and a
+cashier cannot act on free disk space. The manager dashboard is where a background
+warning belongs — proposed, not built.
+
+### 12.17 A backup without the WAL sidecar is not a backup — 2026-08-30
+*(operator-confirmed, 2026-08-30; binding requirement on V3-6)*
+
+SQLite runs in WAL mode (§12.5), so the most recent transactions live in
+`walaa.db-wal` until a checkpoint folds them into `walaa.db`. **Copying the `.db` alone
+silently restores to an older day** — a backup that looks successful, restores cleanly,
+and quietly loses the sales nearest to the failure that made anyone restore it. That is
+worse than no backup, because no backup at least tells the truth about itself.
+
+Binding on the V3-6 backup work:
+
+1. The backup routine **must** either run `PRAGMA wal_checkpoint(TRUNCATE)` before
+   copying, or capture `walaa.db`, `walaa.db-wal` and `walaa.db-shm` as one set. Best is
+   SQLite's own online backup API, which is consistent by construction. Never a naive
+   file copy of the `.db`.
+2. The **restore test is not complete unless it proves recency**: write a transaction,
+   back up, restore, and assert that transaction is present. A restore test that only
+   proves the file opens would pass against exactly this bug.
+
+Until that work lands, the handover checklist in `packaging/README.md` says the same
+thing to whoever maintains the machine: the whole data directory is the backup target,
+and `walaa.db` alone is not one.
