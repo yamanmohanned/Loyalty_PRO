@@ -151,7 +151,12 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
    * undismissible banner rather than a wall.
    */
   if (keyStatus.data && !keyStatus.data.everConfirmed) {
-    return <KeyCeremonyScreen onCompleted={() => void keyStatus.refetch()} />;
+    return (
+      <KeyCeremonyScreen
+        onCompleted={() => void keyStatus.refetch()}
+        onLogout={onLogout}
+      />
+    );
   }
 
   return (

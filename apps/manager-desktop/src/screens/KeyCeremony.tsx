@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, KeyRound, Printer, ShieldCheck } from 'lucide-react';
+import { AlertOctagon, KeyRound, LogOut, Printer, ShieldCheck } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
@@ -19,6 +19,13 @@ import { Button, Card, Field, Input, Notice } from '../components/ui';
  * That is worse than never having had backups, because it was trusted. So the ceremony
  * has no "later" button, no close control, and no route around it: while the key is
  * unconfirmed this component replaces the dashboard entirely.
+ *
+ * **It does have a logout, and the distinction matters.** Undismissible means it cannot
+ * be bypassed *into the dashboard* — not that the session cannot be left. Leaving
+ * force-quit as the only exit would teach a manager that killing the process is how you
+ * get out of our screens, and that is a habit worth more to us unlearned than the
+ * handful of pixels it costs. Logging out returns to the login screen and confirms
+ * nothing; the gate is waiting again at the next login.
  *
  * ## Why re-entry rather than a checkbox
  *
@@ -77,7 +84,13 @@ function PrintableKey({ value, fingerprint }: { value: string; fingerprint: stri
   );
 }
 
-export function KeyCeremonyScreen({ onCompleted }: { onCompleted?: () => void }) {
+export function KeyCeremonyScreen({
+  onCompleted,
+  onLogout,
+}: {
+  onCompleted?: () => void;
+  onLogout?: () => void;
+}) {
   const queryClient = useQueryClient();
   const status = useKeyStatus();
   const [revealed, setRevealed] = useState<string | null>(null);
@@ -135,10 +148,17 @@ export function KeyCeremonyScreen({ onCompleted }: { onCompleted?: () => void })
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-accent-tint text-accent">
             <KeyRound size={24} aria-hidden />
           </span>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-ink">{locale.keyCeremony.title}</h1>
             <p className="text-base text-steel">{locale.keyCeremony.subtitle}</p>
           </div>
+          {/* A way out of the SESSION, not a way past the gate — see the note above. */}
+          {onLogout ? (
+            <Button variant="ghost" onClick={onLogout}>
+              <LogOut size={18} aria-hidden />
+              {locale.nav.logout}
+            </Button>
+          ) : null}
         </div>
 
         <div className="mb-8 print:hidden">
