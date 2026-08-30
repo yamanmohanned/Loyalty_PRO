@@ -188,12 +188,20 @@ export function KeyCeremonyScreen({
         {/* Step 2 — reveal, record, print. */}
         {key?.configured && !revealed ? (
           <Card className="space-y-4 p-6 print:hidden">
+            {/* The caption comes BEFORE the value, and the value is deliberately not
+                styled like a secret — small, steel, no bordered panel. The first
+                operator to use this screen read the fingerprint as the key, because a
+                hex blob above a "reveal the key" button looks like one. Nothing was
+                exposed; the screen was misleading, which on this screen is its own
+                kind of failure. */}
             <div>
-              <p className="mb-1 text-sm text-steel">{locale.keyCeremony.fingerprintLabel}</p>
-              <p className="font-mono text-lg text-ink" dir="ltr">
+              <p className="mb-1 text-sm font-semibold text-steel">
+                {locale.keyCeremony.fingerprintLabel}
+              </p>
+              <p className="mb-1 text-sm text-steel">{locale.keyCeremony.fingerprintHint}</p>
+              <p className="font-mono text-sm text-steel" dir="ltr">
                 {key.fingerprint}
               </p>
-              <p className="mt-1 text-sm text-steel">{locale.keyCeremony.fingerprintHint}</p>
             </div>
             <Button
               onClick={() => reveal.mutate()}
@@ -274,7 +282,16 @@ export function KeyCeremonyScreen({
  *
  * Deliberately not dismissible. A banner with an × is a banner that is gone by Tuesday.
  */
-export function BackupBlockedBanner({ status, onFix }: { status: KeyStatus; onFix: () => void }) {
+export function BackupBlockedBanner({
+  status,
+  canPerformCeremony,
+  onFix,
+}: {
+  status: KeyStatus;
+  /** False for a manager — generating and revealing the key are OWNER-only. */
+  canPerformCeremony: boolean;
+  onFix: () => void;
+}) {
   if (status.backupsEnabled) return null;
 
   return (
@@ -284,14 +301,19 @@ export function BackupBlockedBanner({ status, onFix }: { status: KeyStatus; onFi
         <div className="flex-1">
           <p className="text-sm font-bold text-danger">{locale.keyCeremony.bannerTitle}</p>
           <p className="text-sm text-ink">
-            {status.configured
-              ? locale.keyCeremony.bannerUnconfirmed
-              : locale.keyCeremony.bannerUnconfigured}
+            {!canPerformCeremony
+              ? locale.keyCeremony.bannerOwnerOnly
+              : status.configured
+                ? locale.keyCeremony.bannerUnconfirmed
+                : locale.keyCeremony.bannerUnconfigured}
           </p>
         </div>
-        <Button variant="secondary" onClick={onFix}>
-          {locale.keyCeremony.bannerAction}
-        </Button>
+        {/* No action button for someone who cannot perform the action. */}
+        {canPerformCeremony ? (
+          <Button variant="secondary" onClick={onFix}>
+            {locale.keyCeremony.bannerAction}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

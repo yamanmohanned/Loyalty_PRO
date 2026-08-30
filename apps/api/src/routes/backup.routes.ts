@@ -43,8 +43,12 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
    * Idempotent, and deliberately incapable of replacing an existing key — that would
    * orphan every archive already taken. Rotation, if it is ever wanted, is a different
    * endpoint with different warnings.
+   *
+   * OWNER only, to match `reveal`. A manager who could generate but not reveal would
+   * mint a key nobody has ever seen and leave the installation in a state only the owner
+   * can resolve — the ceremony is one act and it belongs to one role.
    */
-  app.post('/key/generate', { config: { roles: DASHBOARD_ROLES } }, async (request) => {
+  app.post('/key/generate', { config: { roles: ['OWNER'] } }, async (request) => {
     const auth = requireDashboardRole(request);
     return ensureKeyGenerated(auth.merchantId, auth.sub);
   });
@@ -61,6 +65,12 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  /**
+   * Confirms the key by re-entry.
+   *
+   * Open to any dashboard role, unlike generate and reveal: whoever is holding the
+   * printed key can complete the ceremony, which is the point of printing it.
+   */
   app.post(
     '/key/confirm',
     {

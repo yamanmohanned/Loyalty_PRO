@@ -140,17 +140,28 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
    * The backup key ceremony gate (CLAUDE_v3.md §12.19).
    *
    * On a **first run** — no key has ever been confirmed for this merchant — the ceremony
-   * replaces the dashboard entirely. There is no close control and no route around it,
-   * because the failure it prevents is invisible: archives that look healthy and cannot
-   * be opened by anyone once this machine is gone. An optional step here is a step that
-   * never happens.
+   * replaces the dashboard entirely for the OWNER. There is no close control and no
+   * route around it, because the failure it prevents is invisible: archives that look
+   * healthy and cannot be opened by anyone once this machine is gone. An optional step
+   * here is a step that never happens.
    *
-   * A key **replaced later** is treated differently, by `BackupBlockedBanner` below. The
-   * manager has done this before, is probably mid-migration, and locking them out of the
-   * whole dashboard at that moment would be a hazard of its own — so it is a standing,
-   * undismissible banner rather than a wall.
+   * **Only the owner is walled, and that correction came from a real lockout.** The gate
+   * originally blocked every dashboard role, but generating and revealing the key are
+   * OWNER-only — so a manager logging in first was shown a wall they had no means to get
+   * past: they could not reveal the key, therefore could not type it back, therefore
+   * could not reach the dashboard, on this login or any future one. Walling somebody who
+   * cannot perform the action protects nothing; it only makes the product unusable while
+   * the owner is away. Backups still refuse to run, so nothing is deferred — the person
+   * who can act still meets the wall.
+   *
+   * A key **replaced later**, and a manager waiting on the owner, both get
+   * `BackupBlockedBanner` instead: standing, undismissible, and worded for whoever is
+   * reading it.
    */
-  if (keyStatus.data && !keyStatus.data.everConfirmed) {
+  const ceremonyOutstanding = Boolean(keyStatus.data && !keyStatus.data.everConfirmed);
+  const canPerformCeremony = user.role === 'OWNER';
+
+  if (ceremonyOutstanding && canPerformCeremony) {
     return (
       <KeyCeremonyScreen
         onCompleted={() => void keyStatus.refetch()}
@@ -170,7 +181,11 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
       <NavRail user={user} onLogout={onLogout} />
       <main className="flex-1 overflow-y-auto">
         {keyStatus.data ? (
-          <BackupBlockedBanner status={keyStatus.data} onFix={() => navigate('/backup')} />
+          <BackupBlockedBanner
+            status={keyStatus.data}
+            canPerformCeremony={canPerformCeremony}
+            onFix={() => navigate('/backup')}
+          />
         ) : null}
         <div className="mx-auto max-w-content px-8 py-8">
           <Routes>

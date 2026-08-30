@@ -251,8 +251,17 @@ export const locale = {
 
     keyLabel: 'مفتاح التشفير',
     keyHint: 'اكتبه على ورق واحفظه خارج هذا الجهاز — في خزنة، أو مع المحاسب، أو في أي مكان آمن لا يتأثر بما يصيب هذا الجهاز.',
-    fingerprintLabel: 'بصمة المفتاح',
-    fingerprintHint: 'رمز تعريف قصير للمفتاح. آمن للمشاركة، ولا يكشف المفتاح نفسه.',
+    /**
+     * Named so it cannot be mistaken for the secret.
+     *
+     * The fingerprint is safe to display — it is a hash of 256 random bits — but it is
+     * sixteen monospace hex characters sitting above a button that says "reveal the
+     * key", and the first operator to see this screen read it as the key. A caption
+     * underneath was not enough; the label itself now carries the denial.
+     */
+    fingerprintLabel: 'بصمة المفتاح — ليست المفتاح',
+    fingerprintHint:
+      'رمز تعريف قصير للمفتاح، آمن للمشاركة ولا يكشف المفتاح. المفتاح نفسه لم يُعرض بعد.',
     print: 'طباعة المفتاح',
 
     confirmTitle: 'أدخل المفتاح للتأكيد',
@@ -272,6 +281,12 @@ export const locale = {
     bannerUnconfirmed: 'لم يتم تأكيد حفظ مفتاح التشفير خارج هذا الجهاز. لا تعمل أي نسخة احتياطية حتى يتم ذلك.',
     bannerUnconfigured: 'لم يتم إعداد مفتاح التشفير بعد. لا تعمل أي نسخة احتياطية.',
     bannerAction: 'إكمال الخطوة الآن',
+    /**
+     * For a manager. The ceremony is the owner's — generating and revealing the key are
+     * OWNER-only — so telling a manager to "complete it now" would be an instruction
+     * they cannot carry out.
+     */
+    bannerOwnerOnly: 'هذه الخطوة يقوم بها المالك. أبلغه ليسجّل الدخول ويكملها — لا تعمل أي نسخة احتياطية حتى ذلك.',
 
     printTitle: 'مفتاح تشفير النسخ الاحتياطي — ولاء',
     printWarning:

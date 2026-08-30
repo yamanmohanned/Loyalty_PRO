@@ -1291,6 +1291,40 @@ fingerprints. `req.body.key` is in the Pino redaction list. Verified against the
 API: after a full ceremony and two backups, the key does not appear anywhere in the
 captured server output.
 
+#### Corrected 2026-08-31, after the first operator use
+
+**The gate locked out every role that could not complete it.** It walled all dashboard
+roles, but generating and revealing the key are OWNER-only — so a MANAGER logging in
+first met a wall with no means past it: could not reveal the key, therefore could not
+type it back, therefore could not reach the dashboard, on that login or any later one.
+Logout was the only exit and the wall was waiting again.
+
+The fix draws the client wall along the same line as the server's permissions. **Only the
+OWNER is walled.** A manager gets the dashboard with the standing banner, worded for
+someone who cannot act — "the owner does this step" — and with no action button offering
+them something they would be refused. Nothing is deferred: backups still refuse to run,
+and the person who *can* act still meets the wall. Walling somebody who cannot perform
+the action protects nothing and only makes the product unusable while the owner is away.
+
+`generate` moved to OWNER-only alongside `reveal`, so a manager cannot mint a key nobody
+has ever seen. `confirm` stays open to any dashboard role — whoever holds the printed key
+can complete the ceremony, which is the point of printing it. Pinned by
+`backup-roles.test.ts`, because a single `DASHBOARD_ROLES` is exactly what a later tidy-up
+would restore.
+
+**The fingerprint read as the key.** Sixteen monospace hex characters sat directly above
+a button saying "reveal the key", with the clarifying caption underneath in small grey
+text. The first operator to see the screen reported the key was already visible. Nothing
+was exposed — the fingerprint is a hash of 256 random bits and the key is 44 base64
+characters still behind the button — but on this screen, of all screens, being misread as
+leaking the secret is its own failure. The denial is now in the label itself
+("بصمة المفتاح — ليست المفتاح"), the explanation comes *before* the value, and the value
+is styled as an identifier rather than a secret.
+
+The general lesson is §12.20's, one layer up: a screen is not verified until someone who
+did not build it has looked at it. Both of these survived a full live walkthrough by the
+author.
+
 #### Two bugs the live run caught that no test would have
 
 **Backups failed with a generic 500 when the directory was unwritable.** Unelevated, the
