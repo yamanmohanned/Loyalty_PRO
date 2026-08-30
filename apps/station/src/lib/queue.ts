@@ -22,6 +22,26 @@ import { api, ApiRequestError } from './api';
  *
  * `localStorage`, not memory: a tablet that is restarted, or a browser that reloads,
  * must not lose sales that were taken while the network was down.
+ *
+ * ## What deliberately does NOT belong in this queue
+ *
+ * **Only a request that never reached the server is queued** — `isNetworkFailure`,
+ * status 0. A write the server *answered* and did not store (a 5xx; see
+ * `ApiRequestError.isUnsavedWrite`) is shown to the operator as a failure and
+ * dropped, and that is not an oversight waiting to be tidied up (§12.16).
+ *
+ * The two situations look similar and are opposites. A network failure is benign:
+ * the manager machine is unreachable, the operation settles when it returns, and
+ * queueing tells the truth. A 5xx means the machine is reachable and its datastore
+ * cannot accept writes — a full disk being the case this was written for. Queueing
+ * that would retry against a server that will keep refusing, hide the failure behind
+ * a sync indicator that looks like ordinary catching-up, and let every following
+ * sale go unrecorded while the one person able to raise the alarm is told it is all
+ * in hand. The failure has to reach a human, and the operator at the till is the
+ * only human present.
+ *
+ * If you are here because "failed scans should be retried", that is the feature this
+ * comment exists to refuse.
  */
 
 const QUEUE_KEY = 'walaa.station.queue';
