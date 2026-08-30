@@ -43,12 +43,19 @@ this table. Report your findings before making changes.
 | Dashboard: loyalty rules editor | **REWRITE** | New discount model (§2) |
 | Dashboard: reports | **REVISE** | New metrics |
 | `apps/manager-desktop` (Tauri) | **KEEP** | v2 conversion stands entirely |
-| `apps/assistant` (Expo mobile) | **DISCARD** | Replaced by the Loyalty Station (§6) |
+| `apps/assistant` (Expo mobile) | **DISCARDED** | Replaced by the Loyalty Station (§6). Removed 2026-08-31 |
 | WhatsApp as core dependency | **DEMOTE** | Now an optional module (§8) |
 | Integration Gateway concept | **KEEP** | Now fed by the Print Capture Agent |
 
 **Rule:** Do not delete `apps/assistant` until the Loyalty Station is functional. Rename it
 to `apps/_deprecated_assistant` and remove it at the end of the migration.
+
+**Done, 2026-08-31.** The Station builds, is served by the API on the manager machine's
+own port (§12.3), and answers on a tablet; its endpoints have their own suite. The Expo
+app and the now-unused `@walaa/config/tsconfig/react-native` preset are gone. React 18
+and React 19 still coexist in this workspace — the Station and the manager desktop against
+the Next dashboard — so §13.7's `declaration: false` workaround is still load-bearing and
+stays.
 
 ---
 
@@ -1607,3 +1614,34 @@ till mid-sale.
 - **There is still no way to create a user in the field.** The seed makes them, and the
   installer does not. Adding `AGENT` sharpens a gap that already existed for every other
   role, and provisioning has to be solved before an installation can be handed over.
+
+### 12.24 The Expo app is gone, and the hoist hazard it was hiding — 2026-08-31
+
+§1's last migration step: `apps/_deprecated_assistant` is deleted. The gate it was held
+behind is met — the Loyalty Station builds, is served by the API on the manager machine's
+own port, answers on a tablet, and has its own suite. The unused
+`@walaa/config/tsconfig/react-native` preset went with it, along with two stale `.gitignore`
+entries pointing at a directory that had already been renamed.
+
+**Deleting it broke the Station's build, and the reason is worth keeping.** pnpm hoists
+every package into `node_modules/.pnpm/node_modules/`, one version per name, and
+TypeScript finds what it lands there while walking up from a *dependency's* own directory.
+This workspace holds React 18 (Station, manager desktop) and React 19 (the Next
+dashboard). The Expo app's `@types/react@18` had been winning that hoist, and so it was
+deciding which `React.ReactNode` `lucide-react` and `react-router-dom` were typed against
+— for every app, regardless of what each app declared. Removing an app nothing else
+depends on handed the hoist to React 19 and produced `TS2786: 'Route' cannot be used as a
+JSX component` in a package that had not been touched.
+
+`.npmrc` said "Hoist nothing implicitly — workspace packages must declare their own deps",
+which was an intention rather than a setting: `hoist-pattern` was left at its default of
+`*`. It now excludes `@types/*`, so each app sees the types it actually declares.
+
+The failure is the interesting part. A dependency deleted in one package silently
+retyped another, the error named a file nobody had edited, and nothing in the message
+pointed at a lockfile. Changing the hoist pattern requires a full reinstall, which also
+clears the generated Prisma client — `pnpm --filter @walaa/api db:generate` afterwards, or
+every test fails with "did not initialize yet".
+
+React 18 and 19 still coexist, so §13.7's `declaration: false` workaround remains
+load-bearing and stays.

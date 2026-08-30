@@ -155,7 +155,7 @@ rejected; **agent killed → printing unaffected** (show this explicitly).
 - End-to-end: capture → ingest → scan → discount → slip → real-time dashboard update.
 - **Encrypted Google Drive backup** + local + USB, scheduled, with a **verified restore test**.
 - Security pass (v1 §7) and performance pass (v1 §8) across the new surfaces.
-- Remove `apps/_deprecated_assistant`.
+- ~~Remove `apps/_deprecated_assistant`.~~ Done 2026-08-31 (§1).
 - Write the setup guide: hardware list, network setup, printer relocation/`net use LPT1:`
   workaround, calibration walkthrough, backup configuration.
 **Skills:** `verification-before-completion`, `web-design-guidelines`, `agent-browser`.

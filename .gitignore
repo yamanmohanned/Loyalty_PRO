@@ -15,12 +15,6 @@ out/
 .turbo/
 *.tsbuildinfo
 
-# expo
-.expo/
-.expo-shared/
-apps/assistant/android/
-apps/assistant/ios/
-
 # prisma
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal

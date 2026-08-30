@@ -1,9 +1,0 @@
-{
-  "extends": "@walaa/config/tsconfig/react-native.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] },
-    "types": ["react", "node"]
-  },
-  "include": ["index.ts", "src/**/*.ts", "src/**/*.tsx", "App.tsx"]
-}
