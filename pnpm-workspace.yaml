@@ -2,3 +2,26 @@ packages:
   - "apps/*"
   - "packages/*"
   - "packaging"
+
+# Third-party type definitions need @types/react resolvable from their OWN directory.
+#
+# `.npmrc` excludes `@types/*` from pnpm's hoist so that each app sees the React types
+# it declares (CLAUDE_v3.md §12.24) — React 18 for the Station and the manager desktop,
+# React 19 for the Next dashboard. That is correct for the apps and leaves a gap for
+# packages that ship their own `.d.ts` files: recharts' types do `import * as React from
+# 'react'`, TypeScript resolves that by walking up from the recharts directory inside
+# the store, and with nothing hoisted there is no `@types/react` anywhere on that path.
+# The symptom is `TS2786: 'XAxis' cannot be used as a JSX component` in a file nobody
+# touched — the same shape of failure §12.24 records, one layer along.
+#
+# Declaring the peer here makes pnpm link the RIGHT @types/react into each recharts
+# instance: the React 18 copy beside the React 18 recharts, the React 19 copy beside
+# the React 19 one. Restoring the global hoist would also silence it, and would put
+# back exactly the bug §12.24 exists to prevent — one version winning for every app.
+packageExtensions:
+  recharts:
+    peerDependencies:
+      "@types/react": "*"
+  react-router-dom:
+    peerDependencies:
+      "@types/react": "*"
