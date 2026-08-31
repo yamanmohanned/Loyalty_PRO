@@ -38,6 +38,12 @@ export const ApiErrorCodeSchema = z.enum([
    * key ceremony, not by showing a failure the manager cannot act on.
    */
   'BACKUP_BLOCKED',
+  /**
+   * A card cannot be issued or used in the state it is in (§12.25). `details`
+   * carries the `CardRejection` so the caller can say WHICH state rather than
+   * showing a generic failure to somebody standing at a counter.
+   */
+  'CARD_NOT_ISSUABLE',
   'INTERNAL_ERROR',
 ]);
 
@@ -80,5 +86,6 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   // it from a generic 500, and no client in this system special-cases it otherwise.
   STORAGE_UNAVAILABLE: 507,
   BACKUP_BLOCKED: 409,
+  CARD_NOT_ISSUABLE: 409,
   INTERNAL_ERROR: 500,
 };

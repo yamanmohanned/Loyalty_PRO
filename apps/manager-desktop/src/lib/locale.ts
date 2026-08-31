@@ -12,9 +12,89 @@ export const locale = {
     discounts: 'قواعد الخصم',
     reports: 'التقارير',
     capture: 'التقاط الفواتير',
+    cards: 'البطاقات',
     backup: 'النسخ الاحتياطي',
     modules: 'الوحدات',
     logout: 'تسجيل الخروج',
+  },
+
+  /** The reporting window, shared by Overview and Reports. */
+  range: {
+    label: 'الفترة',
+    options: {
+      '7d': 'آخر 7 أيام',
+      '30d': 'آخر 30 يوماً',
+      '90d': 'آخر 90 يوماً',
+      '365d': 'آخر سنة',
+    } as const,
+  },
+
+  cards: {
+    title: 'بطاقات الولاء',
+    subtitle: 'الدفعات المطبوعة، ومقدار ما تبقّى منها',
+
+    /* ── The counter that decides when to reorder ─────────────────────────── */
+
+    blanksRemaining: 'بطاقات جاهزة للتسليم',
+    blanksRemainingHint: 'اطلب دفعة جديدة قبل أن تنفد',
+    nextSerial: 'أول مسلسل في الدفعة القادمة',
+
+    /* ── Generating ───────────────────────────────────────────────────────── */
+
+    generate: 'إنشاء دفعة جديدة',
+    quantity: 'عدد البطاقات',
+    quantityHint: 'حدّد العدد فقط — النظام يختار المسلسلات بنفسه، فلا يمكن أن تتداخل دفعتان',
+    note: 'ملاحظة (اختياري)',
+    notePlaceholder: 'اسم المطبعة أو رقم الطلب',
+    generating: 'جاري الإنشاء…',
+    generated: (range: string) => `تم إنشاء الدفعة — المدى ${range}`,
+
+    /* ── Export ───────────────────────────────────────────────────────────── */
+
+    export: 'تنزيل ملف الطباعة',
+    exportManifest: 'تنزيل كشف الدفعة',
+    exporting: 'جاري التحضير…',
+    /**
+     * The warning has to be on the screen, not in a manual. The file necessarily
+     * contains every card number in the batch — that is what a card printer needs —
+     * so the person downloading it is the person who has to delete it afterwards.
+     */
+    exportWarning:
+      'ملف الطباعة يحتوي أرقام كل البطاقات في الدفعة. سلّمه للمطبعة فقط، واحذفه بعد انتهاء الطباعة.',
+    exportedAt: 'آخر تنزيل',
+
+    /* ── Voiding ──────────────────────────────────────────────────────────── */
+
+    voidBatch: 'إتلاف الدفعة بالكامل',
+    voidBatchHint: 'استخدمه إذا تسرّب ملف الطباعة — تُتلَف البطاقات غير المُسلَّمة فقط',
+    voidBatchReason: 'سبب الإتلاف',
+    voidBatchConfirm: (count: number) =>
+      `سيتم إتلاف ${count} بطاقة غير مُسلَّمة. البطاقات التي بيد الزبائن لا تتأثر. متابعة؟`,
+    voidedCount: (count: number) => `تم إتلاف ${count} بطاقة`,
+
+    /* ── The table ────────────────────────────────────────────────────────── */
+
+    colBatch: 'الدفعة',
+    colRange: 'المدى',
+    colQuantity: 'الكمية',
+    colStatus: 'الحالة',
+    colGeneratedBy: 'أنشأها',
+    colGeneratedAt: 'التاريخ',
+    countPrinted: 'جاهزة',
+    countAssigned: 'مُسلَّمة',
+    countLost: 'مفقودة',
+    countReplaced: 'مستبدَلة',
+    countVoid: 'متلَفة',
+    batchStatus: {
+      GENERATED: 'أُنشئت',
+      EXPORTED: 'نُزّل ملفها',
+      RECEIVED: 'استُلمت',
+      RETIRED: 'متلَفة',
+    } as const,
+
+    empty: 'لا توجد دفعات بعد',
+    emptyBody:
+      'البطاقات المطبوعة مسبقاً تُنشأ هنا ثم تُطبع لدى مطبعة. حتى ذلك الحين تطبع المحطة بطاقات ورقية.',
   },
 
   common: {
@@ -92,11 +172,51 @@ export const locale = {
     colJoined: 'تاريخ التسجيل',
     empty: 'لا يوجد زبائن',
     emptyBody: 'يتم تسجيل الزبائن من محطة الولاء عند الصندوق.',
+
+    /* ── List controls ───────────────────────────────────────────────────── */
+
+    categoryAll: 'كل الفئات',
+    categoryRegular: 'اعتيادي',
+    categoryWholesale: 'جملة',
+    categoryVip: 'كبار المشترين',
+    sortLabel: 'الترتيب',
+    sortNewest: 'الأحدث تسجيلاً',
+    sortSpend: 'الأعلى إنفاقاً',
+    sortName: 'الاسم',
+    /** Shown as `عرض 1–25 من 1,847`, so nobody mistakes a page for the whole list. */
+    pageRange: (from: number, to: number, total: number) =>
+      `عرض ${from}–${to} من ${total.toLocaleString('en-US')}`,
+    prev: 'السابق',
+    next: 'التالي',
+    exportCsv: 'تصدير CSV',
+    /**
+     * The export carries phone numbers, which §7.11 calls the one identifier worth
+     * protecting. Said on the screen rather than assumed, for the same reason the
+     * card batch export says it.
+     */
+    exportWarning: 'الملف يحتوي أرقام هواتف الزبائن — تعامل معه بحذر.',
+  },
+
+  /** The rules a specific customer is measured against (customer detail). */
+  appliedRules: {
+    title: 'الخصم المطبَّق على هذا الزبون',
+    /**
+     * v3 has ONE ladder for everybody (§2.3). Said plainly on the screen because the
+     * v1 design had a per-customer override card here, and a manager who remembers it
+     * should be told the answer rather than left hunting for a button.
+     */
+    subtitle: 'تُطبَّق قواعد المتجر العامة على جميع الزبائن — لا توجد استثناءات فردية.',
+    current: 'المستوى الحالي',
+    none: 'لم يبلغ أي مستوى بعد',
+    capNote: (cap: string) => `الحد الأقصى المطلق للخصم: ${cap}`,
+    edit: 'تعديل قواعد الخصم',
   },
 
   customer: {
     balanceThisPeriod: 'الرصيد التراكمي (هذه الفترة)',
     derivedNote: 'محسوب من الفواتير — غير مخزّن',
+    invoices: 'فاتورة',
+    details: 'التفاصيل',
     toNextTier: 'للوصول إلى خصم',
     allTiersReached: 'تم بلوغ جميع المستويات',
     vouchers: 'القسائم',
@@ -245,6 +365,17 @@ export const locale = {
     whyHard:
       'إذا احترق هذا الجهاز أو سُرق أو تعطّل قرصه، وكان المفتاح موجوداً عليه فقط، فإن كل النسخ الاحتياطية تصبح غير قابلة للاستعادة نهائياً. لا يستطيع أحد فتحها — لا نحن ولا Google ولا أي شخص آخر.',
     whyWorse: 'هذا أسوأ من عدم وجود نسخ احتياطية أصلاً، لأنك ستعتمد عليها.',
+    /**
+     * The consequence got more expensive with pre-printed cards (§12.25).
+     *
+     * §12.11 already forbade regenerating `QR_TOKEN_SECRET` on a machine whose cards
+     * are printed. It now also destroys blank stock in a drawer that no customer has
+     * ever touched — cards the merchant paid a vendor to print. Said on the screen,
+     * not only in a manual, because the person who would do it is the person reading
+     * this one.
+     */
+    whyCards:
+      'ملاحظة مهمة: لا تُعِد توليد مفاتيح الخادم بعد طباعة بطاقات الولاء. تغييرها يُبطل كل البطاقات المطبوعة — بما فيها البطاقات الجاهزة في الدرج التي لم تُسلَّم لأي زبون بعد.',
 
     generate: 'توليد المفتاح',
     generating: 'جاري التوليد…',
@@ -308,6 +439,16 @@ export const locale = {
     captureHealth: 'صحة الالتقاط',
     attributionRate: 'نسبة الارتباط بالزبائن',
     averageBasket: 'متوسط قيمة الفاتورة',
+
+    /* ── Breakdowns ──────────────────────────────────────────────────────── */
+
+    categoryTitle: 'توزيع الزبائن حسب الفئة',
+    categoryEmpty: 'لا يوجد زبائن مسجّلون بعد',
+    tierTitle: 'أداء مستويات الخصم',
+    tierSubtitle: 'عدد الزبائن الذين بلغوا كل مستوى في الفترة الحالية',
+    tierEmpty: 'لم تُحدَّد مستويات خصم بعد',
+    tierReached: (count: number) => `${count} زبون`,
+    ofThreshold: 'عتبة',
   },
 
   /**

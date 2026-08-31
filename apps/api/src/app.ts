@@ -11,6 +11,7 @@ import { registerRealtime } from './plugins/realtime';
 import { registerStation } from './plugins/station';
 import { authRoutes } from './routes/auth.routes';
 import { backupRoutes } from './routes/backup.routes';
+import { cardRoutes, customerCardRoutes } from './routes/cards.routes';
 import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
 import { flagRoutes } from './routes/flags.routes';
@@ -209,6 +210,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     async (api) => {
       await api.register(authRoutes, { prefix: '/auth' });
       await api.register(customerRoutes, { prefix: '/customers' });
+      await api.register(customerCardRoutes, { prefix: '/customers' });
+      await api.register(cardRoutes, { prefix: '/cards' });
       await api.register(ingestRoutes, { prefix: '/ingest' });
       await api.register(scanRoutes, { prefix: '/scan' });
       await api.register(voucherRoutes, { prefix: '/vouchers' });

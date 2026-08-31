@@ -21,6 +21,15 @@
 6. **Evidence before claims.** Never report work complete without running it (v1 §10 stands).
 7. **RTL Arabic first** on every surface (v1 stands).
 8. **One open blocker exists (§9).** Build around it; do not assume it resolved.
+9. **Controls decay; re-check them by trigger, not by reading.** *Not one was a missing
+   control — every one was a control that had stopped matching the system around it.*
+   That was the finding of §12.23 and it is a recurring pattern, not a one-off. A control
+   is written against the system as it stands and goes on **looking** correct in review
+   long after the system has moved, so line-by-line review cannot find this class.
+   **The trigger:** whenever a change alters what the service **SERVES**, what **ROLES**
+   exist, or what a mitigation **ASSUMES**, re-check the controls that depended on the old
+   shape. Not the changed code — the controls whose correctness quietly rested on it.
+   Worked examples in §12.23.
 
 ---
 
@@ -288,6 +297,12 @@ reconciliation against collected slips.
 **Retained:** `merchant`, `branch`, `user`, `customer` (add `barcode_token` unique),
 `audit_log`, `notification_log`.
 
+**Added 2026-08-31 by §12.25 (pre-printed cards, design proposed — not yet built):** a
+`card` table and a `card_batch` table. The card number moves off `customer.barcodeToken`
+and onto the card row, because a customer may hold several cards over time and a replaced
+card has to stay rejectable by number. Existing customers backfill to one `ASSIGNED` card
+each. See §12.25 for the states, the constraints, and what enforces them.
+
 ### 5.3 Derivation rule (unchanged and critical)
 **Cumulative balance is NEVER stored as a number.** It is always computed from `transaction`
 rows within the active period. Stored aggregates drift and corrupt; the source log does not lie.
@@ -320,6 +335,14 @@ then send Enter. So the station needs only a focused input field. No device-spec
    reduces enrollment. Generates a permanent barcode, prints the card.
 5. **Card reprint / lookup** — search by name or phone → reprint **the same code**, never a new
    one (the customer must not lose their history).
+
+> **Superseded in part, 2026-08-31 — see §12.25.** The merchant has moved to durable
+> pre-printed cards carrying a serial he orders in batches, so #4's *generate a number and
+> print it* becomes *assign a card that already exists*: the operator enters name and phone,
+> then **scans the blank card being handed over** rather than typing its serial. #5 is
+> unchanged, and the thermal printing in §6.3 stays as the fallback for a customer who needs
+> a card when no blank is to hand. §12.25 carries the barcode format, the card states and
+> the batch rules.
 
 ### 6.3 Printing
 - **Customer card** and **discount slip** print to the station's own small thermal printer
@@ -452,6 +475,12 @@ Use these deliberately — they materially improve accuracy and reduce rework.
 - Do NOT build the Expo mobile app or the coupon engine.
 - Do NOT expose any settings on the Loyalty Station.
 - Do NOT ship a percentage discount without an absolute value cap.
+- Do NOT rebuild a screen from the Stitch exports without reading §12.26 first — they
+  describe the v1 product, and six of the thirteen are for things v3 discarded.
+- Do NOT reintroduce per-customer discount overrides. §2.3's minimum, maximum and
+  absolute cap only bound a discount while there is one ladder for them to bound.
+- Do NOT restore `hoist-pattern[]=*` in `.npmrc`. If a package's own types stop
+  resolving, add it to `packageExtensions` (§12.24).
 
 ---
 
@@ -1470,6 +1499,10 @@ write a "storage level changed" row, and a trail that fills with boot noise stop
 read. UNKNOWN → WARN and UNKNOWN → CRITICAL still announce, so a machine that boots
 already in trouble says so on its first pass.
 
+**Confirmed by the operator, 2026-08-31.** Both halves stand: worsening immediately,
+recovery only past the re-arm bar, and UNKNOWN → OK staying silent. The audit trail
+exists to be read, and boot noise is what makes people stop reading it.
+
 **One classifier, two delivery paths, and they need each other.** The server classifies;
 no client re-derives a level from `freeBytes`, or the two would disagree at exactly the
 boundary where disagreement is most confusing. Events fire on change only — a per-minute
@@ -1515,6 +1548,34 @@ Station endpoints, backup and its key ceremony, the scheduler, and the realtime 
 Seven defects, and the pattern among them is worth more than the list: **not one was a
 missing control. Every one was a control that had stopped matching the system around
 it.**
+
+#### The pattern, and the trigger it names
+
+The findings below are the evidence; this is the part that generalises, and §0 rule 9
+now carries it. Nothing in a line-by-line reading of the CSP line, the route definitions,
+or the WebSocket handshake was wrong — each was still exactly what its author wrote, and
+each would pass review again today. What changed was around them.
+
+**The trigger: whenever a change alters what the service SERVES, what ROLES exist, or
+what a mitigation ASSUMES, the controls that depended on the old shape must be
+re-checked.**
+
+- **SERVES** — §12.3 made this process serve the Station's HTML and JavaScript on the same
+  port. The content security policy had been switched off with a comment saying the
+  service returns only JSON, which was true on the day it was written.
+- **ROLES** — six routes named no roles, which means every role, which was harmless while
+  every role was a dashboard role. This same pass added a fourth, `AGENT`, and the set the
+  routes were implicitly trusting silently grew.
+- **ASSUMES** — the cleanest of the three. §12.9 accepted a token in the query string,
+  because a browser cannot set a header on an upgrade, and mitigated it with a short TTL.
+  The mitigation was sound and remained sound; it simply stopped applying once Fastify's
+  request logging put that token into a world-readable file. Fifteen minutes is a real
+  defence against an attacker who must catch the token in flight, and no defence at all
+  against one who can read a file at leisure.
+
+Each of these is invisible to review of the diff that caused it, because **the change that
+breaks the control does not touch the control**. The re-check therefore has to be triggered
+by the *kind* of change, which is why it is a rule in §0 rather than something to notice.
 
 #### Security
 
@@ -1637,11 +1698,388 @@ JSX component` in a package that had not been touched.
 which was an intention rather than a setting: `hoist-pattern` was left at its default of
 `*`. It now excludes `@types/*`, so each app sees the types it actually declares.
 
+**The two `hoist-pattern` lines are one setting, and collapsing them restores the bug.**
+`hoist-pattern[]=*` followed by `hoist-pattern[]=!@types/*` reads like a contradiction and
+is not: the first restores pnpm's default, the second carves `@types/*` back out of it.
+Deleting the negation as redundant — or tidying the pair down to the single line that
+"means the same thing" — reinstates exactly the condition above. It will not fail at the
+point of the edit. It fails later, in whichever app loses the hoist race after the next
+unrelated dependency change, with a `TS2786` in a file nobody touched. `.npmrc` carries
+the reasoning in its own comment block, in front of whoever is holding the file; this
+paragraph is the copy that survives a rewrite of that file.
+
 The failure is the interesting part. A dependency deleted in one package silently
 retyped another, the error named a file nobody had edited, and nothing in the message
 pointed at a lockfile. Changing the hoist pattern requires a full reinstall, which also
 clears the generated Prisma client — `pnpm --filter @walaa/api db:generate` afterwards, or
 every test fails with "did not initialize yet".
 
+The shape is §0 rule 9 one layer down, in the build inputs rather than the controls:
+nothing declared the dependency, so nothing flagged its removal, and what changed was
+around the code that broke.
+
 React 18 and 19 still coexist, so §13.7's `declaration: false` workaround remains
 load-bearing and stays.
+
+#### Addendum, 2026-08-31: the fix was verified on one app, and it broke another
+
+Excluding `@types/*` from the hoist fixed the Station and left the manager desktop
+failing to compile — `TS2786: 'XAxis' cannot be used as a JSX component`, and the same for
+every recharts element and for `react-router-dom`'s `NavLink` render prop. It was found
+while building §12.25, on `main`, with nothing of §12.25's applied: **the previous session
+verified the hoist change against the app that had broken and not against the ones that
+had not.**
+
+The mechanism is the mirror image of the original bug. An app resolves `@types/react`
+from its own `node_modules`, which is why the apps were fixed. A **package that ships its
+own `.d.ts`** does not: recharts' types say `import * as React from 'react'`, and
+TypeScript resolves that by walking up from recharts' own directory inside the pnpm store.
+With `@types/*` no longer hoisted there is no `@types/react` anywhere on that path, so
+`React.ReactNode` resolved to nothing at all. Before the change there was exactly one —
+the Expo app's React 18 — which is the bug §12.24 exists to describe. Both states are
+wrong; they are wrong in opposite directions.
+
+The fix is neither hoist pattern. `pnpm-workspace.yaml` now declares `@types/react` as a
+peer dependency of `recharts` and `react-router-dom` through `packageExtensions`, so pnpm
+links **the right one into each instance**: the React 18 types beside the React 18
+recharts, the React 19 types beside the React 19 one. Both copies genuinely exist in this
+workspace and both are now correct, which no single hoisted version could be.
+
+**Restoring `hoist-pattern[]=*` would also silence it**, and would put back the original
+bug. If a third-party package's types stop resolving, add it to `packageExtensions` — do
+not touch `.npmrc`.
+
+The general shape is §0 rule 9 once more, and it is worth naming because this is the
+second time in two sessions: **a fix verified only where the symptom appeared is a fix
+verified nowhere else.** The change altered what every package could see; the re-check
+owed was every package, not the one that had complained.
+
+### 12.25 Pre-printed physical cards — 2026-08-31
+*(merchant requirement, relayed by the operator. **The requirement is settled; the design
+below is proposed and awaiting confirmation** — the operator asked to see the barcode
+format, the schema, and the two enforcement mechanisms before any code is written.)*
+
+The merchant will hand out durable pre-printed cards — ivory or PVC — carrying a serial he
+orders in batches, instead of a thermal card printed at the moment of registration.
+Registration changes from *generate a number and print it* to *assign a card that already
+exists*. This supersedes §6.2 #4 as the **primary** path. §6.2 #5 (a reprint returns the
+same number) is unchanged, and §6.3's thermal printing survives in full as the fallback — a
+customer must never be turned away because the stock drawer is empty.
+
+**The rule the whole design hangs on: the customer record is the identity, the card is only
+a credential.** Balance and history belong to the customer and follow them across any number
+of cards. Any design in which history lives on the card is wrong, and the schema below is
+shaped to make that arrangement unrepresentable rather than merely discouraged.
+
+#### The barcode value — no geometry change at all
+
+Sixteen digits, Code 128C, exactly as §12.12 froze it. Only the **meaning** of the digits
+changes, and only for pre-printed cards:
+
+```
+  card.v2  (pre-printed)     000042 1739205846
+                             └────┘ └────────┘
+                             serial   HMAC check
+                             6 digits  10 digits
+
+  card.v1  (thermal, unchanged)  4821009377 461152
+                                 └────────┘ └────┘
+                                  random     truncated HMAC
+```
+
+| | |
+|---|---|
+| Digits | 16 — unchanged |
+| Code 128C data characters | 8 — unchanged |
+| **Modules** | **143**, including both 10-module quiet zones — unchanged |
+| Width at 0.33 mm | 47.19 mm — unchanged; 58 mm paper keeps about 10.8 mm of margin |
+
+Keeping the total at sixteen is the point. The module-width dial stays untouched, the
+`design/receipts/` fixtures stay valid, the Station's *submit on sixteen digits* rule
+(§12.13) still self-terminates a scan, and the 4-4-4-4 grouping a customer reads down a
+phone line still works. Leading zeros cost nothing: Code 128C encodes `00` as one character
+like any other pair, and `normalizeCardNumber` has always carried the value as a string.
+
+**The check code now carries all of the security, which is why it takes ten digits and not
+six.** §12.12's six-digit signature was one of *two* barriers — a forger also had to land on
+one of a few thousand live values inside a 10^10 random space. A serial is public by design:
+it is printed large on the card so the merchant can order, count and support by it, so
+anyone holding one card knows a valid serial and can read off its neighbours. That second
+barrier is gone, so the signature has to absorb it. Ten digits give one guess in 10^10,
+which against the 120/min rate limit on the resolve path is roughly **79 years of continuous
+attack** for a single expected forgery — and that attack needs a station credential on the
+shop LAN before it can begin.
+
+Stated honestly: this is weaker *in the abstract* than v1's two barriers multiplied
+together, and far stronger than either barrier alone. The trade buys a number that
+identifies its own serial and batch, so a support call can cross-check the printed serial
+against the scanned digits, and a mis-keyed digit is caught rather than silently resolving
+to a different customer.
+
+**What the check code does not fix.** A card someone finds on the floor is a genuine card,
+and no cryptography changes that. The answer to a lost card is the `LOST` state below and
+how quickly it is reported; the exposure is one basket's discount plus sight of a balance,
+bounded by a phone call. The HMAC exists to stop a forged card being *manufactured* from a
+serial, which is the attack a bare sequential number would have opened.
+
+**Two schemes coexist and both stay valid.** `card.v1` (random payload) keeps minting for
+every thermally printed card, unchanged; `card.v2` is only for pre-printed stock.
+Verification tries both — two in-memory HMACs — and the `card` row is the authority on
+identity either way. Nothing already in a customer's wallet stops working.
+
+**Consequence for the secret, and it is sharper than before.** The check code derives from
+`QR_TOKEN_SECRET` through a domain-separated subkey. §12.11 already forbids regenerating
+that secret on a machine whose cards are printed; with pre-printed stock the same mistake
+also destroys **blank cards sitting in a drawer that no customer has ever touched**. The
+prohibition is now about physical inventory, not only about issued cards.
+
+**The batch export file is the sensitive artefact of this whole feature.** It has to contain
+every card number in the range or the card printer cannot print the barcodes — which means
+the printing vendor necessarily learns every number in the batch. Two things make that
+survivable: an unassigned card is worth nothing until somebody physically hands it over at a
+station, and a leaked batch can be voided wholesale. Both belong in the setup guide, along
+with deleting the file once printing is done. Generation and export are audited.
+
+#### Card lifecycle
+
+The states are the merchant's, unchanged in name: `PRINTED` · `ASSIGNED` · `LOST` ·
+`REPLACED` · `VOID`. Legal transitions, and nothing else:
+
+```
+  PRINTED ──assign──► ASSIGNED ──reported lost──► LOST ──replacement──► REPLACED
+     │                    └────────replaced (damaged)──────────────────► REPLACED
+     └──void (misprint)─► VOID
+```
+
+`PRINTED` and `VOID` have no owner; `ASSIGNED`, `LOST` and `REPLACED` all keep the customer
+id, because who held a dead card is exactly what a support call asks about. Nothing returns
+to `PRINTED`, and nothing leaves `VOID` or `REPLACED`.
+
+Every non-`ASSIGNED` state is refused at the scan with **its own message**, never a generic
+error — a card replaced last week and a card never issued are different conversations at the
+counter. The one deliberate exception: an unknown number and a failed check code answer
+identically. Distinguishing them would tell an attacker their check digits were right, which
+is the same oracle §12.19's constant-time comparison refuses to be.
+
+#### Two database-level guarantees
+
+**Assignment is one conditional UPDATE**, the shape v1 §13.9 already uses for coupon
+redemption: every precondition sits in the WHERE clause —
+`SET customerId=?, status='ASSIGNED' WHERE id=? AND status='PRINTED' AND customerId IS NULL`
+— and the service asserts that exactly one row changed. A second attempt matches zero rows,
+so an assigned card can never be reassigned and one customer's details can never land on
+another's card. A read-then-write would let two stations both believe they held a blank.
+
+Alongside it, a **partial unique index** — `UNIQUE(merchantId, customerId) WHERE status =
+'ASSIGNED'` — makes "one live card per customer" a fact the database keeps rather than a
+rule the code remembers. It has a useful side effect: a replacement *must* retire the old
+card before the new one can be assigned, because the index refuses the intermediate state.
+Prisma cannot express a partial unique index, so it lives in the migration SQL, which is
+already how this project applies migrations (§12.11).
+
+**Batch ranges cannot overlap, because a range is not a claim.** Every serial in a batch is
+materialised as a `card` row under `UNIQUE(merchantId, serial)`, so a second batch covering
+the same numbers fails on insert — not on a validation that code might skip. Generation runs
+in one transaction that reads `MAX(serial)`, allocates `[max+1, max+quantity]`, and writes
+the card rows and the batch row together. **The merchant chooses the quantity and never the
+starting serial**, which removes the collision he is worried about instead of warning him
+about it. Serial is `NULL` for thermal cards: they have no physical inventory to track, and
+letting them consume serials would corrupt the "how many blanks are left" count that the
+batch screen exists to answer.
+
+#### Open — needs an answer before build
+
+- **May a `LOST` card be restored to `ASSIGNED`?** "I found it" is a real support call. The
+  partial index already makes the dangerous version impossible — a customer who has been
+  issued a replacement cannot hold a second live card — so allowing it is safe wherever it
+  is possible at all. Proposed: allow, audited. Not implemented without a decision.
+- **Serial capacity is 999,999** at six digits, with a hard refusal rather than a rollover.
+  Confirm that ceiling is comfortable.
+
+#### Answered, and built — 2026-08-31
+
+*(operator answers to the two open questions above, plus what the implementation
+found. The design in this section is no longer a proposal: it is what the code does.)*
+
+**A `LOST` card may be restored, audited, with an actor and a stated reason.**
+Refusing would push staff into issuing a replacement nobody needed — which costs a
+physical card and retires a good one. Building it surfaced something better than the
+partial index, though: replacing a card retires it to `REPLACED`, so the **state guard
+answers first**, and it answers with the reason that is actually true for the person at
+the counter — *this card was replaced* — rather than the index's blunter *you already
+hold a live card*. The index stays as the backstop for any later path that leaves a card
+`LOST` while its holder acquires another. Nothing reaches it today, which is the correct
+order of defences rather than a redundancy, and the test says so in as many words.
+
+**999,999 is the ceiling, with a hard refusal and no rollover.** Enforced in three
+places on purpose: `mintPrePrintedCardNumber` throws, `generateCardBatch` refuses with a
+message naming the ceiling, and a CHECK constraint on `card_batch` makes a row past it
+unwritable. A refusal stops the line and produces a phone call; a rollover silently
+re-issues a serial that is already in somebody's wallet, and the first anyone would know
+is two people holding one number.
+
+**The `QR_TOKEN_SECRET` warning now lives where the person who could do it is looking.**
+It is on the key-ceremony screen itself — not only in §12.11 and not only in a manual —
+because the screen is where a manager thinks about server keys. Wording:
+*«لا تُعِد توليد مفاتيح الخادم بعد طباعة بطاقات الولاء. تغييرها يُبطل كل البطاقات
+المطبوعة — بما فيها البطاقات الجاهزة في الدرج التي لم تُسلَّم لأي زبون بعد.»* The
+handover doc repeats it.
+
+**"Void the entire batch" is a single action on the batch screen.** The remedy for a
+leaked export file only counts if somebody will actually perform it, and a merchant told
+to void a thousand cards one at a time will not. It touches `PRINTED` stock only: a card
+already in a customer's hand is not collateral for a spill of numbers, and taking it away
+would punish them for it.
+
+#### Two defects the build surfaced, neither in the card code
+
+**The card number printed backwards on every screen that showed it.** Under the RTL page
+direction the bidi algorithm lays the four groups out right-to-left, so
+`0000 0122 6577 3350` rendered as `3350 6577 0122 0000`. It had been wrong since §12.12
+and no test could see it — the string is correct, the DOM is correct, and only the pixels
+lie. The whole justification for a sixteen-digit number over the v1 token was that a
+customer could **read it down a phone line** (§12.12), so this quietly removed the reason
+the format exists. Every card-number display now carries `dir="ltr"`, and the comment at
+each site says why so a later tidy-up does not strip it as noise.
+
+Found by looking at the screen after registering a customer, which is §12.19's lesson
+arriving again: *a screen is not verified until someone looks at it.*
+
+**The manager app was carrying its own copy of the customer DTO.** Renaming
+`barcodeToken` → `cardNumber` in `shared-types` did not break `Customers.tsx`, because
+the local `interface CustomerDto` went on describing a shape the server had stopped
+sending. Exactly the drift §12.23 found in the manager's login, where a copied `Role`
+union quietly disagreed with the API about which roles exist. **A duplicated type does
+not fail loudly; it fails by staying plausible.** It imports `Customer` from
+`@walaa/shared-types` now, as CLAUDE.md §9 required all along.
+
+#### What is verified, and what is not
+
+Verified against the running service and both real clients: a batch of five generated
+(range `000001 — 000005`, start computed, not chosen); the export produced with all five
+numbers and a manifest carrying none of them; a blank card scanned at the Station showing
+*«بطاقة جديدة غير مُسلَّمة — بطاقة رقم 000001»* and carrying that card into registration;
+the customer registered onto it with no print dialog and *«سلّم البطاقة للزبون»*; the
+card reported lost and re-scanned as `CARD_REJECTED / LOST`; replaced with `000002`,
+after which `000001` scans as `CARD_REJECTED / REPLACED` naming its successor and the new
+card resolves to the same customer with their history intact; and the manager's batch
+screen reporting `جاهزة: 3 · مُسلَّمة: 1 · مستبدَلة: 1` with the next serial at `000006`.
+
+386 tests pass (317 API, 69 shared-types), typecheck and lint clean across all six
+packages.
+
+**Not verified, and it cannot be from here:** a real card printed by a real vendor on
+real PVC, read by a real scanner. The 0.33 mm module is decided by their printer, ink and
+card surface. That is the checklist item, not a code item.
+
+### 12.26 The Stitch exports, and what they are authoritative for — 2026-08-31
+*(operator ruling, after the fidelity audit. Supersedes CLAUDE.md §6's instruction to
+align implementation to the exports, and retires §6.7 #1 and #2 outright.)*
+
+The Stitch exports arrived in `stitch_wala_a_loyalty_management_dashboard/`: thirteen
+screens, a `design.md`, and a machine-readable design system. The audit found that they
+describe **the v1 product**. They were generated before the pivot, so six of the thirteen
+are screens for things v3 deliberately stopped building — the coupon redemption flow, the
+Expo assistant's four screens, and a customer detail carrying a coupon list and a
+`طريقة الربط: QR / رقم الهاتف` column. CLAUDE.md §6 says to align implementation to the
+exports and then apply §6.7; **followed literally, that instruction walks six screens
+backwards.**
+
+This is §0 rule 9 in the design layer. The Stitch project was the correct design source
+right up until §2 changed what the product does and §12.24 deleted the app four of those
+screens belong to. Nothing about the exports decayed; what they described did.
+
+#### The ruling
+
+**The exports are authoritative for LAYOUT and VISUAL GRAMMAR only, on the four screens
+that survive** — Overview, Customers, Customer detail (structure), and the dashboard
+Login. Their content model is discarded entirely.
+
+Explicitly **not** to be regressed to match them, because matching would remove working
+v3 behaviour: discount type / min / max / **absolute cap** / the live margin warning
+(§2.3 — `_4` has none of them, and "fidelity" there would strip the financial
+guardrails); voucher reconciliation and capture health in Reports; phone-only customer
+search with the uniqueness hint (§1.4); self-hosted fonts; the absence of spinners; the
+storage banner. The dashboard login stays phone/username — the export asks for an email
+and there is no email anywhere in the user model.
+
+**Where the exports disagree among themselves, the implementation wins.** The nav rail
+appears in three incompatible versions — five items in `_2`, six in `_1`/`_3`/`_4`/`_5`
+(including a `الفروع` that does not exist and an `الأعضاء` that renames `الزبائن`), and
+seven in the app. The seven are correct. Vocabulary standardises on **الزبائن**, never
+الأعضاء.
+
+**Tokens and fonts follow §6.2 and §6.3, which §6 already settled.** Worth recording
+*why* it matters here: every export ships the §6.2 tokens **and** a full Material-3
+palette that contradicts them — `primary: #005440` against the mandated accent `#0F6E56`,
+which appears demoted to `primary-container`, and `error: #ba1a1a` against signal-red
+`#B0322E`. So the exported class names cannot be lifted verbatim even where the layout
+is right. Three screens (`_4`, `_7`, `_9`) set body text in **IBM Plex Sans** — the Latin
+family, not IBM Plex Sans **Arabic** — with Plus Jakarta Sans and JetBrains Mono
+alongside; Arabic there renders through silent browser fallback. That is a defect in the
+export, not a design decision. Icons stay `lucide-react`, which `design.md` §8 asks for
+itself. Nothing from an export `<head>` ships: every one of them loads
+`cdn.tailwindcss.com`, Google Fonts, and avatar images from `lh3.googleusercontent.com`,
+and §12.3 is local-only.
+
+#### §6.7 #1 and #2 are retired
+
+**#1, the «التكاملات» screen: retired.** It asked for per-branch operating mode,
+connection status and sync health, with API and DB-Agent shown as inactive placeholders.
+The **Capture screen is its v3 successor** and carries exactly that — mode, agent status,
+codepage, calibration. A separate Integrations screen would be a second door onto the
+same room, and the placeholders it existed to show are §12.4's out-of-scope tiers.
+Recorded here so nobody builds it from the v1 spec later.
+
+**#2, the dual amount states: moot.** It asked the mobile invoice screen to render both
+auto-captured and manual amount entry. In v3 the amount arrives from the print stream and
+no operator screen enters it at all; §13.6's `amount: null` path is handled by the agent
+and the manager's calibration flow, not by a till-side form.
+
+**#3 (sync indicators) and #4 (the RTL pass) stand**, and #4 earned its keep this session
+— see the card number rendering backwards in §12.25.
+
+#### The v3-only surfaces have no design reference, and that is accepted
+
+The Loyalty Station in its entirety — including **the main scan screen, the most-used
+screen in the product** — plus Capture and its calibration flow, Backup, the key
+ceremony, Modules, the storage banner, and the discount settings that actually enforce
+§2.3, were all built directly against the §6 tokens with no Stitch screen behind them.
+*(Operator ruling: no regeneration cycle now. Revisit only if the merchant objects to a
+specific screen.)*
+
+#### The four gaps where the exports were genuinely ahead — built
+
+1. **A reporting window.** Overview and Reports both hardcoded `range=30d` while the API
+   had accepted `7d | 30d | 90d | 365d` since it was written; the control was the only
+   missing piece, and a manager asking about last quarter had no way to ask it. A
+   segmented control rather than a date picker, because the server takes four fixed
+   windows and a calendar would promise precision it does not have.
+2. **The customer list.** This screen was a *lookup* — one phone in, one customer out —
+   which answers "who is this?" and cannot answer "who are my customers?".
+   `CustomerListQuerySchema` had existed since v1 **with no endpoint behind it**. Now
+   `GET /customers` with category filter, sort, and paging, plus an audited CSV export.
+   Sorting by spend cannot be an ORDER BY — cumulative spend is derived and never stored
+   (§5.3) — so it ranks from one grouped query over the active period, ties broken by
+   registration date so paging stays stable.
+3. **Two report breakdowns**: customers by category, and how many customers reached each
+   discount tier in the current period. Both count people rather than summing money, so
+   §13.5's Int32 caution does not reach them — stated because the two look alike and only
+   one of them would. Flat horizontal bars, not pies (§6).
+4. **The applicable-rules card on customer detail.** The export has a *per-customer
+   override* card here, and **v3 removed `customer_override_rule`** along with the coupon
+   model it belonged to. Rebuilding it would reopen a path around §2.3's minimum, maximum
+   and absolute cap — all three only bound a discount if there is a single ladder for them
+   to bound. So the card shows the live ladder with the customer's current tier
+   highlighted and says plainly that the shop's rules apply to everybody, which answers
+   the manager who remembers the old screen instead of leaving them hunting for a button.
+   **If per-customer overrides are ever wanted back, that is a discount-model decision,
+   not a design-fidelity one.**
+
+#### A defect the gap work surfaced
+
+**Two bare adjacent numbers read as one.** The category breakdown rendered a count and a
+share side by side — `9` and `75٪` — and the pair displayed as `975٪`. Found by looking
+at the panel, not by any test: the DOM was correct and only the reading was wrong. The
+count carries its unit now (`9 زبون`) and the share is set apart. On a panel that is
+nothing but numbers, adjacency is ambiguity.

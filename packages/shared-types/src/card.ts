@@ -105,3 +105,83 @@ export function cardNumberSignature(cardNumber: string): string | null {
   if (digits.length !== CARD_NUMBER_DIGITS) return null;
   return digits.slice(CARD_PAYLOAD_DIGITS);
 }
+
+/* ── card.v2 — pre-printed cards (§12.25) ─────────────────────────────────── */
+
+/**
+ * The second card scheme, for the durable pre-printed cards the merchant orders in
+ * batches. Same sixteen digits, same Code 128C, same 143 modules — **only the
+ * meaning of the digits changes**, and only for cards that came off a card printer:
+ *
+ * ```
+ *   000042 1739205846
+ *   └────┘ └────────┘
+ *   serial   check code
+ * ```
+ *
+ * The serial is what is printed large and human-readable on the card, and what the
+ * merchant orders, counts and takes support calls about. The check code is a
+ * truncated HMAC over it.
+ *
+ * ## Why the check code is ten digits when v1's signature was six
+ *
+ * v1's six digits were one of *two* barriers: a forger also had to land on one of a
+ * few thousand live values inside a 10^10 random space. A serial is public by
+ * design — it is printed on the card precisely so people can read it — so anybody
+ * holding one card knows a valid serial and can count to its neighbours. That second
+ * barrier is gone here, and the check code has to absorb it.
+ *
+ * Ten digits give one guess in 10^10. Against the rate limit on the resolve path
+ * that is on the order of a human lifetime of continuous attack for a single
+ * expected forgery, and the attacker needs a station credential on the shop's LAN
+ * before they can begin.
+ *
+ * What this does **not** defend against is a card someone finds on the floor: that
+ * is a genuine card, and no arithmetic changes it. The answer to a lost card is the
+ * `LOST` state and how fast it is reported. The check code exists to stop a card
+ * being *manufactured* from a serial, which is the attack a bare sequential number
+ * would have opened.
+ *
+ * Signing and verification live in the API (`lib/card-number.ts`) because they need
+ * the server secret. This module holds only the shape, which the Station also needs.
+ */
+
+/** Digits of human-readable serial at the front of a `card.v2` number. */
+export const CARD_SERIAL_DIGITS = 6;
+/** Digits of truncated HMAC after it. */
+export const CARD_CHECK_DIGITS = CARD_NUMBER_DIGITS - CARD_SERIAL_DIGITS;
+
+/**
+ * Highest issuable serial: 999,999.
+ *
+ * Allocation refuses at the ceiling rather than rolling over. A refusal stops the
+ * line and gets a phone call; a rollover silently re-issues a serial that is already
+ * in a customer's wallet, and the first anyone would know of it is two people
+ * holding the same card number.
+ */
+export const MAX_CARD_SERIAL = 10 ** CARD_SERIAL_DIGITS - 1;
+
+/** `42` → `000042`. The form printed on the card and quoted in support. */
+export function formatCardSerial(serial: number): string {
+  return String(serial).padStart(CARD_SERIAL_DIGITS, '0');
+}
+
+/**
+ * The serial encoded in a `card.v2` number.
+ *
+ * Meaningful **only** for a number already established as scheme v2 — the leading
+ * six digits of a `card.v1` number are random and mean nothing. Callers verify the
+ * scheme first; this is the shape, not the check.
+ */
+export function cardNumberSerial(cardNumber: string): number | null {
+  const digits = normalizeCardNumber(cardNumber);
+  if (digits.length !== CARD_NUMBER_DIGITS) return null;
+  return Number.parseInt(digits.slice(0, CARD_SERIAL_DIGITS), 10);
+}
+
+/** The check-code half of a `card.v2` number, or null if the shape is wrong. */
+export function cardNumberCheck(cardNumber: string): string | null {
+  const digits = normalizeCardNumber(cardNumber);
+  if (digits.length !== CARD_NUMBER_DIGITS) return null;
+  return digits.slice(CARD_SERIAL_DIGITS);
+}

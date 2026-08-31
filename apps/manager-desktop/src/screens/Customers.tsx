@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowRight, Search, Users } from 'lucide-react';
-import { formatCardNumber } from '@walaa/shared-types';
+import { ArrowRight, Download, Search, Users } from 'lucide-react';
+import { formatCardNumber, type Customer } from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
 import {
+  Button,
   Card,
   CardHeader,
   Chip,
@@ -14,17 +15,44 @@ import {
   Input,
   Money,
   Notice,
+  Select,
+  cn,
   PageHeader,
   SkeletonTable,
 } from '../components/ui';
 
-interface CustomerDto {
-  id: string;
-  name: string;
-  phone: string;
-  category: 'REGULAR' | 'WHOLESALE' | 'VIP';
-  barcodeToken: string;
-  createdAt: string;
+/**
+ * Imported, never redeclared (CLAUDE.md §9).
+ *
+ * This was a local copy until §12.25 renamed the field it carried, and the rename
+ * did not break here — the duplicate went on describing a shape the server had
+ * stopped sending. That is the same drift §12.23 found in the manager's login, where
+ * a copied `Role` union quietly disagreed with the API about which roles exist. A
+ * duplicated type does not fail loudly; it fails by staying plausible.
+ */
+type CustomerDto = Customer;
+
+/** The live rule ladder and the guardrails around it (`GET /discount`). */
+interface DiscountConfigResponse {
+  settings: { absoluteMaxDiscountValue: number; discountType: string } | null;
+  rules: Array<{ thresholdAmount: number; discountType: string; discountRate: number }>;
+}
+
+/** What `GET /customers` returns. Rows carry the derived balance, never a stored one. */
+interface CustomerListResponse {
+  customers: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    category: string;
+    cardNumber: string | null;
+    cumulativeAmount: number;
+    transactionCount: number;
+    createdAt: string;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 interface BalanceDto {
@@ -37,35 +65,95 @@ interface BalanceDto {
 }
 
 /**
- * Customer lookup.
+ * The customer list.
  *
- * **Search is by phone number only.** A name is not unique — two "حسين علي" in one
- * neighbourhood is unremarkable — so a name search would return a list the manager
- * has to disambiguate, and at a counter that is worse than no search at all. The
- * phone number, and the card barcode, are the two identifiers that resolve to
- * exactly one account.
+ * Until now this screen was a **lookup**: one phone number in, one customer out. That
+ * answers "who is this?" and cannot answer "who are my customers?", which is the
+ * question a manager opens this screen to ask. The Stitch design had the list all
+ * along and so did `CustomerListQuerySchema`; only the endpoint and the table were
+ * missing.
+ *
+ * **The filter is a phone PREFIX, and there is still no name search.** CLAUDE.md §1.4
+ * bans name lookup as an *identification* method, and that ban holds where it was
+ * aimed — the scan path, where a queue is waiting and only a unique identifier will
+ * do. Narrowing a list you are already looking at is a different act, and it is why
+ * the field says "filter" rather than "search".
  */
 export function CustomersScreen() {
-  const [query, setQuery] = useState('');
+  const [phone, setPhone] = useState('');
+  const [category, setCategory] = useState<'' | 'REGULAR' | 'WHOLESALE' | 'VIP'>('');
+  const [sort, setSort] = useState<'createdAt' | 'cumulativeAmount' | 'name'>('createdAt');
+  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const trimmed = query.trim();
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['customer-resolve', trimmed],
-    queryFn: () =>
-      api.get<{ customer: CustomerDto; balance: BalanceDto }>(
-        `/customers/resolve?identifier=${encodeURIComponent(trimmed)}`,
-      ),
-    enabled: trimmed.length >= 4,
-    retry: false,
+  const pageSize = 25;
+  const trimmed = phone.trim();
+
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    sort,
+    order: sort === 'name' ? 'asc' : 'desc',
+    ...(trimmed ? { phone: trimmed } : {}),
+    ...(category ? { category } : {}),
   });
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['customers', params.toString()],
+    queryFn: () => api.get<CustomerListResponse>(`/customers?${params.toString()}`),
+  });
+
+  /** Any control that changes what is being listed sends you back to page one. */
+  const reset = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setPage(1);
+  };
+
+  async function exportCsv(): Promise<void> {
+    setExporting(true);
+    try {
+      const response = await api.post<{ csv: string }>('/customers/export', {});
+      const url = URL.createObjectURL(
+        new Blob([response.csv], { type: 'text/csv;charset=utf-8' }),
+      );
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'walaa-customers.csv';
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setNotice(locale.customers.exportWarning);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const total = data?.total ?? 0;
+  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
 
   return (
     <>
-      <PageHeader title={locale.customers.title} subtitle={locale.customers.subtitle} />
+      <PageHeader
+        title={locale.customers.title}
+        subtitle={locale.customers.subtitle}
+        action={
+          <Button variant="ghost" onClick={() => void exportCsv()} disabled={exporting}>
+            <Download size={18} aria-hidden />
+            {locale.customers.exportCsv}
+          </Button>
+        }
+      />
+
+      {notice ? <Notice tone="warning">{notice}</Notice> : null}
 
       <Card className="mb-6">
-        <div className="p-6">
-          <Field label={locale.customers.searchPlaceholder} hint={locale.customers.searchHint}>
+        <div className="flex flex-wrap items-end gap-4 p-6">
+          <Field
+            label={locale.customers.searchPlaceholder}
+            hint={locale.customers.searchHint}
+            className="min-w-64 flex-1"
+          >
             <div className="relative">
               <Search
                 size={18}
@@ -73,65 +161,157 @@ export function CustomersScreen() {
                 aria-hidden
               />
               <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                value={phone}
+                onChange={(e) => reset(setPhone)(e.target.value)}
                 placeholder="07701234567"
                 className="ps-10 font-mono"
                 dir="ltr"
               />
             </div>
           </Field>
+
+          <Field label={locale.customers.colCategory} className="w-48">
+            <Select
+              value={category}
+              onChange={(e) => reset(setCategory)(e.target.value as typeof category)}
+            >
+              <option value="">{locale.customers.categoryAll}</option>
+              <option value="REGULAR">{locale.customers.categoryRegular}</option>
+              <option value="WHOLESALE">{locale.customers.categoryWholesale}</option>
+              <option value="VIP">{locale.customers.categoryVip}</option>
+            </Select>
+          </Field>
+
+          <Field label={locale.customers.sortLabel} className="w-48">
+            <Select value={sort} onChange={(e) => reset(setSort)(e.target.value as typeof sort)}>
+              <option value="createdAt">{locale.customers.sortNewest}</option>
+              <option value="cumulativeAmount">{locale.customers.sortSpend}</option>
+              <option value="name">{locale.customers.sortName}</option>
+            </Select>
+          </Field>
         </div>
       </Card>
 
-      {trimmed.length < 4 ? (
-        <Card>
+      <Card>
+        {isLoading ? (
+          <SkeletonTable rows={6} columns={5} />
+        ) : isError || !data ? (
+          <EmptyState title={locale.common.error} body={locale.common.errorBody} />
+        ) : data.customers.length === 0 ? (
           <EmptyState
             icon={<Users size={22} aria-hidden />}
             title={locale.customers.empty}
             body={locale.customers.emptyBody}
           />
-        </Card>
-      ) : isLoading ? (
-        <Card>
-          <SkeletonTable rows={1} columns={3} />
-        </Card>
-      ) : isError || !data ? (
-        <Card>
-          <EmptyState
-            icon={<Search size={22} aria-hidden />}
-            title="لا نتائج مطابقة"
-            body="تحقّق من رقم الهاتف، أو سجّل الزبون من محطة الولاء."
-          />
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader title={data.customer.name} subtitle={data.customer.phone} />
-          <div className="flex items-center justify-between gap-6 p-6">
-            <div>
-              <p className="text-sm text-steel">{locale.customer.balanceThisPeriod}</p>
-              <Money value={data.balance.cumulativeAmount} className="text-2xl" />
-              <p className="mt-1 text-xs text-steel">{locale.customer.derivedNote}</p>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border text-sm text-steel">
+                    <th className="px-6 py-3 text-start font-medium">
+                      {locale.customers.colCustomer}
+                    </th>
+                    <th className="px-6 py-3 text-start font-medium">
+                      {locale.customers.colBalance}
+                    </th>
+                    <th className="px-6 py-3 text-start font-medium">
+                      {locale.customers.colCategory}
+                    </th>
+                    <th className="px-6 py-3 text-start font-medium">
+                      {locale.customers.colJoined}
+                    </th>
+                    <th className="px-6 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.customers.map((customer) => (
+                    <tr
+                      key={customer.id}
+                      className="border-b border-border last:border-0 transition-colors duration-fast hover:bg-canvas"
+                    >
+                      <td className="px-6 py-4">
+                        <span className="block text-base font-semibold text-ink">
+                          {customer.name}
+                        </span>
+                        <span className="block font-mono text-sm text-steel" dir="ltr">
+                          {customer.phone}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Money value={customer.cumulativeAmount} />
+                        <span className="block text-sm text-steel">
+                          {customer.transactionCount} {locale.customer.invoices}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Chip tone="accent">
+                          {locale.categories[customer.category as 'REGULAR']}
+                        </Chip>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-steel">
+                        {new Date(customer.createdAt).toLocaleDateString('ar-IQ')}
+                      </td>
+                      <td className="px-6 py-4 text-end">
+                        <Link
+                          to={`/customers/${customer.id}`}
+                          className="inline-flex min-h-control items-center gap-2 rounded-md border border-border px-4 text-base text-ink transition-colors duration-fast hover:bg-canvas"
+                        >
+                          {locale.customer.details}
+                          {/* Chevron points in the reading direction (§6.7 #4). */}
+                          <ArrowRight size={18} className="rtl:rotate-180" aria-hidden />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <Chip tone="accent">{locale.categories[data.customer.category]}</Chip>
-            <Link
-              to={`/customers/${data.customer.id}`}
-              className="inline-flex min-h-control items-center gap-2 rounded-md border border-border px-4 text-base text-ink transition-colors duration-fast hover:bg-canvas"
-            >
-              التفاصيل
-              {/* Chevron points in the reading direction — start, not end (§6.7 #4). */}
-              <ArrowRight size={18} className="rtl:rotate-180" aria-hidden />
-            </Link>
-          </div>
-        </Card>
-      )}
+
+            {/* A page that does not say it is a page gets mistaken for the whole
+                list, and a manager concludes they have 25 customers. */}
+            <div className="flex items-center justify-between gap-4 border-t border-border px-6 py-4">
+              <span className="text-sm text-steel">
+                {locale.customers.pageRange(from, to, total)}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  {locale.customers.prev}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={to >= total}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  {locale.customers.next}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Card>
     </>
   );
 }
 
-/** Customer detail — balance derived from transactions, never read from a cache. */
 export function CustomerDetailScreen() {
   const { id } = useParams<{ id: string }>();
+
+  /**
+   * The rule ladder this customer is measured against.
+   *
+   * Fetched here rather than folded into the customer response because it is a
+   * merchant-wide setting, not a property of the person — which is exactly what the
+   * card below exists to say.
+   */
+  const rules = useQuery({
+    queryKey: ['discount-config'],
+    queryFn: () => api.get<DiscountConfigResponse>('/discount'),
+  });
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', id],
@@ -203,13 +383,115 @@ export function CustomerDetailScreen() {
             <p className="text-sm text-steel">رقم البطاقة</p>
             {/* Grouped in fours and set at a readable size: since §12.12 this is a
                 16-digit number a manager reads down the phone to a customer who has
-                lost their card, not an opaque token nobody was ever meant to say. */}
-            <p className="selectable mt-2 font-mono text-lg tabular-nums tracking-[0.15em]">
-              {formatCardNumber(customer.barcodeToken)}
+                lost their card, not an opaque token nobody was ever meant to say.
+
+                `dir="ltr"` is load-bearing, not cosmetic. Under the RTL page
+                direction the bidi algorithm lays the four groups out right-to-left,
+                so `0000 0122 6577 3350` renders as `3350 6577 0122 0000` — and the
+                whole point of this number is that somebody reads it aloud. */}
+            <p
+              className="selectable mt-2 font-mono text-lg tabular-nums tracking-[0.15em]"
+              dir="ltr"
+            >
+              {customer.cardNumber ? formatCardNumber(customer.cardNumber) : locale.common.none}
             </p>
           </Card>
         </div>
       </div>
+
+
+
+      {/*
+        The rules applied to this customer.
+
+        The v1 design had a per-customer override card in this position, and v3
+        removed `customer_override_rule` along with the coupon model it belonged to.
+        This says so out loud rather than leaving the space blank: a manager who
+        remembers the old screen should get the answer — one ladder, everybody —
+        instead of hunting for a button that no longer exists.
+
+        It is also the honest answer for the guardrails. §2.3's minimum, maximum and
+        absolute cap only bound the discount if there is a single ladder for them to
+        bound; a per-customer exception is a path around all three.
+      */}
+      <Card className="mb-6">
+        <CardHeader
+          title={locale.appliedRules.title}
+          subtitle={locale.appliedRules.subtitle}
+          action={
+            <Link
+              to="/discounts"
+              className="inline-flex min-h-control items-center rounded-md border border-border px-4 text-base text-ink transition-colors duration-fast hover:bg-canvas"
+            >
+              {locale.appliedRules.edit}
+            </Link>
+          }
+        />
+        <div className="space-y-2 p-6">
+          {rules.isLoading || !rules.data ? (
+            <SkeletonTable rows={3} columns={2} />
+          ) : rules.data.rules.length === 0 ? (
+            <p className="text-base text-steel">{locale.reports.tierEmpty}</p>
+          ) : (
+            <>
+              {[...rules.data.rules]
+                .sort((a, b) => a.thresholdAmount - b.thresholdAmount)
+                .map((rule) => {
+                  // The tier they are actually on: the highest threshold their
+                  // period spend has cleared. Derived here from the same balance the
+                  // till uses, never a stored tier (§5.3).
+                  const cleared = balance.cumulativeAmount >= rule.thresholdAmount;
+                  const highest =
+                    cleared &&
+                    !rules.data.rules.some(
+                      (other) =>
+                        other.thresholdAmount > rule.thresholdAmount &&
+                        balance.cumulativeAmount >= other.thresholdAmount,
+                    );
+                  return (
+                    <div
+                      key={rule.thresholdAmount}
+                      className={cn(
+                        'flex items-center justify-between gap-4 rounded-md px-4 py-3',
+                        highest ? 'bg-accent-tint' : 'bg-canvas',
+                      )}
+                    >
+                      <span className="flex items-center gap-3 text-base">
+                        <Money value={rule.thresholdAmount} className="text-base" />
+                        <span className="text-accent">
+                          {rule.discountType === 'PERCENTAGE'
+                            ? `${rule.discountRate}٪`
+                            : `${rule.discountRate.toLocaleString('en-US')} د.ع`}
+                        </span>
+                      </span>
+                      {highest ? (
+                        <Chip tone="accent">{locale.appliedRules.current}</Chip>
+                      ) : cleared ? null : (
+                        <span className="text-sm text-steel">
+                          {locale.customer.toNextTier}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+
+              {balance.cumulativeAmount <
+              Math.min(...rules.data.rules.map((rule) => rule.thresholdAmount)) ? (
+                <p className="pt-2 text-base text-steel">{locale.appliedRules.none}</p>
+              ) : null}
+
+              {/* The last line of defence gets said on the screen too (§2.3). */}
+              {rules.data.settings ? (
+                <p className="pt-2 text-sm text-steel">
+                  {locale.appliedRules.capNote(
+                    `${rules.data.settings.absoluteMaxDiscountValue.toLocaleString('en-US')} د.ع`,
+                  )}
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+      </Card>
 
       <Card>
         <CardHeader title={locale.customer.transactions} />

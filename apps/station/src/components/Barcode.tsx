@@ -37,7 +37,9 @@ export function Barcode({
 
   if (!symbol) {
     return showNumber ? (
-      <div className="text-center font-mono text-lg tracking-widest">{formatCardNumber(value)}</div>
+      <div className="text-center font-mono text-lg tracking-widest" dir="ltr">
+        {formatCardNumber(value)}
+      </div>
     ) : null;
   }
 
@@ -66,7 +68,11 @@ export function Barcode({
         ))}
       </svg>
       {showNumber ? (
-        <div className="font-mono text-base tracking-[0.2em] tabular-nums">
+        // `dir="ltr"` is load-bearing. Under the RTL page direction the bidi
+        // algorithm orders the four groups right-to-left, so the number prints
+        // backwards — on the card the customer reads down a phone line, and on the
+        // one a cashier compares against the plastic in their hand.
+        <div className="font-mono text-base tracking-[0.2em] tabular-nums" dir="ltr">
           {formatCardNumber(value)}
         </div>
       ) : null}

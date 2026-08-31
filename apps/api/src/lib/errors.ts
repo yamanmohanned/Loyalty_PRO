@@ -102,3 +102,13 @@ export const storageUnavailable = (cause?: unknown) =>
  * manager cannot act on.
  */
 export const backupBlocked = (message: string) => new AppError('BACKUP_BLOCKED', message);
+
+/**
+ * A card is not in a state where it can be issued or used (§12.25).
+ *
+ * `details` carries the `CardRejection`, because every state deserves its own
+ * answer at the counter: a card replaced last week and a card never issued are
+ * different conversations, and a generic failure sends the operator guessing.
+ */
+export const cardNotIssuable = (rejection: string, message: string) =>
+  new AppError('CARD_NOT_ISSUABLE', message, { details: { rejection } });

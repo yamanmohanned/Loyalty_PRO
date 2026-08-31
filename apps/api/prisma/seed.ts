@@ -323,7 +323,7 @@ async function seed(db: PrismaClientType): Promise<void> {
       where: { merchantId_phone: { merchantId: merchant.id, phone } },
     });
 
-    let customer =
+    const customer =
       existing ??
       (await db.customer.create({
         data: {
@@ -331,18 +331,38 @@ async function seed(db: PrismaClientType): Promise<void> {
           name: fixture.name,
           phone,
           category: fixture.category,
-          // Opaque signed card number — never the phone number (§6.2, §12.12).
-          barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
         },
       }));
+
+    // The card lives in its own table now (§12.25). Seeded customers get a THERMAL
+    // card, because that is what a card minted here is: printed on demand, with no
+    // physical stock behind it and therefore no serial. Pre-printed stock comes from
+    // a batch the manager generates, which is a deliberate act and not something a
+    // seed should fake.
+    const activeCard = await db.card.findFirst({
+      where: { merchantId: merchant.id, customerId: customer.id, status: 'ASSIGNED' },
+    });
 
     // Re-mint a card number this server can no longer verify. A developer's database
     // outlives a change to the signing scheme, and a seeded card that cannot be
     // scanned is worse than useless — it looks like a bug in the station.
-    if (!verifyBarcodeToken(customer.barcodeToken, env.QR_TOKEN_SECRET)) {
-      customer = await db.customer.update({
-        where: { id: customer.id },
-        data: { barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET) },
+    if (!activeCard) {
+      await db.card.create({
+        data: {
+          merchantId: merchant.id,
+          cardNumber: generateBarcodeToken(env.QR_TOKEN_SECRET),
+          scheme: 'card.v1',
+          origin: 'THERMAL',
+          status: 'ASSIGNED',
+          customerId: customer.id,
+          assignedAt: new Date(),
+        },
+      });
+      remintedCards += 1;
+    } else if (!verifyBarcodeToken(activeCard.cardNumber, env.QR_TOKEN_SECRET)) {
+      await db.card.update({
+        where: { id: activeCard.id },
+        data: { cardNumber: generateBarcodeToken(env.QR_TOKEN_SECRET) },
       });
       remintedCards += 1;
     }

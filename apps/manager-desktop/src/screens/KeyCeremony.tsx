@@ -167,6 +167,9 @@ export function KeyCeremonyScreen({
               <p>{locale.keyCeremony.why}</p>
               <p className="font-bold">{locale.keyCeremony.whyHard}</p>
               <p>{locale.keyCeremony.whyWorse}</p>
+              {/* Pre-printed stock raised the cost of rotating the server secret:
+                  it now also kills blank cards nobody has touched (§12.25). */}
+              <p className="font-semibold">{locale.keyCeremony.whyCards}</p>
             </div>
           </Notice>
         </div>

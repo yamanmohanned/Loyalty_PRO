@@ -179,7 +179,9 @@ describe('RBAC', () => {
     });
 
     expect(response.statusCode).toBe(201);
-    expect(response.json().customer.barcodeToken).toBeTruthy();
+    // A registration with no blank card scanned falls back to a thermal card, so the
+    // customer still leaves with a working number (§6.3, §12.25).
+    expect(response.json().customer.cardNumber).toMatch(/^\d{16}$/);
   });
 
   it('stops the station reading customer detail', async () => {

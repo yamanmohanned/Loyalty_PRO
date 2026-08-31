@@ -190,12 +190,28 @@ async function main(): Promise<void> {
   });
   check('توجد فواتير ملتقطة غير مرتبطة بزبون (حالة طبيعية)', unattributed > 0, `[${unattributed}]`);
 
-  // 8. No barcode token may contain the customer's phone number.
-  const leaking = customers.filter((c) => {
-    const national = c.phone.replace('+964', '');
-    return c.barcodeToken.includes(national) || c.barcodeToken.includes(c.phone);
+  // 8. No card number may contain the customer's phone number.
+  const cards = await prisma.card.findMany({
+    where: { merchantId: merchant.id },
+    include: { customer: { select: { phone: true } } },
   });
-  check('لا يحتوي أي رمز بطاقة على رقم هاتف الزبون', leaking.length === 0);
+  const leaking = cards.filter((card) => {
+    if (!card.customer) return false;
+    const national = card.customer.phone.replace('+964', '');
+    return card.cardNumber.includes(national) || card.cardNumber.includes(card.customer.phone);
+  });
+  check('لا يحتوي أي رقم بطاقة على رقم هاتف الزبون', leaking.length === 0);
+
+  // 8b. Every active customer holds exactly one live card. The partial unique index
+  // makes more than one impossible; this catches the other direction — a customer
+  // stranded with none, which would present at the till as "unknown card" for
+  // somebody who is very much a customer.
+  const activeCustomers = customers.filter((c) => c.isActive);
+  const withLiveCard = new Set(
+    cards.filter((card) => card.status === 'ASSIGNED').map((card) => card.customerId),
+  );
+  const cardless = activeCustomers.filter((c) => !withLiveCard.has(c.id));
+  check('كل زبون فعّال يملك بطاقة فعّالة واحدة', cardless.length === 0, `[${cardless.length}]`);
 
   // 9. WAL mode must be on — the concurrency decision in §12.5 depends on it.
   const journal = await prisma.$queryRaw<Array<{ journal_mode: string }>>`PRAGMA journal_mode`;

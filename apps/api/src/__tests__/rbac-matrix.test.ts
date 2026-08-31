@@ -80,11 +80,62 @@ const CASES: Case[] = [
   { method: 'POST', path: '/customers', allowed: STATION },
   {
     method: 'GET',
+    path: '/customers?page=1',
+    allowed: DASHBOARD,
+    why: 'the till answers "who is this?"; browsing the whole list is a manager act',
+  },
+  {
+    method: 'POST',
+    path: '/customers/export',
+    allowed: DASHBOARD,
+    why: 'the file carries every phone number in the shop',
+  },
+  {
+    method: 'GET',
     path: '/customers/00000000-0000-4000-8000-000000000000/card',
     allowed: STATION,
   },
+  { method: 'GET', path: '/customers/00000000-0000-4000-8000-000000000000/cards', allowed: STATION },
   { method: 'GET', path: '/customers/00000000-0000-4000-8000-000000000000', allowed: DASHBOARD },
   { method: 'PATCH', path: '/customers/00000000-0000-4000-8000-000000000000', allowed: DASHBOARD },
+
+  /* Physical card stock (§12.25).
+   *
+   * Split along one line: **batches are inventory, the card lifecycle is a counter
+   * action.** Ordering stock and exporting a file that contains every card number in
+   * it belong to the person who paid for the cards. Reporting a card lost, restoring
+   * one, and issuing a replacement all happen while the customer is standing there,
+   * and routing them through the manager would mean telling somebody to come back
+   * when the owner is in.
+   *
+   * Voiding is the deliberate exception on the station side: it destroys stock, it is
+   * never urgent, and nobody at a till should be able to write off a drawer of cards.
+   */
+  { method: 'GET', path: '/cards/batches', allowed: DASHBOARD },
+  { method: 'POST', path: '/cards/batches', allowed: DASHBOARD },
+  {
+    method: 'POST',
+    path: '/cards/batches/00000000-0000-4000-8000-000000000000/export',
+    allowed: DASHBOARD,
+    why: 'the export carries every card number in the batch',
+  },
+  { method: 'POST', path: '/cards/batches/00000000-0000-4000-8000-000000000000/void', allowed: DASHBOARD },
+  { method: 'GET', path: '/cards/00000000-0000-4000-8000-000000000000', allowed: STATION },
+  { method: 'POST', path: '/cards/00000000-0000-4000-8000-000000000000/lost', allowed: STATION },
+  {
+    method: 'POST',
+    path: '/cards/00000000-0000-4000-8000-000000000000/restore',
+    allowed: STATION,
+    why: '"I found it" is answered at the counter, not next week',
+  },
+  { method: 'POST', path: '/cards/00000000-0000-4000-8000-000000000000/replace', allowed: STATION },
+  { method: 'POST', path: '/cards/00000000-0000-4000-8000-000000000000/replace-thermal', allowed: STATION },
+  {
+    method: 'POST',
+    path: '/cards/00000000-0000-4000-8000-000000000000/void',
+    allowed: DASHBOARD,
+    why: 'writing off stock is the owner\'s call, and never urgent',
+  },
 
   /* Vouchers — redeemed at the till, voided and reconciled by a manager. */
   {
@@ -265,7 +316,9 @@ describe('the route inventory', () => {
         'GET, HEAD /api/v1/backup',
         'GET, HEAD /api/v1/backup/',
         'GET, HEAD /api/v1/backup/key',
+        'GET, HEAD /api/v1/cards/:id',
         'GET, HEAD /api/v1/customers/:id/card',
+        'GET, HEAD /api/v1/customers/:id/cards',
         'GET, HEAD /api/v1/customers/resolve',
         'GET, HEAD /api/v1/customers/search',
         'GET, HEAD /api/v1/discount',
@@ -276,14 +329,23 @@ describe('the route inventory', () => {
         'GET, HEAD /api/v1/reports/programme',
         'GET, HEAD /api/v1/system/storage',
         'GET, HEAD /api/v1/vouchers/reconciliation',
+        'GET, HEAD, POST /api/v1/cards/batches',
         'GET, HEAD, PATCH /api/v1/customers/:id',
         'POST /api/v1/backup/key/confirm',
         'POST /api/v1/backup/key/generate',
         'POST /api/v1/backup/key/reveal',
         'POST /api/v1/backup/run',
         'POST /api/v1/backup/verify',
-        'POST /api/v1/customers',
-        'POST /api/v1/customers/',
+        'POST /api/v1/cards/:id/lost',
+        'POST /api/v1/cards/:id/replace',
+        'POST /api/v1/cards/:id/replace-thermal',
+        'POST /api/v1/cards/:id/restore',
+        'POST /api/v1/cards/:id/void',
+        'POST /api/v1/cards/batches/:id/export',
+        'POST /api/v1/cards/batches/:id/void',
+        'GET, HEAD, POST /api/v1/customers',
+        'GET, HEAD, POST /api/v1/customers/',
+        'POST /api/v1/customers/export',
         'POST /api/v1/discount/assess',
         'POST /api/v1/ingest/invoice',
         'POST /api/v1/scan/card',

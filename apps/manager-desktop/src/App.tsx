@@ -11,6 +11,7 @@ import {
 import {
   BadgePercent,
   Boxes,
+  CreditCard,
   DatabaseBackup,
   LayoutDashboard,
   LogOut,
@@ -27,6 +28,7 @@ import { StorageBanner, useStorageStatus } from './components/StorageBanner';
 import { SetupScreen } from './screens/Setup';
 import { LoginScreen, type SessionUser } from './screens/Login';
 import { OverviewScreen } from './screens/Overview';
+import { CardsScreen } from './screens/Cards';
 import { CustomersScreen } from './screens/Customers';
 import { CustomerDetailScreen } from './screens/CustomerDetail';
 import { DiscountsScreen } from './screens/Discounts';
@@ -72,6 +74,7 @@ const NAV_ITEMS = [
   { to: '/discounts', label: locale.nav.discounts, icon: BadgePercent, end: false },
   { to: '/reports', label: locale.nav.reports, icon: BarChart3, end: false },
   { to: '/capture', label: locale.nav.capture, icon: Printer, end: false },
+  { to: '/cards', label: locale.nav.cards, icon: CreditCard, end: false },
   { to: '/backup', label: locale.nav.backup, icon: DatabaseBackup, end: false },
   { to: '/modules', label: locale.nav.modules, icon: Boxes, end: false },
 ];
@@ -213,6 +216,7 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
             <Route path="/discounts" element={<DiscountsScreen />} />
             <Route path="/reports" element={<ReportsScreen />} />
             <Route path="/capture" element={<CaptureScreen />} />
+            <Route path="/cards" element={<CardsScreen />} />
             <Route path="/backup" element={<BackupScreen />} />
             <Route path="/modules" element={<ModulesScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />

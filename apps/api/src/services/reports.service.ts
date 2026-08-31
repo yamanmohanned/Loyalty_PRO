@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { getPeriodContext, periodKeyFor } from './balance.service';
+import { getActiveRules, getPeriodContext, periodKeyFor } from './balance.service';
 import { reconcileDay } from './voucher.service';
 
 /**
@@ -17,6 +17,24 @@ import { reconcileDay } from './voucher.service';
  */
 
 export type ReportRange = '7d' | '30d' | '90d' | '365d';
+
+/**
+ * The active period's key for this merchant.
+ *
+ * Computed through `getPeriodContext` rather than from a UTC clock: a purchase at
+ * 01:00 in Baghdad belongs to the local day, and bucketing it in UTC files it under
+ * the previous period (§13.1, and the reconciliation bug §12.23 found).
+ */
+async function currentPeriodKey(merchantId: string): Promise<string> {
+  return periodKeyFor(await getPeriodContext(merchantId), new Date());
+}
+
+/** How a tier's reward reads on a chart axis: `3٪` or `7,500 د.ع`. */
+function describeTier(rule: { discountType: string; discountRate: number }): string {
+  return rule.discountType === 'PERCENTAGE'
+    ? `${rule.discountRate}٪`
+    : `${rule.discountRate.toLocaleString('en-US')} د.ع`;
+}
 
 const RANGE_DAYS: Record<ReportRange, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
 
@@ -191,6 +209,29 @@ export interface ProgrammeReport {
   averageBasket: number;
   attributionRatePct: number;
   captureByMode: Array<{ mode: string; count: number }>;
+  /**
+   * Registered customers by category.
+   *
+   * Counts of people, never sums of money — so §13.5's Int32 warning does not apply
+   * and nothing here needs a BIGINT cast. Worth stating because the two breakdowns
+   * below look alike and only one of them would.
+   */
+  customersByCategory: Array<{ category: string; count: number }>;
+  /**
+   * How many customers reached each discount tier in the CURRENT period.
+   *
+   * The v3 answer to the old "tier performance" chart. It reads from the live rule
+   * ladder rather than a stored tier on the customer, because a customer's tier is
+   * derived from spend within the period (§5.3) and a rate the manager changed
+   * yesterday applies to today's ladder. `reached` is cumulative in the way the
+   * ladder is: someone at 200,000 counts toward every threshold below them, because
+   * that is what "reached this tier" means to the person reading the chart.
+   */
+  tierPerformance: Array<{
+    thresholdAmount: number;
+    discountLabel: string;
+    reached: number;
+  }>;
   todayReconciliation: Awaited<ReturnType<typeof reconcileDay>>;
 }
 
@@ -200,14 +241,28 @@ export async function getProgrammeReport(
 ): Promise<ProgrammeReport> {
   const from = since(range);
 
-  const [transactions, vouchers, reconciliation] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { merchantId, occurredAt: { gte: from } },
-      select: { amountGross: true, discountValue: true, customerId: true, captureMode: true },
-    }),
-    prisma.voucher.findMany({ where: { merchantId, issuedAt: { gte: from } } }),
-    reconcileDay(merchantId),
-  ]);
+  const [transactions, vouchers, reconciliation, categoryGroups, rules, periodSpend] =
+    await Promise.all([
+      prisma.transaction.findMany({
+        where: { merchantId, occurredAt: { gte: from } },
+        select: { amountGross: true, discountValue: true, customerId: true, captureMode: true },
+      }),
+      prisma.voucher.findMany({ where: { merchantId, issuedAt: { gte: from } } }),
+      reconcileDay(merchantId),
+      prisma.customer.groupBy({
+        by: ['category'],
+        where: { merchantId, isActive: true },
+        _count: { _all: true },
+      }),
+      getActiveRules(merchantId),
+      // Cumulative spend per customer in the ACTIVE period — the same derivation the
+      // till uses (§5.3), grouped rather than looped so a year of rows is one query.
+      prisma.transaction.groupBy({
+        by: ['customerId'],
+        where: { merchantId, customerId: { not: null }, periodKey: await currentPeriodKey(merchantId) },
+        _sum: { amountGross: true },
+      }),
+    ]);
 
   const redeemed = vouchers.filter((v) => v.status === 'REDEEMED');
   const outstanding = vouchers.filter((v) => v.status === 'ISSUED');
@@ -230,6 +285,16 @@ export async function getProgrammeReport(
     attributionRatePct:
       transactions.length > 0 ? Math.round((attributed / transactions.length) * 100) : 0,
     captureByMode: [...modeCounts.entries()].map(([mode, count]) => ({ mode, count })),
+    customersByCategory: categoryGroups.map((row) => ({
+      category: row.category,
+      count: row._count._all,
+    })),
+    tierPerformance: rules.map((rule) => ({
+      thresholdAmount: rule.thresholdAmount,
+      discountLabel: describeTier(rule),
+      reached: periodSpend.filter((row) => (row._sum.amountGross ?? 0) >= rule.thresholdAmount)
+        .length,
+    })),
     todayReconciliation: reconciliation,
   };
 }

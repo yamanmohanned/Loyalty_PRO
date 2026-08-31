@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Receipt, Users } from 'lucide-react';
@@ -12,6 +13,7 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
+import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
   Card,
   CardHeader,
@@ -67,15 +69,24 @@ interface OverviewResponse {
  * decides whether the loyalty scheme is working at all.
  */
 export function OverviewScreen() {
+  // The window was hardcoded to 30 days while the API had accepted four all along.
+  const [range, setRange] = useState<ReportRange>('30d');
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['overview'],
-    queryFn: () => api.get<OverviewResponse>('/reports/overview?range=30d'),
+    // The range is part of the key, so switching windows caches each one rather than
+    // refetching the same month every time a manager glances back at it.
+    queryKey: ['overview', range],
+    queryFn: () => api.get<OverviewResponse>(`/reports/overview?range=${range}`),
   });
 
   if (isError) {
     return (
       <>
-        <PageHeader title={locale.overview.title} subtitle={locale.overview.subtitle} />
+        <PageHeader
+          title={locale.overview.title}
+          subtitle={locale.overview.subtitle}
+          action={<RangePicker value={range} onChange={setRange} />}
+        />
         <Card>
           <EmptyState title={locale.common.error} body={locale.common.errorBody} />
         </Card>
@@ -87,7 +98,11 @@ export function OverviewScreen() {
 
   return (
     <>
-      <PageHeader title={locale.overview.title} subtitle={locale.overview.subtitle} />
+      <PageHeader
+        title={locale.overview.title}
+        subtitle={locale.overview.subtitle}
+        action={<RangePicker value={range} onChange={setRange} />}
+      />
 
       {/* Four KPIs across, never three equal columns (§6.5 anti-pattern). */}
       <div className="mb-6 grid grid-cols-4 gap-4">

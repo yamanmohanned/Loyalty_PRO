@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
+import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
   Card,
   CardHeader,
@@ -8,6 +10,7 @@ import {
   Money,
   Notice,
   PageHeader,
+  SkeletonTable,
   Skeleton,
 } from '../components/ui';
 
@@ -22,6 +25,8 @@ interface ProgrammeReportResponse {
     averageBasket: number;
     attributionRatePct: number;
     captureByMode: Array<{ mode: string; count: number }>;
+    customersByCategory: Array<{ category: string; count: number }>;
+    tierPerformance: Array<{ thresholdAmount: number; discountLabel: string; reached: number }>;
     todayReconciliation: {
       date: string;
       issuedCount: number;
@@ -46,15 +51,23 @@ interface ProgrammeReportResponse {
  * panel rather than a cell in a table.
  */
 export function ReportsScreen() {
+  // The window was hardcoded to 30 days while the API had accepted four all along.
+  const [range, setRange] = useState<ReportRange>('30d');
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['programme-report'],
-    queryFn: () => api.get<ProgrammeReportResponse>('/reports/programme?range=30d'),
+    // The range is part of the key, so each window caches rather than refetching.
+    queryKey: ['programme-report', range],
+    queryFn: () => api.get<ProgrammeReportResponse>(`/reports/programme?range=${range}`),
   });
 
   if (isError) {
     return (
       <>
-        <PageHeader title={locale.reports.title} subtitle={locale.reports.subtitle} />
+        <PageHeader
+          title={locale.reports.title}
+          subtitle={locale.reports.subtitle}
+          action={<RangePicker value={range} onChange={setRange} />}
+        />
         <Card>
           <EmptyState title={locale.common.error} body={locale.common.errorBody} />
         </Card>
@@ -66,7 +79,11 @@ export function ReportsScreen() {
 
   return (
     <>
-      <PageHeader title={locale.reports.title} subtitle={locale.reports.subtitle} />
+      <PageHeader
+        title={locale.reports.title}
+        subtitle={locale.reports.subtitle}
+        action={<RangePicker value={range} onChange={setRange} />}
+      />
 
       <div className="mb-6 grid grid-cols-4 gap-4">
         <Stat label={locale.reports.discountsGranted} money={r?.discountsGranted} loading={isLoading} />
@@ -125,6 +142,90 @@ export function ReportsScreen() {
                   </div>
                 </div>
               </>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Two breakdowns, side by side rather than three equal columns (§6.5). Both
+          count people, never money, so §13.5's Int32 caution does not reach them. */}
+      <div className="mb-6 grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader title={locale.reports.categoryTitle} />
+          <div className="space-y-3 p-6">
+            {isLoading || !r ? (
+              <SkeletonTable rows={3} columns={2} />
+            ) : r.customersByCategory.length === 0 ? (
+              <p className="text-base text-steel">{locale.reports.categoryEmpty}</p>
+            ) : (
+              (() => {
+                const total = r.customersByCategory.reduce((sum, row) => sum + row.count, 0);
+                return r.customersByCategory.map((row) => {
+                  const share = total > 0 ? Math.round((row.count / total) * 100) : 0;
+                  return (
+                    <div key={row.category} className="space-y-1">
+                      <div className="flex items-center justify-between text-base">
+                        <span className="text-ink">
+                          {locale.categories[row.category as 'REGULAR']}
+                        </span>
+                        {/* The count carries its unit, and the share is set apart.
+                            Bare and adjacent, `9` and `75٪` rendered as `975٪` — two
+                            numbers touching read as one, and this panel is nothing
+                            but numbers. */}
+                        <span className="flex items-baseline gap-3">
+                          <span className="amount text-ink">
+                            {locale.reports.tierReached(row.count)}
+                          </span>
+                          <span className="text-sm text-steel">{share}٪</span>
+                        </span>
+                      </div>
+                      {/* A bar, not a pie. Flat and 2D per §6 — and a horizontal bar
+                          reads at a glance in RTL without a legend to cross-check. */}
+                      <div className="h-2 overflow-hidden rounded-pill bg-canvas">
+                        <div className="h-full bg-accent" style={{ width: `${share}%` }} />
+                      </div>
+                    </div>
+                  );
+                });
+              })()
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title={locale.reports.tierTitle} subtitle={locale.reports.tierSubtitle} />
+          <div className="space-y-3 p-6">
+            {isLoading || !r ? (
+              <SkeletonTable rows={3} columns={2} />
+            ) : r.tierPerformance.length === 0 ? (
+              <p className="text-base text-steel">{locale.reports.tierEmpty}</p>
+            ) : (
+              (() => {
+                // Scaled against the widest bar rather than the customer count: the
+                // lowest tier is always the largest, and scaling to it is what makes
+                // the drop-off between tiers visible at all.
+                const widest = Math.max(...r.tierPerformance.map((tier) => tier.reached), 1);
+                return r.tierPerformance.map((tier) => (
+                  <div key={tier.thresholdAmount} className="space-y-1">
+                    <div className="flex items-center justify-between text-base">
+                      <span className="text-ink">
+                        <span className="text-sm text-steel">{locale.reports.ofThreshold} </span>
+                        <Money value={tier.thresholdAmount} className="text-base" />
+                        <span className="ms-2 text-sm text-accent">{tier.discountLabel}</span>
+                      </span>
+                      <span className="amount text-ink">
+                        {locale.reports.tierReached(tier.reached)}
+                      </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-pill bg-canvas">
+                      <div
+                        className="h-full bg-accent"
+                        style={{ width: `${Math.round((tier.reached / widest) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ));
+              })()
             )}
           </div>
         </Card>

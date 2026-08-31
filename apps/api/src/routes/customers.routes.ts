@@ -2,19 +2,23 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   CreateCustomerRequestSchema,
+  CustomerListQuerySchema,
   CustomerSearchQuerySchema,
   DASHBOARD_ROLES,
   ResolveCustomerQuerySchema,
   STATION_ROLES,
   UpdateCustomerRequestSchema,
   type CreateCustomerRequest,
+  type CustomerListQuery,
   type UpdateCustomerRequest,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import { getCustomerBalance } from '../services/balance.service';
 import {
   createCustomer,
+  exportCustomersCsv,
   getCustomer,
+  listCustomers,
   getCustomerCard,
   resolveCustomer,
   searchCustomers,
@@ -82,6 +86,43 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       const auth = requireAuth(request);
       const { id } = request.params as { id: string };
       return { card: await getCustomerCard(auth.merchantId, id) };
+    },
+  );
+
+  /**
+   * The dashboard list — paged, filterable, sortable.
+   *
+   * Dashboard-only. The Station has `resolve` and `search`, which answer "who is
+   * this?" for a person standing at the counter; browsing the whole customer list is
+   * a different act with a different audience, and a till does not need it.
+   */
+  app.get(
+    '/',
+    { config: { roles: DASHBOARD_ROLES }, schema: { querystring: CustomerListQuerySchema } },
+    async (request) => {
+      const auth = requireDashboardRole(request);
+      return listCustomers(auth.merchantId, request.query as CustomerListQuery);
+    },
+  );
+
+  /**
+   * The list as CSV.
+   *
+   * A POST, not a GET, for the same reason the card batch export is: it is audited,
+   * and a GET with a side effect is a GET somebody's browser will repeat. Rate
+   * limited harder than a read, because repeatedly pulling every phone number in the
+   * shop is what harvesting looks like.
+   */
+  app.post(
+    '/export',
+    {
+      config: { roles: DASHBOARD_ROLES, rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (request) => {
+      const auth = requireDashboardRole(request);
+      return {
+        csv: await exportCustomersCsv({ merchantId: auth.merchantId, actorUserId: auth.sub }),
+      };
     },
   );
 

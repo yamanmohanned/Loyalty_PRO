@@ -53,6 +53,57 @@ export const isStationRole = (role: Role): boolean => STATION_ROLES.includes(rol
 export const CustomerCategorySchema = z.enum(['REGULAR', 'WHOLESALE', 'VIP']);
 export type CustomerCategory = z.infer<typeof CustomerCategorySchema>;
 
+/* ── Cards (§12.25) ────────────────────────────────────────────────────────── */
+
+/**
+ * The life of a physical card.
+ *
+ * Cards exist before customers do: a batch is generated, printed by a vendor, and
+ * sits in a drawer as `PRINTED` until somebody is handed one.
+ *
+ * ```
+ *   PRINTED ──assign──► ASSIGNED ──reported lost──► LOST ──replacement──► REPLACED
+ *      │                    └────────replaced (damaged)──────────────────► REPLACED
+ *      └──void (misprint)─► VOID
+ * ```
+ *
+ * `LOST` may return to `ASSIGNED` — "I found it" is a real support call, and
+ * refusing it pushes staff into issuing a replacement nobody needed. It is safe
+ * because the partial unique index makes the dangerous version impossible: a
+ * customer already holding a live replacement cannot acquire a second live card, and
+ * the attempt is refused by name rather than silently.
+ *
+ * `PRINTED` and `VOID` have no owner. `ASSIGNED`, `LOST` and `REPLACED` all keep
+ * one, because who held a dead card is exactly what a support call asks about.
+ */
+export const CardStatusSchema = z.enum(['PRINTED', 'ASSIGNED', 'LOST', 'REPLACED', 'VOID']);
+export type CardStatus = z.infer<typeof CardStatusSchema>;
+
+/** Statuses a card can be scanned into a sale with. Exactly one. */
+export const SCANNABLE_CARD_STATUS: CardStatus = 'ASSIGNED';
+
+/**
+ * Where a card came from, which decides which numbering scheme it carries.
+ *
+ * `PRE_PRINTED` cards have a serial, belong to a batch, and carry a `card.v2`
+ * number. `THERMAL` cards are printed at the Station when no blank is to hand
+ * (§6.3) — they have **no serial**, because there is no physical inventory to
+ * track, and letting them consume serials would corrupt the count of blanks
+ * remaining that the batch screen exists to answer. They carry `card.v1`.
+ */
+export const CardOriginSchema = z.enum(['PRE_PRINTED', 'THERMAL']);
+export type CardOrigin = z.infer<typeof CardOriginSchema>;
+
+/**
+ * Where a batch is in its journey from "generated" to "cards in a drawer".
+ *
+ * Informational only: nothing gates issuance on it, because issuance is already
+ * gated by something better — the operator has to physically scan a card that
+ * exists. `RETIRED` is the wholesale remedy for a leaked export file (§12.25).
+ */
+export const CardBatchStatusSchema = z.enum(['GENERATED', 'EXPORTED', 'RECEIVED', 'RETIRED']);
+export type CardBatchStatus = z.infer<typeof CardBatchStatusSchema>;
+
 /* ── Discounts ─────────────────────────────────────────────────────────────── */
 
 /**

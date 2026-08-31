@@ -33,7 +33,14 @@ import { Button, Card, Input, Money, Notice } from '../components/ui';
 type Phase =
   | { kind: 'idle' }
   | { kind: 'working' }
-  | { kind: 'result'; response: ScanCardResponse }
+  /**
+   * The digits that produced this result travel with it.
+   *
+   * Kept here rather than echoed back by the server: the station already has
+   * them, and a response that repeated the number would be handing one back for
+   * cards that are not the person in front of the scanner's to hold.
+   */
+  | { kind: 'result'; response: ScanCardResponse; scanned: string }
   | { kind: 'queued' }
   /**
    * The write reached the server and was not stored (CLAUDE_v3.md §12.16). Separate
@@ -84,7 +91,7 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
           barcodeToken: scanned,
           idempotencyKey: crypto.randomUUID(),
         });
-        setPhase({ kind: 'result', response });
+        setPhase({ kind: 'result', response, scanned });
 
         if (response.outcome === 'QUALIFIED' && response.slip) {
           print(<PrintableSlip shopName={shopName} slip={response.slip} />);
@@ -174,7 +181,10 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
         <Outcome
           phase={phase}
           onReset={reset}
-          onRegister={() => navigate('/register')}
+          onRegister={(cardNumber) =>
+            navigate('/register', cardNumber ? { state: { cardNumber } } : undefined)
+          }
+          onFindCustomer={() => navigate('/reprint')}
           shopName={shopName}
         />
       </div>
@@ -188,11 +198,14 @@ function Outcome({
   phase,
   onReset,
   onRegister,
+  onFindCustomer,
   shopName,
 }: {
   phase: Phase;
   onReset: () => void;
-  onRegister: () => void;
+  /** Carries the blank card the operator is holding, when there is one. */
+  onRegister: (cardNumber: string | null) => void;
+  onFindCustomer: () => void;
   shopName: string;
 }): JSX.Element | null {
   const print = usePrint();
@@ -256,15 +269,76 @@ function Outcome({
   const { response } = phase;
 
   if (response.outcome === 'UNKNOWN_CARD') {
+    // Two causes, one door, different words (§12.25).
+    //
+    // `UNASSIGNED` means the operator is holding a real, unissued card — so the
+    // screen names its serial and carries that card into registration, where it gets
+    // bound instead of a fresh number being minted and a good card wasted.
+    const blank = response.cardRejection === 'UNASSIGNED';
+    const serial = response.scannedCard?.serialFormatted ?? null;
+
     return (
       <Card className="space-y-4 text-center">
         <CreditCard className="mx-auto text-steel" size={40} aria-hidden />
-        <p className="text-2xl font-bold">{locale.outcome.unknownCard}</p>
-        {/* An unknown card is an enrolment opportunity, not a failure (§6.2 #3). */}
-        <p className="text-base text-steel">{locale.outcome.unknownCardHint}</p>
-        <Button size="large" onClick={onRegister} className="w-full">
-          {locale.outcome.register}
+        <p className="text-2xl font-bold">
+          {blank ? locale.outcome.blankCard : locale.outcome.unknownCard}
+        </p>
+        {/* An unknown or unissued card is an enrolment opportunity, not a failure
+            (§6.2 #3). */}
+        <p className="text-base text-steel">
+          {blank && serial
+            ? locale.outcome.blankCardHint(serial)
+            : locale.outcome.unknownCardHint}
+        </p>
+        <Button size="large" onClick={() => onRegister(blank ? phase.scanned : null)} className="w-full">
+          {blank ? locale.outcome.registerOnCard : locale.outcome.register}
         </Button>
+      </Card>
+    );
+  }
+
+  if (response.outcome === 'CARD_REJECTED') {
+    // A card this server knows and will not accept. Every state gets its own
+    // sentence and its own next step: an operator told only that something failed
+    // will scan again, and scanning again is the one thing that cannot help.
+    const serial = response.scannedCard?.replacedBySerial ?? null;
+    const { title, hint } = ((): { title: string; hint: string } => {
+      switch (response.cardRejection) {
+        case 'LOST':
+          return { title: locale.outcome.cardLost, hint: locale.outcome.cardLostHint };
+        case 'REPLACED':
+          return {
+            title: locale.outcome.cardReplaced,
+            hint: serial
+              ? locale.outcome.cardReplacedHint(serial)
+              : locale.outcome.cardReplacedNoSerial,
+          };
+        case 'VOID':
+          return { title: locale.outcome.cardVoid, hint: locale.outcome.cardVoidHint };
+        default:
+          return {
+            title: locale.outcome.inactiveCustomer,
+            hint: locale.outcome.inactiveCustomerHint,
+          };
+      }
+    })();
+
+    return (
+      <Card className="space-y-4 border-amber/30 bg-amber-tint text-center">
+        <CreditCard className="mx-auto text-amber" size={40} aria-hidden />
+        <p className="text-2xl font-bold text-amber">{title}</p>
+        <p className="text-base text-ink">{hint}</p>
+        <div className="flex gap-3">
+          <Button variant="ghost" className="flex-1" onClick={onReset}>
+            {locale.scan.again}
+          </Button>
+          {/* The remedy for every one of these states starts by finding the person,
+              so the screen offers that rather than leaving the operator to work out
+              which menu it lives under. */}
+          <Button className="flex-1" onClick={onFindCustomer}>
+            {locale.outcome.findCustomer}
+          </Button>
+        </div>
       </Card>
     );
   }

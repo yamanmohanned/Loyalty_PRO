@@ -5,15 +5,10 @@ import {
   type ScanCardResponse,
   type Voucher as VoucherDto,
 } from '@walaa/shared-types';
-import { loadEnv } from '../config/env';
-import {
-  canonicalizeBarcodeToken,
-  looksLikeBarcodeToken,
-  verifyBarcodeToken,
-} from '../lib/barcode-token';
 import { forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
+import { lookupCard } from './card.service';
 import {
   computeCumulativeAmount,
   getActiveRules,
@@ -24,8 +19,6 @@ import {
 import { findPendingInvoice } from './ingestion.service';
 import { publish } from './realtime.service';
 import { getSettlementStrategy } from './settlement';
-
-const env = loadEnv();
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -115,27 +108,47 @@ export async function scanCard(
 
   /* ── 1. Who is this? ────────────────────────────────────────────────────── */
 
-  // Signature check before any database work: a mis-scan or a forged code is
-  // rejected without a query, which keeps the station fast under a queue.
-  const plausible = looksLikeBarcodeToken(token) && verifyBarcodeToken(token, env.QR_TOKEN_SECRET);
+  // The check code is verified inside `lookupCard` before any database work, so a
+  // mis-scan or a forged number is rejected without a query — fast under a queue,
+  // and no enumeration oracle for an attacker.
+  const lookup = await lookupCard(context.merchantId, token);
 
-  const customer = plausible
-    ? await prisma.customer.findFirst({
-        where: {
-          // Bare digits are the storage form, so a number typed back with the
-          // grouping printed on the card finds the same row the scanner does.
-          barcodeToken: canonicalizeBarcodeToken(token),
-          merchantId: context.merchantId,
-          isActive: true,
-        },
-      })
-    : null;
+  if (!lookup.ok) {
+    // Two different situations, and they lead to different doors (§12.25).
+    //
+    // An unknown number or a blank card is an enrolment opportunity: the station
+    // offers registration, and on a blank it registers onto the card in the
+    // operator's hand rather than minting a fresh one and wasting it (§6.2 #3).
+    //
+    // A card that was reported lost, superseded or voided is not an enrolment
+    // opportunity — the person almost certainly has an account already — so it is
+    // refused with the honest reason, and the station says which.
+    const enrolment = lookup.rejection === 'UNKNOWN' || lookup.rejection === 'UNASSIGNED';
+    return {
+      outcome: enrolment ? 'UNKNOWN_CARD' : 'CARD_REJECTED',
+      cardRejection: lookup.rejection,
+      scannedCard: lookup.card,
+      customer: null,
+      transaction: null,
+      balance: null,
+      voucher: null,
+      slip: null,
+      progressMessage: null,
+    };
+  }
+
+  const customer = await prisma.customer.findFirst({
+    where: { id: lookup.customerId, merchantId: context.merchantId, isActive: true },
+  });
 
   if (!customer) {
-    // Not an error — an unknown card is an enrolment opportunity, and the station
-    // offers registration rather than showing a failure (§6.2 #3).
+    // The card points at a customer this scan cannot use. `lookupCard` already
+    // screens deactivated accounts, so reaching here means the row vanished between
+    // the two queries — vanishingly rare, and still not a reason to guess.
     return {
-      outcome: 'UNKNOWN_CARD',
+      outcome: 'CARD_REJECTED',
+      cardRejection: 'INACTIVE_CUSTOMER',
+      scannedCard: null,
       customer: null,
       transaction: null,
       balance: null,
@@ -172,6 +185,8 @@ export async function scanCard(
       const voucher = alreadyAttributed.vouchers[0];
       return {
         outcome: alreadyAttributed.discountValue > 0 ? 'QUALIFIED' : 'NOT_QUALIFIED',
+        cardRejection: null,
+        scannedCard: null,
         customer: {
           id: customer.id,
           name: customer.name,
@@ -223,6 +238,8 @@ export async function scanCard(
     const balance = await buildBalance(context.merchantId, customer.id);
     return {
       outcome: 'NO_PENDING_INVOICE',
+      cardRejection: null,
+      scannedCard: null,
       customer: {
         id: customer.id,
         name: customer.name,
@@ -383,6 +400,8 @@ export async function scanCard(
     const balance = await buildBalance(context.merchantId, customer.id);
     return {
       outcome: 'NO_PENDING_INVOICE',
+      cardRejection: null,
+      scannedCard: null,
       customer: {
         id: customer.id,
         name: customer.name,
@@ -422,6 +441,8 @@ export async function scanCard(
       : computation.discountValue > 0
         ? 'QUALIFIED'
         : 'NOT_QUALIFIED',
+    cardRejection: null,
+    scannedCard: null,
     customer: {
       id: customer.id,
       name: customer.name,

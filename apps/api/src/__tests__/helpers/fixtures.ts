@@ -29,6 +29,8 @@ export interface World {
   customerId: string;
   customerPhone: string;
   customerBarcode: string;
+  /** The card row behind `customerBarcode` — card lifecycle tests act on it. */
+  customerCardId: string;
 }
 
 /**
@@ -130,7 +132,21 @@ export async function createWorld(
       name: 'حسين علي',
       phone: '+9647701234567',
       category: 'REGULAR',
-      barcodeToken: generateBarcodeToken(env.QR_TOKEN_SECRET),
+    },
+  });
+
+  // The card is its own row now (§12.25). A THERMAL card here rather than a batched
+  // one: the base fixture should not silently consume serial 000001 out of the
+  // physical-stock sequence that the batch tests measure.
+  const customerCard = await prisma.card.create({
+    data: {
+      merchantId: merchant.id,
+      cardNumber: generateBarcodeToken(env.QR_TOKEN_SECRET),
+      scheme: 'card.v1',
+      origin: 'THERMAL',
+      status: 'ASSIGNED',
+      customerId: customer.id,
+      assignedAt: new Date(),
     },
   });
 
@@ -146,7 +162,8 @@ export async function createWorld(
     agentUserId: agent.id,
     customerId: customer.id,
     customerPhone: customer.phone,
-    customerBarcode: customer.barcodeToken,
+    customerBarcode: customerCard.cardNumber,
+    customerCardId: customerCard.id,
   };
 }
 

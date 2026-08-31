@@ -151,7 +151,6 @@ describe('what a name search is allowed to reveal', () => {
           name: `محمد ${i}`,
           phone: `+96477012000${i}`,
           category: 'REGULAR',
-          barcodeToken: `900000000${String(i).padStart(7, '0')}`,
         },
       });
     }
@@ -191,17 +190,17 @@ describe('reprinting the card', () => {
     expect(first.statusCode).toBe(200);
     // A reprint that minted a new number would sever the customer from their own
     // purchase history (§6.2 #5).
-    expect(first.json().card.barcodeToken).toBe(world.customerBarcode);
-    expect(second.json().card.barcodeToken).toBe(world.customerBarcode);
+    expect(first.json().card.cardNumber).toBe(world.customerBarcode);
+    expect(second.json().card.cardNumber).toBe(world.customerBarcode);
   });
 
   it('returns the number in both the printed and the readable form', async () => {
     const response = await card(await tokenFor('station'), world.customerId);
     const payload = response.json().card;
 
-    expect(payload.barcodeToken).toMatch(/^\d{16}$/);
+    expect(payload.cardNumber).toMatch(/^\d{16}$/);
     expect(payload.cardNumberFormatted).toMatch(/^\d{4} \d{4} \d{4} \d{4}$/);
-    expect(payload.cardNumberFormatted.replace(/ /g, '')).toBe(payload.barcodeToken);
+    expect(payload.cardNumberFormatted.replace(/ /g, '')).toBe(payload.cardNumber);
     expect(payload.phoneLocal).toBe('0770 123 4567');
   });
 

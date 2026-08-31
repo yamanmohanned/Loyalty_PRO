@@ -53,6 +53,8 @@ model Merchant {
   featureFlags FeatureFlag[]
   notificationLogs NotificationLog[]
   auditLogs AuditLog[]
+  cards Card[]
+  cardBatches CardBatch[]
 
   @@map("merchant")
 }
@@ -103,6 +105,8 @@ model User {
   redeemedVouchers Voucher[] @relation("VoucherRedeemedBy")
   auditLogs AuditLog[]
   updatedFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
+  assignedCards Card[] @relation("CardAssignedBy")
+  generatedBatches CardBatch[] @relation("CardBatchGeneratedBy")
 
   @@unique([merchantId, username])
   @@index([merchantId, role])
@@ -138,15 +142,6 @@ model Customer {
   phone String
   /// REGULAR | WHOLESALE | VIP
   category String @default("REGULAR")
-  /// The permanent card number printed on the customer's loyalty card and scanned
-  /// at the station: 16 digits, stored bare, displayed and read aloud in fours.
-  /// Ten random digits plus a six-digit truncated HMAC — opaque and signed, never
-  /// PII, never derived from the phone number. Numeric because Code 128C encodes
-  /// two digits per symbol, which is what makes it narrow enough to print on
-  /// thermal paper at all (§12.12).
-  /// A reprint reissues THIS number; a customer must never lose their history to a
-  /// new one (§6.2 #5).
-  barcodeToken String @unique @map("barcode_token")
   isActive Boolean @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -155,6 +150,9 @@ model Customer {
   transactions Transaction[]
   vouchers Voucher[]
   notificationLogs NotificationLog[]
+  /// Every card this customer has ever held. At most one is ASSIGNED at a time,
+  /// which the partial unique index in the migration enforces (§12.25).
+  cards Card[]
 
   @@unique([merchantId, phone])
   @@index([merchantId, category])
@@ -418,4 +416,108 @@ model AuditLog {
   /// have been broken — the query degrades precisely in the case it exists to reveal.
   @@index([merchantId, action, createdAt])
   @@map("audit_log")
+}
+
+// ── Physical card stock (§12.25) ──────────────────────────────────────────────
+//
+// Cards exist BEFORE customers do. A batch is generated, a vendor prints it, and
+// the cards sit in a drawer as PRINTED until somebody is handed one.
+//
+// The card number lives here and not on `customer` for one reason: a customer holds
+// several cards over a lifetime, and a REPLACED card has to stay rejectable *by
+// number* long after it stopped being anybody's card. A number on the customer row
+// can only ever describe the current card, so the old one becomes unrepresentable —
+// which is exactly the state a person who found it would exploit.
+//
+// Two guarantees in this file are NOT expressible in Prisma and live in the
+// migration SQL instead. Read them there before changing anything here:
+//
+//   * `card_one_active_per_customer` — a partial unique index over
+//     (merchant_id, customer_id) WHERE status = 'ASSIGNED'. One live card per
+//     customer, kept by the database rather than remembered by code.
+//   * CHECK constraints tying status to ownership and origin to serial, so a row
+//     that contradicts itself cannot be written at all.
+
+model Card {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  /// Human-readable serial printed large on a pre-printed card: 1 → `000042`.
+  /// NULL for THERMAL cards — they are printed on demand and there is no physical
+  /// stock to track. Letting them consume serials would corrupt the count of blanks
+  /// remaining, which is the number the batch screen exists to answer.
+  serial Int?
+  /// The sixteen digits the barcode carries, stored bare.
+  /// PRE_PRINTED: a six-digit serial then a ten-digit HMAC check (`card.v2`).
+  /// THERMAL: ten random digits then a six-digit truncated HMAC (`card.v1`).
+  /// Both are 16 digits of Code 128C — 143 modules, unchanged since §12.12.
+  cardNumber String @map("card_number")
+  /// `card.v1` | `card.v2` — which scheme signed this number. Stored rather than
+  /// inferred: the two are indistinguishable by shape, and a verifier that guessed
+  /// would have to try both on every scan forever.
+  scheme String
+  /// PRE_PRINTED | THERMAL
+  origin String
+  /// PRINTED | ASSIGNED | LOST | REPLACED | VOID
+  status String @default("PRINTED")
+  batchId String? @map("batch_id")
+  /// NULL while the card is blank stock or a misprint. Kept after LOST and
+  /// REPLACED, because who held a dead card is what a support call asks about.
+  customerId String? @map("customer_id")
+  assignedAt DateTime? @map("assigned_at")
+  assignedByUserId String? @map("assigned_by_user_id")
+  lostAt DateTime? @map("lost_at")
+  /// The card that superseded this one. One-to-one: a card replaces at most one.
+  replacedByCardId String? @unique @map("replaced_by_card_id")
+  voidedAt DateTime? @map("voided_at")
+  voidReason String? @map("void_reason")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  batch CardBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("CardAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
+  replacedBy Card? @relation("CardReplacement", fields: [replacedByCardId], references: [id], onDelete: SetNull)
+  replaces Card? @relation("CardReplacement")
+
+  /// The hard guarantee against overlapping batch ranges. A batch's range is not a
+  /// claim to be validated — every serial in it is a row, so a second batch covering
+  /// the same numbers fails on INSERT, not on a check somebody could forget to write.
+  @@unique([merchantId, serial])
+  @@unique([merchantId, cardNumber])
+  /// Scan hot path: the station resolves a scanned number to a card on every sale.
+  @@index([cardNumber])
+  /// The batch screen's per-status tallies, and "how many blanks are left".
+  @@index([merchantId, status])
+  @@index([batchId, status])
+  @@index([customerId])
+  @@map("card")
+}
+
+model CardBatch {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  /// Sequential per merchant from 1. What the merchant calls the batch out loud.
+  batchNumber Int @map("batch_number")
+  /// Inclusive. Derived from the rows that exist, never chosen by a human: the
+  /// merchant picks the QUANTITY and the server picks the start, which is what
+  /// removes the collision he is worried about instead of warning him about it.
+  serialStart Int @map("serial_start")
+  serialEnd Int @map("serial_end")
+  quantity Int
+  /// GENERATED | EXPORTED | RECEIVED | RETIRED
+  status String @default("GENERATED")
+  note String?
+  generatedByUserId String? @map("generated_by_user_id")
+  generatedAt DateTime @default(now()) @map("generated_at")
+  exportedAt DateTime? @map("exported_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  generatedBy User? @relation("CardBatchGeneratedBy", fields: [generatedByUserId], references: [id], onDelete: SetNull)
+  cards Card[]
+
+  @@unique([merchantId, batchNumber])
+  @@index([merchantId, generatedAt])
+  @@map("card_batch")
 }

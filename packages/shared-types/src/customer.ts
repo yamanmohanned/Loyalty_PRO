@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CustomerCategorySchema } from './enums';
+import { CardOriginSchema, CustomerCategorySchema } from './enums';
 import { PhoneInputSchema } from './phone';
 
 /** Customer DTOs. Phone is the identifier; nothing sensitive is stored (CLAUDE.md §0.4). */
@@ -11,11 +11,15 @@ export const CustomerSchema = z.object({
   phone: z.string(),
   category: CustomerCategorySchema,
   /**
-   * The permanent code printed on the customer's loyalty card. Opaque and signed —
-   * never PII, never derived from the phone number. A reprint reissues THIS code:
-   * a new one would sever the customer from their own history (§6.2 #5).
+   * The number on the card this customer currently holds, or null when they hold
+   * none — between reporting one lost and being issued a replacement.
+   *
+   * **Null is not an error state.** The card is a credential, not the identity: the
+   * customer, their balance and their history all exist perfectly well without one
+   * (§12.25). A reprint reissues THIS number; a replacement mints a different one
+   * and retires this card (§6.2 #5).
    */
-  barcodeToken: z.string(),
+  cardNumber: z.string().nullable(),
   createdAt: z.string().datetime({ offset: true }),
 });
 
@@ -31,6 +35,18 @@ export const CreateCustomerRequestSchema = z
     name: z.string().trim().min(2, 'الاسم مطلوب').max(120),
     phone: PhoneInputSchema,
     category: CustomerCategorySchema.default('REGULAR'),
+    /**
+     * The blank pre-printed card being handed over, exactly as scanned (§12.25).
+     *
+     * Scanned, never typed: transcription error on this field would bind one
+     * customer's details to a card in somebody else's pocket, and it is faster with
+     * a queue waiting besides.
+     *
+     * Omitted when no blank is to hand, and the Station prints a thermal card
+     * instead — the fallback that keeps a customer from being turned away because
+     * the stock drawer is empty (§6.3).
+     */
+    cardNumber: z.string().trim().min(1).max(64).optional(),
   })
   .strict();
 
@@ -132,9 +148,18 @@ export const CustomerCardSchema = z.object({
   /** `0770 123 4567` — the form printed on the card and read back by a person. */
   phoneLocal: z.string(),
   /** The 16 digits, bare, for the barcode. */
-  barcodeToken: z.string(),
+  cardNumber: z.string(),
   /** `4821 0093 7746 1152` — the same digits, grouped for printing and reading. */
   cardNumberFormatted: z.string(),
+  /**
+   * `000042` for a pre-printed card, null for one printed on thermal paper.
+   *
+   * Shown beside the number so an operator holding the physical card can confirm
+   * they have the right one before reprinting anything.
+   */
+  serialFormatted: z.string().nullable(),
+  /** PRE_PRINTED | THERMAL — decides whether a reprint produces paper or plastic. */
+  origin: CardOriginSchema,
   createdAt: z.string().datetime({ offset: true }),
 });
 

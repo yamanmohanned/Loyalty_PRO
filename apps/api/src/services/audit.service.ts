@@ -17,12 +17,39 @@ export const AUDIT_ACTIONS = {
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
   CARD_REPRINTED: 'customer.card_reprinted',
+  /**
+   * The customer list left the machine as a file. Every phone number in the shop is
+   * in it, and §7.11 calls the phone the one identifier worth protecting here — so
+   * "who exported it, when" is a question somebody will eventually need answered.
+   */
+  CUSTOMER_LIST_EXPORTED: 'customer.list_exported',
   INVOICE_CAPTURED: 'transaction.captured',
   INVOICE_ATTRIBUTED: 'transaction.attributed',
   MANUAL_AMOUNT_ENTERED: 'transaction.manual_amount',
   VOUCHER_ISSUED: 'voucher.issued',
   VOUCHER_REDEEMED: 'voucher.redeemed',
   VOUCHER_VOIDED: 'voucher.voided',
+  /* ── Physical card stock (§12.25) ───────────────────────────────── */
+
+  CARD_BATCH_GENERATED: 'card_batch.generated',
+  /**
+   * The export file was produced — and with it, every card number in the batch
+   * left this machine. Recorded with an actor because that file is the one artefact
+   * of this feature worth stealing, and "who exported it, when" is the first
+   * question after a leak.
+   */
+  CARD_BATCH_EXPORTED: 'card_batch.exported',
+  CARD_BATCH_VOIDED: 'card_batch.voided',
+  CARD_ASSIGNED: 'card.assigned',
+  CARD_REPORTED_LOST: 'card.reported_lost',
+  /**
+   * A lost card came back. Audited with an actor and a stated reason, because it
+   * re-arms a credential that was deliberately disarmed.
+   */
+  CARD_RESTORED: 'card.restored',
+  CARD_REPLACED: 'card.replaced',
+  CARD_VOIDED: 'card.voided',
+
   DISCOUNT_RULES_UPDATED: 'discount.rules_updated',
   DISCOUNT_SETTINGS_UPDATED: 'discount.settings_updated',
   FEATURE_FLAG_TOGGLED: 'feature_flag.toggled',

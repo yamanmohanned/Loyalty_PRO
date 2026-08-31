@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CardRejectionSchema, ScannedCardSchema } from './card-stock';
 import { CaptureModeSchema, DiscountTypeSchema } from './enums';
 import { CapturedInvoiceSchema } from './invoice';
 import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
@@ -126,11 +127,36 @@ export const ScanOutcomeSchema = z.enum([
    * someone their discount.
    */
   'LINKED_WITHOUT_DISCOUNT',
+  /**
+   * The card was recognised and cannot be used: reported lost, superseded by a
+   * replacement, or voided as a misprint (§12.25). `cardRejection` says which.
+   *
+   * Separate from `UNKNOWN_CARD` because the two lead somewhere different. An
+   * unknown or unissued card is an enrolment opportunity and the station offers
+   * registration; a dead card is a conversation, and offering to register a customer
+   * who already has an account would be the wrong door.
+   */
+  'CARD_REJECTED',
 ]);
 export type ScanOutcome = z.infer<typeof ScanOutcomeSchema>;
 
 export const ScanCardResponseSchema = z.object({
   outcome: ScanOutcomeSchema,
+  /**
+   * Why the card was refused, on `UNKNOWN_CARD` and `CARD_REJECTED`; null otherwise.
+   *
+   * It is carried on `UNKNOWN_CARD` too, because that outcome has two causes with
+   * two different follow-ups: `UNKNOWN` is a number this server never minted, and
+   * registration starts from a blank slate; `UNASSIGNED` is a real, unissued card in
+   * the operator's hand, and registration should bind *that* card rather than mint a
+   * fresh one and waste it.
+   */
+  cardRejection: CardRejectionSchema.nullable().default(null),
+  /**
+   * The card that was scanned, when it is one this server knows — so the station can
+   * name a serial in its message and carry an unassigned card into registration.
+   */
+  scannedCard: ScannedCardSchema.nullable().default(null),
   customer: z
     .object({
       id: z.string().uuid(),
