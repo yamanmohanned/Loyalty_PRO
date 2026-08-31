@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import type { KeyStatus } from '@walaa/shared-types';
 import { loadEnv, resetEnvCache } from '../../config/env';
 import { setEnvValue } from '../../config/env-file';
 import { backupBlocked, validationFailed } from '../../lib/errors';
@@ -41,31 +42,10 @@ import { generateBackupKey, keyFingerprint, parseBackupKey } from './key';
  * every diagnostic here uses instead.
  */
 
-export interface KeyStatus {
-  /** A key exists in the configuration. */
-  configured: boolean;
-  /** Safe to display and log; identifies the key without disclosing it. */
-  fingerprint: string | null;
-  confirmed: boolean;
-  confirmedAt: string | null;
-  /** The name of the manager who confirmed, for the audit answer "who has it". */
-  confirmedBy: string | null;
-  /**
-   * Whether backups may run. False until a human has proved they hold the key
-   * somewhere other than this machine.
-   */
-  backupsEnabled: boolean;
-  /**
-   * Whether ANY key has ever been confirmed for this merchant.
-   *
-   * Distinguishes a genuine first run from a key that was replaced later, and the
-   * manager app treats the two differently: first run is a wall with no way past it,
-   * whereas a replaced key raises a standing banner instead. Locking a manager out of
-   * the whole dashboard midway through a migration would be a hazard of its own, and by
-   * then they have done this ceremony before and know what it is.
-   */
-  everConfirmed: boolean;
-}
+// `KeyStatus` is the shared contract (`@walaa/shared-types`). It decides whether a
+// shop's backups are openable at all, and a client that disagreed with this shape
+// would tell a manager the ceremony is done when it is not (§12.27).
+export type { KeyStatus };
 
 /** Reads the configured key, or null when the ceremony has not been started. */
 function currentKey(): Buffer | null {

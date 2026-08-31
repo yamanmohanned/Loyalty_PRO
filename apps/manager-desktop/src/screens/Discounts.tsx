@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import type { DiscountConfigResponse, DiscountRuleRow } from '@walaa/shared-types';
 import { assessMargin, SAFE_PERCENTAGE_MAX, SAFE_PERCENTAGE_MIN } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
@@ -33,27 +34,6 @@ import {
  * at the till, not a separate frontend approximation that could drift.
  */
 
-interface DiscountRuleRow {
-  id?: string;
-  thresholdAmount: number;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
-  discountRate: number;
-  maxDiscountValue: number | null;
-}
-
-interface DiscountConfig {
-  settings: {
-    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE';
-    minRate: number;
-    maxRate: number;
-    absoluteMaxDiscountValue: number;
-    periodType: 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-    settlementStrategy: 'VOUCHER_AS_PAYMENT' | 'DAILY_PROMOTIONAL_EXPENSE';
-  };
-  rules: Array<DiscountRuleRow & { id: string; isActive: boolean; sortOrder: number }>;
-  settlementStrategies: Array<{ name: string; label: string; requiresSplitPayment: boolean }>;
-}
-
 export function DiscountsScreen() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
@@ -61,10 +41,10 @@ export function DiscountsScreen() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['discount-config'],
-    queryFn: () => api.get<DiscountConfig>('/discount'),
+    queryFn: () => api.get<DiscountConfigResponse>('/discount'),
   });
 
-  const [draftSettings, setDraftSettings] = useState<DiscountConfig['settings'] | null>(null);
+  const [draftSettings, setDraftSettings] = useState<DiscountConfigResponse['settings'] | null>(null);
   const [draftRules, setDraftRules] = useState<DiscountRuleRow[] | null>(null);
 
   const settings = draftSettings ?? data?.settings ?? null;
@@ -90,7 +70,7 @@ export function DiscountsScreen() {
   const dangerousCount = assessments.filter((a) => a.exceedsProfit).length;
 
   const saveSettings = useMutation({
-    mutationFn: (next: DiscountConfig['settings']) =>
+    mutationFn: (next: DiscountConfigResponse['settings']) =>
       api.put('/discount/settings', {
         discountType: next.discountType,
         minRate: next.minRate,
@@ -152,7 +132,7 @@ export function DiscountsScreen() {
     );
   }
 
-  const updateSettings = (patch: Partial<DiscountConfig['settings']>) => {
+  const updateSettings = (patch: Partial<DiscountConfigResponse['settings']>) => {
     setDraftSettings({ ...settings, ...patch });
     setSaved(false);
   };
@@ -210,7 +190,7 @@ export function DiscountsScreen() {
             <Field label={locale.discounts.discountType} hint={settings.discountType === 'NONE' ? locale.discounts.typeNoneHint : undefined}>
               <Select
                 value={settings.discountType}
-                onChange={(e) => updateSettings({ discountType: e.target.value as DiscountConfig['settings']['discountType'] })}
+                onChange={(e) => updateSettings({ discountType: e.target.value as DiscountConfigResponse['settings']['discountType'] })}
               >
                 <option value="PERCENTAGE">{locale.discounts.typePercentage}</option>
                 <option value="FIXED_AMOUNT">{locale.discounts.typeFixed}</option>
@@ -221,7 +201,7 @@ export function DiscountsScreen() {
             <Field label={locale.discounts.periodType}>
               <Select
                 value={settings.periodType}
-                onChange={(e) => updateSettings({ periodType: e.target.value as DiscountConfig['settings']['periodType'] })}
+                onChange={(e) => updateSettings({ periodType: e.target.value as DiscountConfigResponse['settings']['periodType'] })}
               >
                 <option value="WEEKLY">{locale.periodTypes.WEEKLY}</option>
                 <option value="MONTHLY">{locale.periodTypes.MONTHLY}</option>
@@ -272,7 +252,7 @@ export function DiscountsScreen() {
                 value={settings.settlementStrategy}
                 onChange={(e) =>
                   updateSettings({
-                    settlementStrategy: e.target.value as DiscountConfig['settings']['settlementStrategy'],
+                    settlementStrategy: e.target.value as DiscountConfigResponse['settings']['settlementStrategy'],
                   })
                 }
               >

@@ -318,3 +318,40 @@ export function assessMargin(params: {
     warning,
   };
 }
+
+/* ── The configuration payload (§12.27) ───────────────────────────────────── */
+
+/**
+ * One rung of the ladder as the rules editor edits it.
+ *
+ * `id` is optional because a row the manager has just added does not have one yet.
+ */
+export interface DiscountRuleRow {
+  id?: string;
+  thresholdAmount: number;
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discountRate: number;
+  maxDiscountValue: number | null;
+}
+
+/**
+ * Everything the discount screen needs, in one response.
+ *
+ * `assessments` travels with the rules rather than being recomputed in the client:
+ * the margin warning is the §2.3 guardrail the manager sees before saving a rate
+ * that loses money on every qualifying sale, and a client that derived it could
+ * derive it differently from the server that enforces it.
+ */
+export interface DiscountConfigResponse {
+  settings: {
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE';
+    minRate: number;
+    maxRate: number;
+    absoluteMaxDiscountValue: number;
+    periodType: 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
+    settlementStrategy: 'VOUCHER_AS_PAYMENT' | 'DAILY_PROMOTIONAL_EXPENSE';
+  };
+  rules: Array<DiscountRuleRow & { id: string; isActive: boolean; sortOrder: number }>;
+  assessments: Array<{ thresholdAmount: number; warning: string | null; exceedsProfit: boolean }>;
+  settlementStrategies: Array<{ name: string; label: string; requiresSplitPayment: boolean }>;
+}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, KeyRound, LogOut, Printer, ShieldCheck } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
+import type { KeyStatus } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
@@ -34,16 +35,7 @@ import { Button, Card, Field, Input, Notice } from '../components/ui';
  * that cannot be enforced, and saying it still changes what most people do.
  */
 
-export interface KeyStatus {
-  configured: boolean;
-  fingerprint: string | null;
-  confirmed: boolean;
-  confirmedAt: string | null;
-  confirmedBy: string | null;
-  backupsEnabled: boolean;
-  /** Whether any key has ever been confirmed — a first run versus a replaced key. */
-  everConfirmed: boolean;
-}
+export type { KeyStatus };
 
 export function useKeyStatus() {
   return useQuery({

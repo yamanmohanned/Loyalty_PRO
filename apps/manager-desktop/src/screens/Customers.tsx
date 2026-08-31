@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Download, Search, Users } from 'lucide-react';
-import { formatCardNumber, type Customer } from '@walaa/shared-types';
+import {
+  formatCardNumber,
+  type Customer,
+  type CustomerBalance,
+  type CustomerListResponse,
+  type DiscountConfigResponse,
+} from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
 import {
@@ -21,48 +27,6 @@ import {
   SkeletonTable,
 } from '../components/ui';
 
-/**
- * Imported, never redeclared (CLAUDE.md §9).
- *
- * This was a local copy until §12.25 renamed the field it carried, and the rename
- * did not break here — the duplicate went on describing a shape the server had
- * stopped sending. That is the same drift §12.23 found in the manager's login, where
- * a copied `Role` union quietly disagreed with the API about which roles exist. A
- * duplicated type does not fail loudly; it fails by staying plausible.
- */
-type CustomerDto = Customer;
-
-/** The live rule ladder and the guardrails around it (`GET /discount`). */
-interface DiscountConfigResponse {
-  settings: { absoluteMaxDiscountValue: number; discountType: string } | null;
-  rules: Array<{ thresholdAmount: number; discountType: string; discountRate: number }>;
-}
-
-/** What `GET /customers` returns. Rows carry the derived balance, never a stored one. */
-interface CustomerListResponse {
-  customers: Array<{
-    id: string;
-    name: string;
-    phone: string;
-    category: string;
-    cardNumber: string | null;
-    cumulativeAmount: number;
-    transactionCount: number;
-    createdAt: string;
-  }>;
-  total: number;
-  page: number;
-  pageSize: number;
-}
-
-interface BalanceDto {
-  periodKey: string;
-  cumulativeAmount: number;
-  transactionCount: number;
-  nextThresholdAmount: number | null;
-  amountToNextThreshold: number | null;
-  nextDiscountLabel: string | null;
-}
 
 /**
  * The customer list.
@@ -315,7 +279,7 @@ export function CustomerDetailScreen() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<{ customer: CustomerDto; balance: BalanceDto }>(`/customers/${id}`),
+    queryFn: () => api.get<{ customer: Customer; balance: CustomerBalance }>(`/customers/${id}`),
     enabled: Boolean(id),
   });
 

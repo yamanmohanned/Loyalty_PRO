@@ -40,7 +40,10 @@ the run itself.
 - [ ] **Real Al-Bayan captured bytes.** §12.6 ruled this non-blocking for *building*, and
   it was. It blocks *integration with the real POS*: the parser is proven only against the
   synthetic ESC/POS fixtures in `agent/fixtures/`. Put the real capture beside them and
-  compare (§12.14).
+  compare (§12.14). **The day you go to get them has a written order of operations:
+  [`agent/RUNBOOK-first-install.md`](agent/RUNBOOK-first-install.md)** — what to try, in
+  what order, which log line means which mode is live, and what to bring back if nothing
+  captures.
 - [ ] **Settlement strategy chosen for the run.** §9 stays open and no phase waits on it
   (§12.8) — but the slip's cashier instruction is composed by the server *from the selected
   strategy* (§12.13). A live run therefore needs `VoucherAsPaymentStrategy` or

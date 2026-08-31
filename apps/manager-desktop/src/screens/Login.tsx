@@ -1,24 +1,18 @@
 import { useState } from 'react';
-import { isDashboardRole, type Role } from '@walaa/shared-types';
+import { isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
-export interface SessionUser {
-  id: string;
-  name: string;
-  username: string;
-  /** The shared union, not a copy of it — see the login check below. */
-  role: Role;
-  merchantId: string;
-  branchId: string | null;
-  branchCode: string | null;
-}
-
-interface LoginResponse {
-  user: SessionUser;
-  tokens: { accessToken: string; refreshToken: string; expiresIn: number };
-}
+/**
+ * The signed-in user, as the API defines them.
+ *
+ * An alias, never a redeclaration (§12.27). The local copy this replaces was
+ * already a subset — it had no `merchantName`, which the server has been sending
+ * since the Station needed a shop name to print on cards. Nothing in the manager
+ * app broke, because a missing field never does; it just quietly was not there.
+ */
+export type SessionUser = AuthUser;
 
 /**
  * Login.

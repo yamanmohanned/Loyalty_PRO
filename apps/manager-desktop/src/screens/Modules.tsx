@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FeatureFlagKey } from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, Notice, PageHeader, SkeletonTable, cn } from '../components/ui';
@@ -12,16 +13,8 @@ import { Card, CardHeader, Chip, Notice, PageHeader, SkeletonTable, cn } from '.
  * backup is the one that should never be left off.
  */
 
-type FlagKey =
-  | 'whatsapp_integration'
-  | 'customer_card_printing'
-  | 'cloud_backup'
-  | 'advanced_reports'
-  | 'voucher_reconciliation'
-  | 'sms_fallback'
-  | 'auto_update';
 
-const MODULES: Array<{ key: FlagKey; label: string; hint: string; locked?: string }> = [
+const MODULES: Array<{ key: FeatureFlagKey; label: string; hint: string; locked?: string }> = [
   { key: 'cloud_backup', label: locale.modules.cloudBackup, hint: locale.modules.cloudBackupHint },
   { key: 'customer_card_printing', label: locale.modules.cardPrinting, hint: locale.modules.cardPrintingHint },
   { key: 'voucher_reconciliation', label: locale.modules.voucherReconciliation, hint: locale.modules.voucherReconciliationHint },
@@ -41,11 +34,11 @@ export function ModulesScreen() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['flags'],
-    queryFn: () => api.get<{ flags: Record<FlagKey, boolean> }>('/flags'),
+    queryFn: () => api.get<{ flags: Record<FeatureFlagKey, boolean> }>('/flags'),
   });
 
   const toggle = useMutation({
-    mutationFn: (params: { key: FlagKey; isEnabled: boolean }) =>
+    mutationFn: (params: { key: FeatureFlagKey; isEnabled: boolean }) =>
       api.put(`/flags/${params.key}`, { isEnabled: params.isEnabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['flags'] }),
   });

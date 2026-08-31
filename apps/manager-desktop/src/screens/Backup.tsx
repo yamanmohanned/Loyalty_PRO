@@ -11,7 +11,12 @@ import {
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Button, Card, CardHeader, Chip, Notice, PageHeader, Skeleton } from '../components/ui';
-import { KeyConfirmedSummary, type KeyStatus } from './KeyCeremony';
+import type {
+  BackupOverview,
+  HistoryEntry,
+  VerificationResult,
+} from '@walaa/shared-types';
+import { KeyConfirmedSummary } from './KeyCeremony';
 
 /**
  * Backup (CLAUDE_v3.md §7.3, §12.17–§12.21).
@@ -27,61 +32,6 @@ import { KeyConfirmedSummary, type KeyStatus } from './KeyCeremony';
  * being attempted three months ago produces no error at all; the only thing that reveals
  * it is a date, sitting where a recent one should be.
  */
-
-interface StoredBackup {
-  id: string;
-  name: string;
-  bytes: number;
-  createdAt: string;
-}
-
-interface DestinationListing {
-  kind: string;
-  label: string;
-  available: boolean;
-  backups: StoredBackup[];
-}
-
-interface ScheduleStatus {
-  enabled: boolean;
-  dailyAt: string;
-  timeZone: string;
-  everyTransactions: number;
-  lastSuccessAt: string | null;
-  lastOutcome: 'COMPLETED' | 'FAILED' | 'SKIPPED' | null;
-  nextRunAt: string | null;
-  transactionsSinceLastBackup: number;
-  running: boolean;
-}
-
-interface HistoryEntry {
-  at: string;
-  outcome: 'COMPLETED' | 'FAILED' | 'SKIPPED';
-  name: string;
-  actorName: string | null;
-  archiveBytes: number | null;
-  destinations: Array<{ kind: string; ok: boolean; error?: string }>;
-  error: string | null;
-  outOfSpace: boolean;
-}
-
-interface BackupOverview {
-  key: KeyStatus;
-  destinations: DestinationListing[];
-  schedule: ScheduleStatus;
-  history: {
-    runs: HistoryEntry[];
-    lastVerification: { at: string; verifiedFrom: string | null; actorName: string | null } | null;
-  };
-}
-
-interface VerificationResult {
-  ok: boolean;
-  recencyProven: boolean;
-  verifiedFrom: string;
-  failure?: string;
-  restore: { integrity: string; counts: { customers: number; transactions: number } };
-}
 
 const dateTime = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' }) : '—';

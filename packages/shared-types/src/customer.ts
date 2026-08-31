@@ -164,3 +164,29 @@ export const CustomerCardSchema = z.object({
 });
 
 export type CustomerCard = z.infer<typeof CustomerCardSchema>;
+
+/* ── The dashboard list (§12.26) ──────────────────────────────────────────── */
+
+/**
+ * One row of the customer list.
+ *
+ * `cumulativeAmount` is derived from transactions in the active period and never
+ * stored (§5.3) — which is also why sorting by it cannot be an ORDER BY.
+ */
+export interface CustomerListRow {
+  id: string;
+  name: string;
+  phone: string;
+  category: string;
+  cardNumber: string | null;
+  cumulativeAmount: number;
+  transactionCount: number;
+  createdAt: string;
+}
+
+export interface CustomerListResponse {
+  customers: CustomerListRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

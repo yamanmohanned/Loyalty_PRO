@@ -477,8 +477,13 @@ Use these deliberately — they materially improve accuracy and reduce rework.
 - Do NOT ship a percentage discount without an absolute value cap.
 - Do NOT rebuild a screen from the Stitch exports without reading §12.26 first — they
   describe the v1 product, and six of the thirteen are for things v3 discarded.
-- Do NOT reintroduce per-customer discount overrides. §2.3's minimum, maximum and
-  absolute cap only bound a discount while there is one ladder for them to bound.
+- Do NOT reintroduce per-customer discount overrides — discarded by design, not
+  missing (§12.27). §2.3's minimum, maximum and absolute cap only bind while there
+  is one ladder for them to bind.
+- Do NOT declare a server response shape in a client. It goes in
+  `packages/shared-types` and both sides import it (§12.27, checked by a test).
+- Do NOT call a human-readable format done on a passing unit test. Look at it
+  rendered (§12.27).
 - Do NOT restore `hoist-pattern[]=*` in `.npmrc`. If a package's own types stop
   resolving, add it to `packageExtensions` (§12.24).
 
@@ -2083,3 +2088,115 @@ share side by side — `9` and `75٪` — and the pair displayed as `975٪`. Fou
 at the panel, not by any test: the DOM was correct and only the reading was wrong. The
 count carries its unit now (`9 زبون`) and the share is set apart. On a panel that is
 nothing but numbers, adjacency is ambiguity.
+
+### 12.27 Two rules the card work earned — 2026-08-31
+*(operator ruling. Both come out of defects found while building §12.25, and both
+are about failures that a passing test suite cannot see.)*
+
+#### Format-for-humans is verifiable only by looking
+
+**The class.** Any value that is formatted *so a person can read it* — grouped,
+spaced, padded, mirrored, wrapped, aligned — is correct only on the screen. The
+string can be right, the DOM can be right, every unit test can pass, and the
+rendering can still be wrong. **A unit test cannot check a format whose whole
+purpose is legibility, because it is not comparing what the reader sees.**
+
+The instance that named it: the sixteen-digit card number rendered backwards on
+every screen that showed it. `formatCardNumber` returned `0000 0122 6577 3350`
+correctly and a test asserted so; under the RTL page direction the bidi algorithm
+laid the four groups out right-to-left and the reader saw `3350 6577 0122 0000`.
+It had been wrong since §12.12 and **it silently removed the only reason the
+sixteen-digit format exists** — §12.12 chose it over the v1 token specifically so a
+customer could read the number down a phone line. The format survived; the reason
+for it did not.
+
+**So, the rule.** Anything formatted for a human to read gets a **rendered check**
+before it is called done — a screenshot, or a DOM read of the text as displayed —
+not only a unit test on the formatting function. That covers at minimum: card
+numbers, phone numbers, serials, money, dates, and any number set beside another
+number.
+
+The second instance, found the same day and by the same means: the category
+breakdown put a count and a share side by side, and `9` next to `75٪` displayed as
+`975٪`. Two bare adjacent numbers read as one. No test could see that either — the
+DOM was correct and only the reading was wrong. The count carries its unit now.
+
+This is §12.19's lesson one layer down. That one said a screen is not verified
+until somebody looks at it; this says *which* things on a screen most need looking
+at, and why the test suite will not cover for you.
+
+#### No client redeclares a server DTO
+
+**The rule: every shape that crosses the wire is declared once, in
+`packages/shared-types`, and imported by both sides.** A client may write an inline
+wrapper at a call site — `api.get<{ card: CustomerCard }>` — but every *name* in it
+comes from the contract package.
+
+CLAUDE.md §9 has said this since v1. It was broken anyway, three times, and each
+time it failed the same way — **silently, by staying plausible**:
+
+- §12.23: the manager's login copied the `Role` union, so it went on refusing
+  exactly the roles it was written against while the API grew a fourth.
+- §12.25: the manager's customer list copied the customer DTO, so renaming
+  `barcodeToken` → `cardNumber` in the contract **did not break it**. The duplicate
+  described a shape the server had stopped sending.
+- Found while writing this: `SessionUser` was a *subset* of the API's `AuthUser`,
+  missing the `merchantName` the server has sent since the Station needed a shop
+  name to print. Nothing broke, because a missing field never does.
+
+A duplicated type does not fail at the point of duplication. It fails later, in
+another commit, as a screen showing `undefined`.
+
+**The check.** `packages/shared-types/src/__tests__/no-duplicate-dtos.test.ts`
+fails the build when a client types an API call with anything it declared itself.
+It reads the type argument of every `api.get/post/put/patch<…>` in the client apps
+and requires each name in it to be imported from `@walaa/shared-types`. That is the
+precise rule rather than a proxy: the type argument *is* the client's claim about
+what the server returns, and the contract package is the only thing entitled to
+make that claim. Local UI types are untouched, because they never appear there.
+
+A second assertion guards the guard — it counts the API calls found and fails if
+the count collapses, so a renamed helper cannot turn the check into a green test
+that checks nothing.
+
+Fourteen shapes moved into the contract to make it pass: the reports
+(`OverviewReport`, `ProgrammeReport`, `ReportRange`), the backup and key-ceremony
+shapes including `KeyStatus`, `LoginResponse`, `DiscountConfigResponse`,
+`CustomerListResponse`, and `FeatureFlagKey`. The API imports them as its own
+return types, so server and client cannot drift without a type error **in the same
+commit**.
+
+*Recorded honestly: writing this section, the first draft of the shared `KeyStatus`
+invented a `confirmedByName` field and dropped `backupsEnabled` — a third variant,
+created while removing the second. Comparing against both existing copies caught
+it. The shape that decides whether a shop's backups are openable is not one to
+reconstruct from memory.*
+
+#### Per-customer discount overrides are DISCARDED BY DESIGN
+
+*(operator ruling, 2026-08-31 — recorded so no future session rebuilds them as a
+design-fidelity fix.)*
+
+The v1 Stitch customer-detail screen has a per-customer override card
+(«لا توجد قاعدة مخصصة — يطبَّق النظام العام», with an "add a custom rule" action),
+and v1 had `customer_override_rule` behind it. **v3 removed that table along with
+the coupon model it belonged to, and it is not coming back.**
+
+They are **discarded, not missing.** The reasoning, which is the operator's:
+
+§2.3's minimum rate, maximum rate and **absolute value cap** exist to stop a
+configuration that loses money on every qualifying sale — on a 25,000 IQD basket at
+2–4% net margin, a 10% discount costs the shop roughly 1,750 IQD of a ~750 IQD
+profit. **All three guardrails only bind while there is one ladder for them to
+bind.** A per-customer exception is not one more rule; it is a second ladder that
+none of the three reaches, and it reopens every one of them at once.
+
+What the detail screen shows instead is the live ladder with the customer's current
+tier highlighted, and a line saying plainly that the shop's rules apply to
+everybody. That answers the manager who remembers the v1 screen, rather than
+leaving them hunting for a button — and it is a *report* of the rules rather than a
+second place to set them.
+
+If per-customer discounting is ever genuinely wanted, it is a **discount-model
+decision** requiring its own guardrails, not a fidelity fix. It does not arrive by
+way of a design export.

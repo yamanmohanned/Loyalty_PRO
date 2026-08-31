@@ -9,6 +9,7 @@
  */
 
 export * from './auth';
+export * from './backup';
 export * from './barcode';
 export * from './card';
 export * from './card-stock';
@@ -21,6 +22,7 @@ export * from './invoice-parsers';
 export * from './money';
 export * from './period';
 export * from './phone';
+export * from './reports';
 export * from './storage';
 export * from './sync';
 export * from './transaction';

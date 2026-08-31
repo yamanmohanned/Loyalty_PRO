@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import type { ProgrammeReportResponse } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
@@ -13,32 +14,6 @@ import {
   SkeletonTable,
   Skeleton,
 } from '../components/ui';
-
-interface ProgrammeReportResponse {
-  report: {
-    discountsGranted: number;
-    vouchersIssued: number;
-    vouchersRedeemed: number;
-    vouchersOutstanding: number;
-    outstandingValue: number;
-    redemptionRatePct: number;
-    averageBasket: number;
-    attributionRatePct: number;
-    captureByMode: Array<{ mode: string; count: number }>;
-    customersByCategory: Array<{ category: string; count: number }>;
-    tierPerformance: Array<{ thresholdAmount: number; discountLabel: string; reached: number }>;
-    todayReconciliation: {
-      date: string;
-      issuedCount: number;
-      issuedValue: number;
-      redeemedCount: number;
-      redeemedValue: number;
-      outstandingCount: number;
-      outstandingValue: number;
-      settlementStrategy: string;
-    };
-  };
-}
 
 /**
  * Programme reporting.

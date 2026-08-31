@@ -28,6 +28,13 @@ decision in this project traces back to one of them:
 
 ---
 
+## The first install on a real till
+
+`RUNBOOK-first-install.md` is the order of operations for that day: what to establish
+before installing anything, which log line tells you which mode won, the decision tree
+when nothing captures, and the exact artefacts to bring back if it does not work. Read
+it before going, not in the shop.
+
 ## Building and testing
 
 C: on the build machine is full, so packages restore to `E:` (see `NuGet.config`, and

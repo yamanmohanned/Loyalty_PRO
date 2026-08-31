@@ -1,3 +1,4 @@
+import type { OverviewReport, ProgrammeReport, ReportRange } from '@walaa/shared-types';
 import { prisma } from '../lib/prisma';
 import { getActiveRules, getPeriodContext, periodKeyFor } from './balance.service';
 import { reconcileDay } from './voucher.service';
@@ -16,7 +17,11 @@ import { reconcileDay } from './voucher.service';
  * the programme is actually reaching customers.
  */
 
-export type ReportRange = '7d' | '30d' | '90d' | '365d';
+// `ReportRange`, `OverviewReport` and `ProgrammeReport` are the shared contracts
+// (`@walaa/shared-types`), imported rather than declared: the manager app used to
+// carry its own copy of each, and a copy agrees with the server right up until it
+// does not (§12.27). Re-exported so existing importers of this module keep working.
+export type { OverviewReport, ProgrammeReport, ReportRange };
 
 /**
  * The active period's key for this merchant.
@@ -54,38 +59,6 @@ function localDay(instant: Date, timeZone: string): string {
   }).formatToParts(instant);
   const read = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
   return `${read('year')}-${read('month')}-${read('day')}`;
-}
-
-export interface OverviewReport {
-  totalCustomers: number;
-  newCustomersInRange: number;
-  capturedInvoices: number;
-  attributedInvoices: number;
-  /** Percentage of captures a card was scanned for — the enrolment signal. */
-  attributionRatePct: number;
-  capturedSales: number;
-  discountsGranted: number;
-  averageBasket: number;
-  currentPeriodKey: string;
-  timeseries: Array<{ date: string; amount: number; count: number; attributed: number }>;
-  topCustomers: Array<{
-    id: string;
-    name: string;
-    phone: string;
-    category: string;
-    cumulativeAmount: number;
-    transactionCount: number;
-  }>;
-  recentTransactions: Array<{
-    id: string;
-    invoiceId: string;
-    amountGross: number;
-    discountValue: number;
-    amountNet: number;
-    customerName: string | null;
-    occurredAt: string;
-    captureMode: string;
-  }>;
 }
 
 export async function getOverview(
@@ -197,42 +170,6 @@ export async function getOverview(
       captureMode: t.captureMode,
     })),
   };
-}
-
-export interface ProgrammeReport {
-  discountsGranted: number;
-  vouchersIssued: number;
-  vouchersRedeemed: number;
-  vouchersOutstanding: number;
-  outstandingValue: number;
-  redemptionRatePct: number;
-  averageBasket: number;
-  attributionRatePct: number;
-  captureByMode: Array<{ mode: string; count: number }>;
-  /**
-   * Registered customers by category.
-   *
-   * Counts of people, never sums of money — so §13.5's Int32 warning does not apply
-   * and nothing here needs a BIGINT cast. Worth stating because the two breakdowns
-   * below look alike and only one of them would.
-   */
-  customersByCategory: Array<{ category: string; count: number }>;
-  /**
-   * How many customers reached each discount tier in the CURRENT period.
-   *
-   * The v3 answer to the old "tier performance" chart. It reads from the live rule
-   * ladder rather than a stored tier on the customer, because a customer's tier is
-   * derived from spend within the period (§5.3) and a rate the manager changed
-   * yesterday applies to today's ladder. `reached` is cumulative in the way the
-   * ladder is: someone at 200,000 counts toward every threshold below them, because
-   * that is what "reached this tier" means to the person reading the chart.
-   */
-  tierPerformance: Array<{
-    thresholdAmount: number;
-    discountLabel: string;
-    reached: number;
-  }>;
-  todayReconciliation: Awaited<ReturnType<typeof reconcileDay>>;
 }
 
 export async function getProgrammeReport(

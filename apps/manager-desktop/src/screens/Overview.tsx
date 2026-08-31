@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api } from '../lib/api';
+import type { OverviewResponse } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
@@ -25,39 +26,6 @@ import {
   Skeleton,
   SkeletonTable,
 } from '../components/ui';
-
-interface OverviewResponse {
-  overview: {
-    totalCustomers: number;
-    newCustomersInRange: number;
-    capturedInvoices: number;
-    attributedInvoices: number;
-    attributionRatePct: number;
-    capturedSales: number;
-    discountsGranted: number;
-    averageBasket: number;
-    currentPeriodKey: string;
-    timeseries: Array<{ date: string; amount: number; count: number; attributed: number }>;
-    topCustomers: Array<{
-      id: string;
-      name: string;
-      phone: string;
-      category: string;
-      cumulativeAmount: number;
-      transactionCount: number;
-    }>;
-    recentTransactions: Array<{
-      id: string;
-      invoiceId: string;
-      amountGross: number;
-      discountValue: number;
-      amountNet: number;
-      customerName: string | null;
-      occurredAt: string;
-      captureMode: string;
-    }>;
-  };
-}
 
 /**
  * Overview.
