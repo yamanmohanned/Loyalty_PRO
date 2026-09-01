@@ -9,7 +9,8 @@
 > **Status legend.** `[x]` proven, with the evidence named · `[ ]` open · **BLOCKED**
 > waiting on someone outside the code.
 >
-> Compiled 2026-08-31 from `CLAUDE.md`, `CLAUDE_v3.md` §§2–9 and §12.1–12.26, and
+> Compiled 2026-08-31 from `CLAUDE.md`, `CLAUDE_v3.md` §§2–9 and §12.1–12.28 (settlement
+> item updated 2026-09-01), and
 > `PROMPT_v3.md`.
 
 ---
@@ -44,11 +45,6 @@ the run itself.
   [`agent/RUNBOOK-first-install.md`](agent/RUNBOOK-first-install.md)** — what to try, in
   what order, which log line means which mode is live, and what to bring back if nothing
   captures.
-- [ ] **Settlement strategy chosen for the run.** §9 stays open and no phase waits on it
-  (§12.8) — but the slip's cashier instruction is composed by the server *from the selected
-  strategy* (§12.13). A live run therefore needs `VoucherAsPaymentStrategy` or
-  `DailyPromotionalExpenseStrategy` deliberately set, even provisionally. Never a flow
-  where the cashier collects less cash than the POS recorded without a voucher record (§9).
 - [ ] **BLOCKED — Physical card stock exists.** §12.25 makes pre-printed cards the primary
   registration path: the customer is handed a card that **already exists in the database**,
   so until a batch has been generated, exported, printed by the card vendor and physically
@@ -168,6 +164,14 @@ the run itself.
 
 Listed so the run does not spend its time re-deriving what is settled.
 
+- [x] **Discount settlement is the merchant's own affair** — §9 **closed** by operator
+  ruling (§12.28), the split-payment question about Al-Bayan withdrawn. The system prints
+  gross / discount / net and prescribes no bookkeeping. The default `MERCHANT_DEFINED`
+  instruction states the figures and defers the procedure, so the run needs no decision
+  here. One thing worth doing on the day, and it is not a blocker: *show the merchant the
+  printed sentence before the first customer sees it* — if he wants a procedure on the
+  paper, `VOUCHER_AS_PAYMENT` and `DAILY_PROMOTIONAL_EXPENSE` are still there and it is a
+  settings change on the Discounts screen, not a rebuild.
 - [x] Service survives reboot with nobody logged in — the evidence for §3's Windows Service
   over a Tauri sidecar (§12.11).
 - [x] **Fail-open**: `ForwardFirstTests` breaks the capture side every realistic way — throw,

@@ -25,8 +25,9 @@ migrate** — carefully, without destroying work that remains valid.
 3. **Report the current state honestly:** what Phase 2 actually completed, what is half-built,
    and what is broken. Do not gloss over incomplete work.
 4. **Stress-test your migration plan** using the **`grill-me`** skill before executing it.
-5. **List blocking questions.** Note that §9 (discount settlement) is a known open blocker —
-   do not re-ask it; build the pluggable strategy as instructed.
+5. **List blocking questions.** Note that §9 (discount settlement) is **closed** as of
+   2026-09-01 (§12.28) — do not re-ask it. The merchant settles discounts his own way; all
+   three strategies stay built and the choice is a per-store setting.
 6. **Do not write code until I confirm your audit and plan.**
 
 ---

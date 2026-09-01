@@ -1,4 +1,4 @@
-import type { CaptureMode, CustomerCategory } from './enums';
+import type { CaptureMode, CustomerCategory, SettlementStrategy } from './enums';
 
 /**
  * Reporting contracts (CLAUDE_v3.md §12.27).
@@ -67,7 +67,9 @@ export interface DayReconciliation {
   redeemedValue: number;
   outstandingCount: number;
   outstandingValue: number;
-  settlementStrategy: string;
+  /** The union, not `string`: the Reports screen names the strategy from
+   *  SETTLEMENT_STRATEGY_LABELS, which a widened type would let it index unsafely. */
+  settlementStrategy: SettlementStrategy;
 }
 
 export interface ProgrammeReport {

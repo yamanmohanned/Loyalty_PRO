@@ -177,26 +177,45 @@ export const VoucherStatusSchema = z.enum(['ISSUED', 'REDEEMED', 'VOID']);
 export type VoucherStatus = z.infer<typeof VoucherStatusSchema>;
 
 /**
- * How a granted discount is settled against the books (CLAUDE_v3.md §9).
+ * What the slip tells the cashier to do about a granted discount (CLAUDE_v3.md §9).
  *
- * This is an OPEN question at the merchant, which is exactly why it is a selectable
- * strategy rather than a hardcoded flow:
+ * §9 is **closed** by operator ruling: the merchant records discounts by his own
+ * accounting method, and the system does not prescribe one. All three strategies stay
+ * available and the choice is a per-store setting, because a second merchant may want
+ * the slip to carry an explicit procedure.
  *
- * - `VOUCHER_AS_PAYMENT` (preferred) — the invoice stays at full value in the POS and
- *   the customer pays cash + voucher. Requires Al-Bayan to support split payment,
- *   which is not yet confirmed.
- * - `DAILY_PROMOTIONAL_EXPENSE` (fallback) — vouchers are aggregated daily and booked
- *   as a promotional expense. Less elegant, still accounting-sound.
+ * - `MERCHANT_DEFINED` (default) — states gross, discount and net plainly and defers
+ *   the mechanism to the store. Assumes nothing about how the discount is recorded.
+ * - `VOUCHER_AS_PAYMENT` — the invoice stays at full value in the POS and the customer
+ *   pays cash + voucher. Presumes the POS accepts a second tender on one invoice.
+ * - `DAILY_PROMOTIONAL_EXPENSE` — full cash is collected and the slips are aggregated
+ *   at end of day as one promotional expense.
  *
- * Neither may ever produce a cash total below what the POS recorded without a
- * matching voucher record. That is an unexplained shortfall that reads as theft in
- * the books and would wrongly implicate staff (§9, §0 rule 3).
+ * The invariant behind all three is structural, not textual: a discount is never
+ * granted without a voucher record written in the same transaction. An unexplained
+ * shortfall in the drawer reads as theft in the books and would wrongly implicate
+ * staff (§9, §0 rule 3).
  */
 export const SettlementStrategySchema = z.enum([
+  'MERCHANT_DEFINED',
   'VOUCHER_AS_PAYMENT',
   'DAILY_PROMOTIONAL_EXPENSE',
 ]);
 export type SettlementStrategy = z.infer<typeof SettlementStrategySchema>;
+
+/**
+ * The Arabic name of each strategy, declared once (§12.27).
+ *
+ * Both sides need it — the API to label the options in the settings response, the
+ * manager to name the strategy on the reconciliation panel — and a `Record` keyed by
+ * the union means adding a fourth strategy is a type error everywhere it must be
+ * handled, rather than a silent mislabel in whichever client spelled out a ternary.
+ */
+export const SETTLEMENT_STRATEGY_LABELS: Readonly<Record<SettlementStrategy, string>> = {
+  MERCHANT_DEFINED: 'بيان الخصم فقط',
+  VOUCHER_AS_PAYMENT: 'قسيمة كوسيلة دفع',
+  DAILY_PROMOTIONAL_EXPENSE: 'مصروف ترويجي يومي',
+};
 
 /* ── Feature flags (CLAUDE_v3.md §8) ───────────────────────────────────────── */
 

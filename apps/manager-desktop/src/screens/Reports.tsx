@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { ProgrammeReportResponse } from '@walaa/shared-types';
+import { SETTLEMENT_STRATEGY_LABELS, type ProgrammeReportResponse } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
@@ -233,9 +233,7 @@ export function ReportsScreen() {
               <div className="mt-6">
                 <Notice tone="neutral">
                   آلية التسوية:{' '}
-                  {r.todayReconciliation.settlementStrategy === 'VOUCHER_AS_PAYMENT'
-                    ? 'قسيمة كوسيلة دفع'
-                    : 'مصروف ترويجي يومي'}
+                  {SETTLEMENT_STRATEGY_LABELS[r.todayReconciliation.settlementStrategy]}
                 </Notice>
               </div>
             </>

@@ -8,7 +8,7 @@ import {
 import { AppError, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
-import { getSettlementStrategy } from './settlement';
+import { DEFAULT_SETTLEMENT_STRATEGY, getSettlementStrategy } from './settlement';
 
 /**
  * Voucher lifecycle and end-of-day reconciliation.
@@ -167,6 +167,7 @@ export async function reconcileDay(
     voidCount: voided.length,
     outstandingCount: outstanding.length,
     outstandingValue: sum(outstanding),
-    settlementStrategy: (settings?.settlementStrategy ?? 'VOUCHER_AS_PAYMENT') as VoucherReconciliation['settlementStrategy'],
+    settlementStrategy: (settings?.settlementStrategy ??
+      DEFAULT_SETTLEMENT_STRATEGY) as VoucherReconciliation['settlementStrategy'],
   };
 }

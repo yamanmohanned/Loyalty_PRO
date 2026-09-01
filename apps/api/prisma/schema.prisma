@@ -210,9 +210,11 @@ model DiscountSettings {
   periodType String @default("MONTHLY") @map("period_type")
   periodStart DateTime? @map("period_start")
   periodEnd DateTime? @map("period_end")
-  /// VOUCHER_AS_PAYMENT | DAILY_PROMOTIONAL_EXPENSE (§9). Selectable because the
-  /// settlement mechanism is an open blocker; both strategies are implemented.
-  settlementStrategy String @default("VOUCHER_AS_PAYMENT") @map("settlement_strategy")
+  /// MERCHANT_DEFINED | VOUCHER_AS_PAYMENT | DAILY_PROMOTIONAL_EXPENSE (§9, closed).
+  /// Chooses the wording of the cashier instruction printed on the slip, nothing else.
+  /// Defaults to the strategy that states the figures and presumes no procedure; a
+  /// store wanting an explicit one selects it in settings (§12.28).
+  settlementStrategy String @default("MERCHANT_DEFINED") @map("settlement_strategy")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

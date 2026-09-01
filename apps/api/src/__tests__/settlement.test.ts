@@ -8,8 +8,10 @@ import { resetSubscribers } from '../services/realtime.service';
 import { scanCard, type ScanContext } from '../services/scan.service';
 import {
   ALL_SETTLEMENT_STRATEGIES,
+  DEFAULT_SETTLEMENT_STRATEGY,
   dailyPromotionalExpenseStrategy,
   getSettlementStrategy,
+  merchantDefinedStrategy,
   voucherAsPaymentStrategy,
 } from '../services/settlement';
 import { processSyncBatch, type SyncContext } from '../services/sync.service';
@@ -20,9 +22,10 @@ import { capturedInvoice, createWorld, type World } from './helpers/fixtures';
 /**
  * Settlement strategies, vouchers, feature flags and offline sync.
  *
- * The settlement tests exist because §9 is an open blocker: the mechanism is not
- * confirmed, so both implementations must be correct and interchangeable before
- * the answer arrives.
+ * §9 is closed: the merchant records discounts by his own accounting method and the
+ * system prescribes none. What survives is a per-store choice of the words printed on
+ * the slip, so every implementation must be correct and interchangeable, and the
+ * default must be the one that asserts no procedure.
  */
 
 const prisma = new PrismaClient();
@@ -57,27 +60,52 @@ const capture = (invoiceId: string, amountGross: number) =>
 const scan = (invoiceId?: string) =>
   scanCard(station, { barcodeToken: world.customerBarcode, ...(invoiceId ? { invoiceId } : {}) });
 
-describe('settlement strategy selection (§9)', () => {
-  it('defaults to voucher-as-payment', () => {
+describe('settlement strategy selection (§9, closed)', () => {
+  it('defaults to the strategy that presumes no procedure', () => {
+    expect(DEFAULT_SETTLEMENT_STRATEGY).toBe('MERCHANT_DEFINED');
+    expect(getSettlementStrategy(DEFAULT_SETTLEMENT_STRATEGY).name).toBe('MERCHANT_DEFINED');
+  });
+
+  it('resolves each strategy by name', () => {
     expect(getSettlementStrategy('VOUCHER_AS_PAYMENT').name).toBe('VOUCHER_AS_PAYMENT');
+    expect(getSettlementStrategy('DAILY_PROMOTIONAL_EXPENSE').name).toBe(
+      'DAILY_PROMOTIONAL_EXPENSE',
+    );
   });
 
-  it('falls back to the preferred strategy on an unrecognised value', () => {
+  it('falls back to the default on an unrecognised value', () => {
     // SQLite stores this as a plain string. A bad value must not stop the store
-    // discounting, and the preferred strategy is the safe default because it never
-    // asks a cashier to take short payment.
-    expect(getSettlementStrategy('NONSENSE').name).toBe('VOUCHER_AS_PAYMENT');
+    // discounting, and the safest thing to print when the setting is unreadable is
+    // the discount itself with no procedure asserted around it.
+    expect(getSettlementStrategy('NONSENSE').name).toBe('MERCHANT_DEFINED');
   });
 
-  it('exposes both implementations for the settings UI', () => {
-    expect(ALL_SETTLEMENT_STRATEGIES).toHaveLength(2);
+  it('exposes all three implementations to the settings UI, default first', () => {
+    expect(ALL_SETTLEMENT_STRATEGIES.map((s) => s.name)).toEqual([
+      'MERCHANT_DEFINED',
+      'VOUCHER_AS_PAYMENT',
+      'DAILY_PROMOTIONAL_EXPENSE',
+    ]);
+    // Only the voucher-as-payment procedure needs a second tender on one invoice.
     expect(voucherAsPaymentStrategy.requiresSplitPayment).toBe(true);
-    // The fallback exists precisely for a POS that cannot split payment.
     expect(dailyPromotionalExpenseStrategy.requiresSplitPayment).toBe(false);
+    expect(merchantDefinedStrategy.requiresSplitPayment).toBe(false);
+  });
+
+  it('gives a store the default without being told', async () => {
+    // Proves the column default, not the constant: a settings row written without a
+    // strategy is what a fresh install produces, and it must not arrive carrying a
+    // procedure the merchant never chose.
+    const merchant = await prisma.merchant.create({ data: { name: 'متجر بلا إعداد' } });
+    const settings = await prisma.discountSettings.create({
+      data: { merchantId: merchant.id },
+    });
+
+    expect(settings.settlementStrategy).toBe('MERCHANT_DEFINED');
   });
 });
 
-describe('both strategies protect the cash drawer (§0 rule 3)', () => {
+describe('every strategy protects the cash drawer (§0 rule 3)', () => {
   const context = {
     merchantId: 'm',
     transactionId: 't',
@@ -90,6 +118,24 @@ describe('both strategies protect the cash drawer (§0 rule 3)', () => {
     discountLabel: '2٪',
     issuedAt: new Date(),
   };
+
+  it('merchant-defined states the figures and names no mechanism', () => {
+    const outcome = merchantDefinedStrategy.settle(context);
+
+    expect(outcome.strategy).toBe('MERCHANT_DEFINED');
+    expect(outcome.value).toBe(500);
+    // Gross, discount and net are all on the paper, so nothing is calculated at a
+    // till with a queue behind it.
+    expect(outcome.cashierInstruction).toContain('500 د.ع');
+    expect(outcome.cashierInstruction).toContain('25,000');
+    expect(outcome.cashierInstruction).toContain('24,500');
+    // And nothing about how the sale is settled. Each of the other two instructions
+    // asserts a mechanism, and asserting either one here is the thing this strategy
+    // exists to avoid (§9 closed — the merchant records discounts his own way).
+    expect(outcome.cashierInstruction).not.toContain('لا تعدّل الفاتورة');
+    expect(outcome.cashierInstruction).not.toContain('لا تستلم مبلغاً أقل');
+    expect(outcome.cashierInstruction).not.toContain('نقداً');
+  });
 
   it('voucher-as-payment tells the cashier not to modify the invoice', () => {
     const outcome = voucherAsPaymentStrategy.settle(context);

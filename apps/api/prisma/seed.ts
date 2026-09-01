@@ -235,7 +235,7 @@ async function seed(db: PrismaClientType): Promise<void> {
       // The last line of defence (§2.3). Never ship a percentage without it.
       absoluteMaxDiscountValue: 5_000,
       periodType: 'MONTHLY',
-      settlementStrategy: 'VOUCHER_AS_PAYMENT',
+      settlementStrategy: 'MERCHANT_DEFINED',
     },
   });
 

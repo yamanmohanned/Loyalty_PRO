@@ -408,28 +408,39 @@ and is **billed per conversation**.
 
 ---
 
-## 9. OPEN BLOCKER — do not assume resolved
+## 9. CLOSED — settlement is the merchant's, not ours
 
-**The discount delivery mechanism is not yet verified.**
+**Closed by operator ruling, 2026-09-01.** This section stood open from the first day of
+v3 and gated nothing in the end. The merchant has his own accounting method for discounts
+and payment handling, is not asking us to prescribe one, and has **withdrawn the
+split-payment question** about Al-Bayan. It is not a blocker, and no checklist item, phase
+or release waits on it any longer.
 
-Cashiers cannot modify invoices. Therefore the discount cannot be applied as a price reduction.
-The designed solution is **voucher-as-payment**: the invoice stays at full value in the POS
-(no edit, no permission needed), and the customer pays *cash + voucher*. Books reconcile
-exactly, and vouchers are collected and matched against system records at end of day.
+**What the system does, and where its responsibility stops.** It captures the invoice,
+calculates the discount under the §2.3 guardrails, records both, and prints a slip
+carrying **gross / discount / net** plus a voucher code. How that discount is entered in
+the merchant's books is his decision and outside our scope.
 
-**This depends on Al-Bayan supporting split/multiple payment methods on one invoice — NOT YET
-CONFIRMED.**
+**All three settlement strategies remain available, and the choice is a per-store
+setting** — `discount_settings.settlement_strategy`, changed from the manager's Discounts
+screen, applying to the next slip printed with no rebuild and no redeploy. What the
+setting selects is now **only the wording of the cashier instruction** on the slip:
 
-**Instructions:**
-- Build the full capture, calculation, recording, and voucher-issuing pipeline now. It is
-  correct and necessary under either outcome.
-- Treat the redemption/settlement step as **pluggable**: implement a `DiscountSettlementStrategy`
-  interface with two implementations — `VoucherAsPaymentStrategy` (preferred) and
-  `DailyPromotionalExpenseStrategy` (fallback: vouchers are aggregated daily and booked as a
-  promotional expense — less elegant but accounting-sound).
-- **Never** implement a flow where the cashier collects less cash than the POS recorded without a
-  corresponding voucher record. That creates an unexplained cash shortfall that reads as theft in
-  the books and will wrongly implicate staff.
+| Strategy | The instruction it prints |
+|---|---|
+| `MERCHANT_DEFINED` **(default)** | states the three figures and says to apply the discount per the store's own procedure — assumes nothing about how it is recorded |
+| `VOUCHER_AS_PAYMENT` | collect net in cash plus this voucher, leave the invoice at full value — presumes the POS accepts a second tender |
+| `DAILY_PROMOTIONAL_EXPENSE` | collect the full amount, hand back the discount against the slip, retain it — presumes it does not |
+
+The default is the neutral one because a printed instruction is an assumption about the
+store's procedure, and this store's procedure is not ours to assume. A merchant who wants
+the procedure on the paper selects one of the other two. See §12.28.
+
+**The one rule that survives closure, unchanged:** never a flow where the cashier collects
+less cash than the POS recorded without a corresponding voucher record. That is an
+unexplained shortfall that reads as theft in the books and will wrongly implicate staff.
+It is now guaranteed structurally rather than by wording — the voucher is written in the
+same transaction as the discount (§12.9), so no instruction text is load-bearing for it.
 
 ---
 
@@ -597,6 +608,9 @@ operator runs it. **PROMPT_v3.md's instruction to invoke it is superseded** — 
 line as the operator's responsibility, not a phase gate.
 
 ### 12.8 Settlement blocker unchanged — 2026-08-27
+*(Superseded by §12.28 on 2026-09-01: §9 is closed. Kept as the record of where it
+stood.)*
+
 §9 remains **open**. `DiscountSettlementStrategy` is built with both implementations —
 `VoucherAsPaymentStrategy` (default) and `DailyPromotionalExpenseStrategy` (fallback) —
 and no phase waits on the answer.
@@ -2200,3 +2214,62 @@ second place to set them.
 If per-customer discounting is ever genuinely wanted, it is a **discount-model
 decision** requiring its own guardrails, not a fidelity fix. It does not arrive by
 way of a design export.
+
+### 12.28 §9 closed, and the default became the strategy that assumes nothing — 2026-09-01
+*(operator ruling. Closes §9, which had stood open since v3 began, and supersedes
+§12.8's "§9 remains open".)*
+
+The merchant settles discounts by his own accounting method and withdrew the
+split-payment question about Al-Bayan. The system's responsibility ends at capturing
+the invoice, calculating the discount under §2.3, recording both, and printing a slip
+with gross / discount / net. **Bookkeeping is his.**
+
+**Both existing strategies are kept, by instruction.** Nothing is removed: another
+store may well want the procedure printed, and the interface that made the mechanism
+pluggable is exactly what makes it a settings change rather than a rebuild.
+
+**What was actually missing was a neutral option, so one was added.** Neither existing
+instruction is neutral — each states a procedure, and states a different one:
+
+- `VOUCHER_AS_PAYMENT` — «استلم {net} نقداً + هذه القسيمة … لا تعدّل الفاتورة» —
+  presumes the POS takes a second tender on one invoice.
+- `DAILY_PROMOTIONAL_EXPENSE` — «استلم {gross} كاملاً، ثم سلّم الزبون {discount} …» —
+  presumes it does not, and prescribes a cash hand-back at the till.
+
+`MERCHANT_DEFINED` is the third, and the new default: it states the discount value with
+gross and net, says to apply it per the store's own procedure, and names no mechanism.
+
+**Why a third strategy rather than rewording one of the two.** Rewording
+`VOUCHER_AS_PAYMENT` to be neutral would have made its own name, its label and its
+`requiresSplitPayment: true` describe something it no longer did — which is deleting it
+while keeping its identifier, the opposite of the instruction to keep both. It would
+also have been retroactive: §12.9 stamps the strategy on each voucher at issue time
+precisely so a settings change cannot reinterpret slips already in a drawer, but
+`describe()` regenerates the words on every reprint, so changing a strategy's text
+changes what already-issued slips say when reprinted. A new name leaves old vouchers
+reprinting exactly as they printed.
+
+**The §9 cash-drawer rule is now structural rather than textual.** The two explicit
+strategies each carry a warning that protects the cashier, and each warning only makes
+sense inside its own mechanism — «لا تعدّل الفاتورة» presumes one, «لا تستلم مبلغاً
+أقل» presumes the other. The neutral instruction carries neither, deliberately. The
+guarantee it seems to give up was never really coming from the wording: the voucher is
+written in the same database transaction as the discount, so a reduction a customer
+received always has a record explaining it. **The cost is honest and worth stating** —
+under `MERCHANT_DEFINED` the slip no longer tells a cashier what not to do. A store
+that wants that sentence on the paper picks one of the other two.
+
+**Existing rows keep the strategy they hold.** The migration changes a column default,
+not any stored value. An upgrade must not switch a store to different wording than the
+cashiers there have learned to read.
+
+**Three drifted declarations were found on the way in**, all the §12.27 failure mode —
+a shape spelled out a second time and then quietly falling behind. `DiscountConfigResponse`
+redeclared the discount-type, period-type and settlement unions as string literals;
+`DayReconciliation` had widened `settlementStrategy` to `string`; and the manager's
+Reports screen named the strategy with a **two-way ternary** — which, with a third
+strategy added, would have labelled every `MERCHANT_DEFINED` reconciliation «مصروف
+ترويجي يومي» and been wrong on screen while every test stayed green. All three now
+come from the enum, and the Arabic names live once in
+`SETTLEMENT_STRATEGY_LABELS`, keyed by the union so a fourth strategy is a type error
+rather than a mislabel.

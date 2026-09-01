@@ -5,6 +5,8 @@ import {
   RuleDiscountTypeSchema,
   SettlementStrategySchema,
   type DiscountType,
+  type PeriodType,
+  type SettlementStrategy,
 } from './enums';
 import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
 
@@ -344,14 +346,15 @@ export interface DiscountRuleRow {
  */
 export interface DiscountConfigResponse {
   settings: {
-    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE';
+    discountType: DiscountType;
     minRate: number;
     maxRate: number;
     absoluteMaxDiscountValue: number;
-    periodType: 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
-    settlementStrategy: 'VOUCHER_AS_PAYMENT' | 'DAILY_PROMOTIONAL_EXPENSE';
+    periodType: PeriodType;
+    /** Widened by adding a strategy, so the literal union may never be spelled here. */
+    settlementStrategy: SettlementStrategy;
   };
   rules: Array<DiscountRuleRow & { id: string; isActive: boolean; sortOrder: number }>;
   assessments: Array<{ thresholdAmount: number; warning: string | null; exceedsProfit: boolean }>;
-  settlementStrategies: Array<{ name: string; label: string; requiresSplitPayment: boolean }>;
+  settlementStrategies: Array<{ name: SettlementStrategy; label: string; requiresSplitPayment: boolean }>;
 }

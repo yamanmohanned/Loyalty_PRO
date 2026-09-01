@@ -2,7 +2,7 @@ import type { SettlementStrategy as SettlementStrategyName } from '@walaa/shared
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  DISCOUNT SETTLEMENT — CLAUDE_v3.md §9 (OPEN BLOCKER)
+ *  DISCOUNT SETTLEMENT — CLAUDE_v3.md §9 (CLOSED, 2026-09-01)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * The problem this interface exists for:
@@ -10,22 +10,29 @@ import type { SettlementStrategy as SettlementStrategyName } from '@walaa/shared
  * Cashiers at this merchant are **not authorised to modify invoices**. That is a
  * deliberate anti-fraud control and must be respected, not worked around. So the
  * discount cannot be applied as a price reduction on the invoice itself — the POS
- * total is fixed the moment it prints.
+ * total is fixed the moment it prints. Which leaves the question of how the customer
+ * actually pays less, and how the books still balance.
  *
- * Which leaves the question of how the customer actually pays less, and how the
- * books still balance. Two answers are viable, and **which one is correct is not
- * yet confirmed**, because it depends on whether Al-Bayan supports split payment on
- * one invoice. So it is a strategy, selected from settings, rather than a hardcoded
- * flow that would have to be torn out if the answer goes the other way.
+ * **That question is the merchant's, and he has answered it his own way.** §9 is
+ * closed by operator ruling: the system captures, calculates and prints the slip with
+ * gross / discount / net, and does not prescribe how the discount is recorded. The
+ * split-payment question that gated the preferred strategy is withdrawn.
  *
- * ── THE RULE THAT BINDS BOTH IMPLEMENTATIONS ───────────────────────────────
+ * The interface stays, and all three implementations stay, because the *words on the
+ * slip* are still a per-store choice: `MERCHANT_DEFINED` (the default) names no
+ * mechanism, while `VOUCHER_AS_PAYMENT` and `DAILY_PROMOTIONAL_EXPENSE` each print an
+ * explicit procedure for a store that wants one. Switching is a settings change, not
+ * a rebuild.
+ *
+ * ── THE RULE THAT BINDS EVERY IMPLEMENTATION ───────────────────────────────
  *
  * **A cashier must never collect less cash than the POS recorded without a
  * corresponding voucher record.** An unexplained shortfall in the drawer does not
  * read as a discount in the books — it reads as theft, and it will wrongly
  * implicate the person on the till. Every strategy therefore produces a voucher,
  * atomically with the discount it settles. There is no code path that discounts
- * without issuing one.
+ * without issuing one. This is enforced by the transaction, not by the wording, so
+ * it survives a strategy whose instruction deliberately names no procedure.
  */
 
 export interface SettlementContext {
@@ -48,7 +55,7 @@ export interface SettlementContext {
 /**
  * What the strategy produces: the voucher to persist and the words to print.
  *
- * The instruction text is the strategy's real output. Both strategies discount the
+ * The instruction text is the strategy's real output. Every strategy discounts the
  * same amount; they differ in what the cashier is told to *do* with the slip, and
  * getting that sentence wrong is what would create a cash discrepancy.
  */

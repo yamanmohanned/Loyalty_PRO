@@ -1,4 +1,4 @@
-import { formatIqd } from '@walaa/shared-types';
+import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@walaa/shared-types';
 import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
@@ -8,15 +8,15 @@ import {
 } from './strategy';
 
 /**
- * **Daily promotional expense** — the fallback settlement (CLAUDE_v3.md §9).
+ * **Daily promotional expense** — an explicit-procedure settlement (CLAUDE_v3.md §9).
  *
- * Used when the POS cannot accept a second payment method on one invoice. The
+ * For a store whose POS cannot accept a second payment method on one invoice. The
  * invoice is still recorded and paid at full value; the discount is handed to the
  * customer separately and the collected slips are booked at end of day as a single
  * promotional expense.
  *
- * Less elegant than voucher-as-payment — the customer does not see the reduction
- * on the invoice itself — but accounting-sound: the day's cash matches the day's
+ * The customer does not see the reduction on the invoice itself, but it is
+ * accounting-sound: the day's cash matches the day's
  * POS total exactly, and the discount appears where it honestly belongs, as
  * marketing spend rather than as missing revenue.
  *
@@ -27,7 +27,7 @@ import {
  */
 export const dailyPromotionalExpenseStrategy: DiscountSettlementStrategy = {
   name: 'DAILY_PROMOTIONAL_EXPENSE',
-  label: 'مصروف ترويجي يومي',
+  label: SETTLEMENT_STRATEGY_LABELS.DAILY_PROMOTIONAL_EXPENSE,
   requiresSplitPayment: false,
 
   describe(context: SettlementContext): SettlementNarrative {
