@@ -289,6 +289,26 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
    Get-ChildItem C:\ProgramData\Walaa -Force | Select-Object Name, Length, LastWriteTime
    ```
 
+   **Read `api.log` as UTF-8, or its Arabic comes out as mojibake.** The file itself is
+   correct — UTF-8, no BOM, which is what a JSON Lines file should be — but Windows
+   PowerShell 5.1 defaults `Get-Content` to the ANSI codepage, and the Arabic error
+   messages are exactly the ones worth reading:
+
+   ```powershell
+   Get-Content C:\ProgramData\Walaa\logs\api.log -Encoding UTF8 -Tail 200
+   ```
+
+   What the two readings look like on the same line:
+
+   ```text
+   -Encoding UTF8   "message": "تعذّر تجهيز مجلد النسخ الاحتياطي (EPERM): ..."
+   the default      "message": "ØªØ¹Ø°Ù‘Ø± ØªØ¬Ù‡ÙŠØ² Ù…Ø¬Ù„Ø¯ ..."
+   ```
+
+   The BOM is omitted deliberately rather than overlooked: a BOM would fix the default
+   reading, and would also break the first record for every JSON parser that reads the
+   file. `service.log` needs no such care — the service host writes it in English.
+
    Two things to say out loud while handing this over:
 
    - **The whole data directory is the backup target**, and `walaa.db` alone is not a

@@ -53,3 +53,7 @@ target/
 # four surviving screens were built against, see CLAUDE_v3.md 12.26). The archive it came
 # out of is a binary duplicate of it and is not.
 stitch_wala_a_loyalty_management_dashboard.zip
+
+# Dev-only backup destination. The installed service writes under %PROGRAMDATA%;
+# a checkout writes here, because it cannot write there (see backup.service.ts).
+.walaa-dev/

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { loadEnv } from '../config/env';
+import { loadEnv, resetEnvCache } from '../config/env';
 import { AUDIT_ACTIONS } from '../services/audit.service';
 import {
   readArchive,
@@ -15,6 +15,7 @@ import {
 } from '../services/backup/archive';
 import {
   listBackups,
+  localBackupDirectory,
   restoreArchive,
   runBackup,
   verifyRestore,
@@ -72,6 +73,49 @@ function destinations(label = 'local') {
 const context = () => ({ merchantId: world.merchantId, actorUserId: world.ownerId });
 
 /* ── The archive format ───────────────────────────────────────────────────────── */
+
+describe('the on-machine backup directory', () => {
+  /** The suite pins BACKUP_LOCAL_DIR (vitest.config.ts), so the default is only
+   *  observable with it unset — which is also the shape a developer runs in. */
+  function withoutOverride<T>(fn: () => T): T {
+    const previous = process.env.BACKUP_LOCAL_DIR;
+    delete process.env.BACKUP_LOCAL_DIR;
+    resetEnvCache();
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) delete process.env.BACKUP_LOCAL_DIR;
+      else process.env.BACKUP_LOCAL_DIR = previous;
+      resetEnvCache();
+    }
+  }
+
+  it('stays inside the checkout in development, never under ProgramData', () => {
+    // The scheduled run used to fail EPERM every five minutes here: a dev process is
+    // unelevated and %PROGRAMDATA%\Walaa is locked to SYSTEM and Administrators. The
+    // cost was not the failure but the noise — 507 is the code a genuinely full volume
+    // reports (§12.22), and a developer trained to scroll past it misses the real one.
+    const directory = withoutOverride(() => localBackupDirectory());
+
+    expect(directory).toContain('.walaa-dev');
+    expect(directory.toLowerCase()).not.toContain('programdata');
+  });
+
+  it('lets BACKUP_LOCAL_DIR win wherever it is set', () => {
+    const override = join(tmpdir(), 'walaa-explicit-backup-dir');
+    const previous = process.env.BACKUP_LOCAL_DIR;
+    process.env.BACKUP_LOCAL_DIR = override;
+    resetEnvCache();
+
+    try {
+      expect(localBackupDirectory()).toBe(override);
+    } finally {
+      if (previous === undefined) delete process.env.BACKUP_LOCAL_DIR;
+      else process.env.BACKUP_LOCAL_DIR = previous;
+      resetEnvCache();
+    }
+  });
+});
 
 describe('the archive format', () => {
   it('round-trips a file byte for byte', async () => {

@@ -1,8 +1,8 @@
 import { mkdir, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../../config/env';
-import { resolveDataDir } from '../../config/paths';
+import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
 import { AppError, backupBlocked } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { readArchive, writeArchive, type ArchiveHeader } from './archive';
@@ -76,8 +76,33 @@ export function configuredKeyFingerprint(): string | null {
   return key ? keyFingerprint(key) : null;
 }
 
+/**
+ * Where the on-machine copy is written.
+ *
+ * `BACKUP_LOCAL_DIR` wins wherever it is set. Otherwise the installed service writes
+ * under its data directory (`%PROGRAMDATA%\Walaa\backups`), which is the right
+ * answer on a merchant machine and the wrong one in a checkout: a dev process runs
+ * unelevated and cannot write there, so every scheduled run failed with EPERM and
+ * logged a 507 every five minutes.
+ *
+ * **That is worse than untidy.** 507 is the code §12.22's free-space warning uses for a
+ * volume that has genuinely run out — the one storage signal that must never be
+ * background noise. A developer who has learned to scroll past it has been trained by
+ * us to miss the real one.
+ *
+ * The dev branch is gated on the repository marker rather than on `NODE_ENV`, because
+ * that marker cannot exist on an installed machine (`findRepoEnvFile` requires both
+ * `pnpm-workspace.yaml` and `.env` — the reasoning is in `config/paths.ts`). A shop's
+ * backups can therefore never be redirected into a directory that does not exist there.
+ */
 export function localBackupDirectory(): string {
-  return loadEnv().BACKUP_LOCAL_DIR ?? join(resolveDataDir(), 'backups');
+  const configured = loadEnv().BACKUP_LOCAL_DIR;
+  if (configured) return configured;
+
+  const repoEnvFile = findRepoEnvFile();
+  if (repoEnvFile) return join(dirname(repoEnvFile), '.walaa-dev', 'backups');
+
+  return join(resolveDataDir(), 'backups');
 }
 
 /**
@@ -147,11 +172,13 @@ function stagingDirectory(): string {
 /**
  * Creates the staging directory, or fails with something a manager can act on.
  *
- * Found by running this against the live API: unelevated, the backup directory defaults
- * under `%PROGRAMDATA%\Walaa`, which the installer locks to SYSTEM and Administrators,
- * so `mkdir` returns EPERM. The packaged service runs as LocalSystem and does not hit it
- * — but a misconfigured `BACKUP_LOCAL_DIR`, a USB path that vanished, or a full disk all
- * land here too, and every one of them was answering "حدث خطأ غير متوقع".
+ * Found by running this against the live API: a dev process is unelevated, and the
+ * directory it defaulted to under `%PROGRAMDATA%\Walaa` is locked by the installer to
+ * SYSTEM and Administrators, so `mkdir` returned EPERM on every scheduled run.
+ * `localBackupDirectory` now keeps a checkout out of ProgramData entirely, so that
+ * particular EPERM is gone — but a misconfigured `BACKUP_LOCAL_DIR`, a USB path that
+ * vanished, or a full disk all still land here, and every one of them was answering
+ * "حدث خطأ غير متوقع".
  *
  * A backup that cannot start is not a bug the manager should be asked to shrug at. It is
  * §7.3's mandatory safeguard not running, and it names the directory so somebody can fix
