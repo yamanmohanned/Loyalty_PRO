@@ -141,9 +141,16 @@ export function PrintableSlip({
         {slip.cashierInstruction}
       </div>
 
-      <div style={{ textAlign: 'center', fontSize: '11pt', marginTop: '2mm' }}>
+      {/* 13pt, the same weight the net amount gets. Since §12.28 dropped the "what not
+          to do" sentence, this code and the invoice number above are the whole paper
+          trail — and it is the one thing here a person transcribes or matches against a
+          list later, off fading thermal paper under shop lighting. The letter-spacing
+          and centring stay: both help someone reading a code aloud. */}
+      <div style={{ textAlign: 'center', marginTop: '2mm' }}>
         <div style={{ fontSize: '9pt' }}>{locale.slip.voucher}</div>
-        <div style={{ fontWeight: 700, letterSpacing: '0.08em' }}>{slip.voucherCode}</div>
+        <div style={{ fontSize: '13pt', fontWeight: 700, letterSpacing: '0.08em' }}>
+          {slip.voucherCode}
+        </div>
       </div>
     </div>
   );
