@@ -2186,6 +2186,38 @@ created while removing the second. Comparing against both existing copies caught
 it. The shape that decides whether a shop's backups are openable is not one to
 reconstruct from memory.*
 
+**Adding a value to a union is a known trigger for this class** *(third instance,
+§12.28, 2026-09-01)*. The two above were duplicated *shapes*; this one was duplicated
+*display text*, and it is the same failure with a different surface. The manager's
+Reports screen named the settlement strategy with a **two-way ternary** — «قسيمة كوسيلة
+دفع» if `VOUCHER_AS_PAYMENT`, else «مصروف ترويجي يومي». Correct while the union had two
+members. Adding a third silently relabelled every `MERCHANT_DEFINED` reconciliation as a
+promotional expense: **wrong on screen, with every test green**, because an `else` branch
+cannot fail.
+
+So the rule extends: **every place that maps a union to text a person reads comes from
+one source, keyed by the union.** For settlement that is `SETTLEMENT_STRATEGY_LABELS`, a
+`Readonly<Record<SettlementStrategy, string>>` in the contract package, imported by the
+API for the settings response and by the manager for the reconciliation panel. A fourth
+strategy is then a compile error at every place that must handle it.
+
+Two things worth naming, because neither is obvious:
+
+- **The `no-duplicate-dtos` check does not catch this**, and should not be extended to
+  try. A ternary over a union is not a client declaring a wire shape; the type argument
+  is honest. What makes this catchable is a `Record` keyed by the union — an exhaustive
+  mapping, not another test. Prefer that shape over a ternary or a `switch` with a
+  `default` anywhere display text is chosen from an enum.
+- **`string` in a response type disarms it.** `DayReconciliation.settlementStrategy` had
+  been widened to `string`, so the ternary type-checked and a `Record` lookup would have
+  too. A union that reaches a client as `string` has already lost the property that would
+  have caught the mislabel.
+
+**The practical instruction:** when adding a member to any union in
+`packages/shared-types`, grep for every existing member by name before finishing. Each
+hit outside the contract package is a place that has to handle the new one, and the ones
+that compile anyway are exactly the dangerous ones.
+
 #### Per-customer discount overrides are DISCARDED BY DESIGN
 
 *(operator ruling, 2026-08-31 — recorded so no future session rebuilds them as a
