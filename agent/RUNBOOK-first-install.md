@@ -1,5 +1,30 @@
 # Runbook — the first install on the real Al-Bayan machine
 
+## IF PRINTING STOPS — REVERT NOW, DIAGNOSE AFTERWARDS
+
+Not "after one more try". Put printing back first. **A till that cannot print is a shop
+that cannot sell**, and nothing else in this file is worth a minute of that.
+
+**The revert is one step, and which step depends only on the mode the agent is running:**
+
+| Mode | The one step that restores printing |
+|---|---|
+| `SpoolWatch` | nothing to do — the agent was never in the print path |
+| `VirtualPrinter` | point Al-Bayan back at the real printer |
+| `SerialBridge` | point Al-Bayan back at the real COM port (e.g. `COM1`) |
+| `NetworkProxy` | point Al-Bayan back at the printer's own IP |
+
+**Stopping the service is not a revert** for the three in-path modes. It removes the code
+that forwards, so printing stays dead until Al-Bayan is pointed back itself.
+
+The setting you are restoring is Al-Bayan's original printer configuration — **write it
+down before you change anything** (§1) and keep it on paper, in your hand. Leave that
+paper with the manager before you go, so they can do this without you.
+
+Every finding below keeps until tomorrow. The shop's morning does not.
+
+---
+
 > **What this is.** A written order of operations for the single largest unknown left in
 > the project: the day the Print Capture Agent meets a real Al-Bayan till for the first
 > time. Everything the agent does has been proven against synthetic fixtures (§12.14);
@@ -9,18 +34,7 @@
 > sequence, what output means, and what to do when nothing captures.
 >
 > **The point of writing it down** is to arrive prepared rather than debug live in a
-> working shop. A till that cannot print is a shop that cannot sell.
-
----
-
-## 0. The rule that outranks every other line in this file
-
-**If printing stops, revert immediately and diagnose afterwards.** Not "after one more
-try". The revert is one step, it is in `agent/README.md` §ONE-STEP MANUAL REVERT, and it
-must be written on paper and in your hand *before* you touch a printer setting.
-
-Nothing on this list is worth a minute of a shop that cannot sell. Every finding here
-keeps until tomorrow. The shop's morning does not.
+> working shop.
 
 ---
 
