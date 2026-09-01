@@ -2305,3 +2305,55 @@ strategy added, would have labelled every `MERCHANT_DEFINED` reconciliation «م
 come from the enum, and the Arabic names live once in
 `SETTLEMENT_STRATEGY_LABELS`, keyed by the union so a fourth strategy is a type error
 rather than a mislabel.
+
+### 12.29 A known failure signature: blank screen, empty API log — 2026-09-01
+*(found running the current build locally, the day after §12.28 added an export.)*
+
+**The symptom.** The manager app renders nothing at all — a blank white page — and
+**the API log shows zero requests from it**, while the Station on the same machine is
+talking to the same server normally. That combination is the diagnostic: the app is
+failing before it ever reaches the network, so it is not connectivity, not the setup
+screen, and not the server.
+
+The console says what it actually is:
+
+```
+Uncaught SyntaxError: The requested module '/node_modules/.vite/deps/@walaa_shared-types.js?v=…'
+does not provide an export named 'SETTLEMENT_STRATEGY_LABELS'
+```
+
+**The cause.** Both clients list `@walaa/shared-types` in `optimizeDeps.include`, so Vite
+pre-bundles it into `node_modules/.vite/deps`. **That cache is keyed on the lockfile and
+the config, not on a linked workspace package's source.** Adding an export to
+`packages/shared-types` therefore invalidates nothing: the app imports a name the cached
+bundle does not contain, and an ES module import failure kills the whole entry before
+React mounts — hence a blank page rather than an error boundary.
+
+The evidence, which is how to confirm it in ten seconds rather than reading source:
+
+| | |
+|---|---|
+| cached bundle built | 31 Aug 19:34 |
+| `enums.ts` last changed | 1 Sep 06:11 |
+| occurrences of the new export in the cached bundle | **0** |
+
+**Dev only.** `vite build` does not use that cache, so a production bundle was never
+affected, and neither typecheck nor the test suite can see it — the TypeScript path
+resolves to the source, which was correct all along.
+
+**The fix: `vite --force` in both `dev` scripts.** It re-optimizes on every start, which
+measures at ~500 ms and is nothing against a blank screen carrying no usable error.
+`tauri dev` inherits it through `beforeDevCommand: "pnpm dev"`.
+
+*(Operator ruling: `--force` rather than removing `@walaa/shared-types` from
+`optimizeDeps.include`. Keeping the pre-bundle and paying the re-optimize is a known
+cost; changing what gets optimized trades this symptom for an unknown one.)*
+
+**Record the signature, not just the fix.** The next new export will do the same thing to
+anyone whose cache predates it, possibly at a merchant's site rather than on a bench.
+Blank screen + no requests in the API log + a `does not provide an export named …` line
+now has one answer: the dep cache is stale. Clear it and restart —
+
+```
+rm -rf apps/manager-desktop/node_modules/.vite apps/station/node_modules/.vite
+```
