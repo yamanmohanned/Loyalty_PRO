@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+  </style>
+</head>
+<body>
+<!-- STITCH_THREEJS_START:ANIMATION_16 class="fixed inset-0 w-full h-full bg-transparent" -->
+<div class="fixed inset-0 w-full h-full bg-transparent" style="display:block;">
+<script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
+<div id="threejs-container-ANIMATION_16" style="width:100%;height:100%"></div>
+<script>
+(function() {
+  const container = document.getElementById('threejs-container-ANIMATION_16');
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const container = document.querySelector('.success-container');
+const width = container?.clientWidth || window.innerWidth;
+const height = container?.clientHeight || window.innerHeight;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+
+renderer.setSize(width, height);
+renderer.setPixelRatio(window.devicePixelRatio);
+if (container) container.appendChild(renderer.domElement);
+
+// Success Green Color
+const successGreen = new THREE.Color(0x1E7B4D);
+
+// Create a checkmark shape using geometry
+const checkmarkGroup = new THREE.Group();
+
+const material = new THREE.MeshPhongMaterial({ 
+    color: successGreen,
+    shininess: 100,
+    specular: 0x555555
+});
+
+// Short arm
+const shortArmGeo = new THREE.BoxGeometry(0.5, 1.5, 0.4);
+const shortArm = new THREE.Mesh(shortArmGeo, material);
+shortArm.position.set(-0.6, -0.2, 0);
+shortArm.rotation.z = Math.PI / 4;
+checkmarkGroup.add(shortArm);
+
+// Long arm
+const longArmGeo = new THREE.BoxGeometry(0.5, 3, 0.4);
+const longArm = new THREE.Mesh(longArmGeo, material);
+longArm.position.set(0.6, 0.5, 0);
+longArm.rotation.z = -Math.PI / 4;
+checkmarkGroup.add(longArm);
+
+scene.add(checkmarkGroup);
+
+// Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+scene.add(ambientLight);
+
+const pointLight = new THREE.PointLight(0xffffff, 1);
+pointLight.position.set(5, 5, 5);
+scene.add(pointLight);
+
+camera.position.z = 8;
+
+let startTime = Date.now();
+
+function animate() {
+    requestAnimationFrame(animate);
+    
+    const elapsed = (Date.now() - startTime) / 1000;
+    
+    // Entrance animation: scale and bounce
+    if (elapsed < 1) {
+        const s = Math.sin(elapsed * Math.PI * 1.5) * 1.2;
+        checkmarkGroup.scale.set(s, s, s);
+    } else {
+        // Subtle ambient float
+        checkmarkGroup.position.y = Math.sin(elapsed * 2) * 0.1;
+        checkmarkGroup.rotation.y = Math.sin(elapsed) * 0.1;
+    }
+    
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    const w = container?.clientWidth || window.innerWidth;
+    const h = container?.clientHeight || window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+});
+
+animate();
+})();
+</script>
+</div>
+<!-- STITCH_THREEJS_END:ANIMATION_16 -->
+</body>
+</html>

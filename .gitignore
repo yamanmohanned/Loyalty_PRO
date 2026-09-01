@@ -48,3 +48,8 @@ target/
 # .NET build output (the Print Capture Agent)
 [Bb]in/
 [Oo]bj/
+
+# Stitch design exports: the extracted directory is tracked (it is the reference the
+# four surviving screens were built against, see CLAUDE_v3.md 12.26). The archive it came
+# out of is a binary duplicate of it and is not.
+stitch_wala_a_loyalty_management_dashboard.zip
