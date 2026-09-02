@@ -4,6 +4,7 @@ import { isStationRole, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
+import { BrandMark } from '../components/BrandMark';
 import { Guide } from '../components/Guide';
 import { Button, Card, Field, Input } from '../components/ui';
 
@@ -62,7 +63,8 @@ export function LoginScreen({
       {/* Glass rather than a plain card: this surface sits on the canvas, where
           even `steel` clears 4.5:1 (4.76). It is the first thing anyone sees. */}
       <Card className="glass w-full max-w-md border-transparent">
-        <div className="mb-6 text-center">
+        <div className="mb-6 flex flex-col items-center text-center">
+          <BrandMark size={56} className="mb-3" />
           <h1 className="font-display text-3xl font-bold text-accent">{locale.app.name}</h1>
           <p className="text-base text-steel">{locale.app.station}</p>
         </div>

@@ -13,7 +13,7 @@
 
 export const locale = {
   app: {
-    name: 'ولاء',
+    name: 'Customer loyalty',
     station: 'محطة الولاء',
   },
 

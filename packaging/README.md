@@ -412,3 +412,68 @@ Code signing is a purchasing decision, not a technical one; it is not in this sp
 tooling, but a default install into `Program Files` needs ~110 MB free on the target
 drive and would be tight here. The MSI target was dropped — §12.3 asks for one NSIS
 installer, and WiX would have needed another download onto that drive.
+
+---
+
+## Renaming the product — what is safe and what is not
+
+*(added 2026-09-02, when the product was renamed to **Customer loyalty**)*
+
+Everything a person **reads** was renamed. Every identifier the **operating system**
+keys on was not, and the difference is not cosmetic caution — each one below has a
+specific failure attached to it.
+
+### Renamed
+
+| Where | Now |
+|---|---|
+| Window title, browser tab | `Customer loyalty — إدارة المتجر` / `— محطة الولاء` |
+| In-app wordmark (sidebar, both logins) | `Customer loyalty` |
+| Installer publisher and descriptions | `Customer loyalty` |
+| Windows service **display** name | `Customer loyalty API` — the SCM keys on the service *name*, so this is free |
+| App icon, all sizes | Regenerated from `customer_loyalty.ico` |
+
+### NOT renamed, and why
+
+| Identifier | Value | What renaming it does |
+|---|---|---|
+| `tauri.conf.json` → `productName` | `ولاء` | **The install path.** See below — this is the one with real consequences |
+| `tauri.conf.json` → `identifier` | `com.walaa.manager` | The uninstall registry key. A new identifier makes the installer add a *second* entry in Add/Remove Programs instead of upgrading the first |
+| `SERVICE_NAME` | `WalaaApi` | The SCM key an upgrade uses to find the service it is replacing. Rename it and the old service keeps running from the old binaries, holding the API port and `walaa.db` open, so the new one cannot bind |
+| `FIREWALL_RULE` | `Walaa Loyalty API` | Rules are created and deleted by name. A rename **orphans the old rule** — left open on the shop network with nothing to close it — and adds a duplicate |
+| `%PROGRAMDATA%\Walaa\` | — | Holds `walaa.db`, `walaa.env` and `logs\`. Renaming it strands the live database **and the backup encryption key**. Never |
+| `walaa.db`, `walaa.env` | — | Same |
+| `/health` → `"service":"walaa-api"` | — | `testApiUrl()` in the Station refuses any address whose `/health` does not answer with exactly this. Changing it makes **every already-paired station** report "this address is not a Walaa server" until someone re-runs setup on each one |
+| `@walaa/*` package names, `WALAA_DATA_DIR` | — | Internal. Churn with no user-visible benefit |
+
+### What an existing installation would do if `productName` changed
+
+This is the question worth answering before anyone takes that step.
+
+`productName` sets the install directory (`%PROGRAMFILES%\<productName>\`) and the
+executable name. Change it to `Customer loyalty` and install over an existing shop:
+
+1. The new installer targets `%PROGRAMFILES%\Customer loyalty\`. **The existing
+   install at `%PROGRAMFILES%\ولاء\` is not touched** — it stays on disk.
+2. `NSIS_HOOK_PREINSTALL` checks `$INSTDIR\runtime\walaa-service.exe` to stop the
+   service before copying files. `$INSTDIR` is now the *new*, empty directory, so
+   that file does not exist and **the check silently passes over**. The old service
+   is never stopped.
+3. `NSIS_HOOK_POSTINSTALL` runs `install` from the new path. `WalaaApi` is already
+   registered, so the SCM refuses, and the installer shows its "could not be
+   registered" message box.
+4. Net result: **two installations on disk, one service still running the old
+   binaries, and a warning dialog.** The shop keeps working — the old service is
+   still serving — but the new app is not running the new API, and the next person
+   to look will find two entries in Add/Remove Programs.
+
+Note that the data survives all of this: `%PROGRAMDATA%\Walaa` is untouched by
+either install, which is exactly why it is on that list above.
+
+**If the rename is wanted anyway**, the fix is one addition rather than a rewrite:
+`NSIS_HOOK_PREINSTALL` should read `InstallLocation` from the uninstall registry key
+(which is keyed on `identifier`, and `identifier` is not changing) and run
+`uninstall` against the service executable it finds there, before the file copy.
+That turns the above into a clean upgrade. It cannot be verified from a development
+machine — it needs a real prior installation to upgrade over — so it should be
+tested on a spare machine before it reaches a shop.

@@ -13,6 +13,7 @@ import { RegisterScreen } from './screens/Register';
 import { ReprintScreen } from './screens/Reprint';
 import { ScanScreen } from './screens/Scan';
 import { SetupScreen } from './screens/Setup';
+import { BrandMark } from './components/BrandMark';
 import { cn } from './components/ui';
 
 /**
@@ -120,9 +121,12 @@ function Header({
 }): JSX.Element {
   return (
     <header className="flex items-center justify-between gap-3 border-b border-border bg-surface px-5 py-3">
-      <div className="min-w-0">
-        <p className="truncate font-display text-lg font-bold">{merchantName}</p>
-        <p className="text-sm text-steel">{locale.app.station}</p>
+      <div className="flex min-w-0 items-center gap-3">
+        <BrandMark size={36} />
+        <div className="min-w-0">
+          <p className="truncate font-display text-lg font-bold">{merchantName}</p>
+          <p className="text-sm text-steel">{locale.app.station}</p>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

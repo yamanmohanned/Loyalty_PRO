@@ -2783,3 +2783,86 @@ watched sources, so the change needed a dev-server restart before it appeared at
 `prefers-reduced-transparency` and `forced-colors` both switch every glass surface
 back to opaque white. `backdrop-filter` degrades to the flat translucent fill where
 unsupported, which is why the alpha is high enough to carry the contrast alone.
+
+---
+
+### 12.35 The rename to "Customer loyalty", and the four identifiers that stayed — 2026-09-02
+*(operator request, with an explicit instruction to flag what renaming would break
+before changing it)*
+
+#### What changed, and what did not
+
+Everything a person **reads** was renamed. Every identifier the **operating system**
+keys on was not. The full table, with the specific failure attached to each
+identifier, is in `packaging/README.md` under *"Renaming the product"* — it belongs
+beside the installer, which is where anyone would go to change one.
+
+The short version: window titles, in-app wordmark, installer publisher and
+descriptions, and the Windows service **display** name all say *Customer loyalty*
+now. `productName`, `identifier`, `SERVICE_NAME`, `FIREWALL_RULE`,
+`%PROGRAMDATA%\Walaa\`, the database and env filenames, and the `/health` service
+string all still say *walaa*, and each has a comment or a README row saying why.
+
+Two of those are worth restating here because the reasoning is not obvious:
+
+- **`FIREWALL_RULE`.** The rule is created and deleted *by name*. Renaming it
+  orphans the old one — left open on the shop's network with nothing left that knows
+  how to close it — and adds a duplicate beside it.
+- **`/health` → `"service":"walaa-api"`.** `testApiUrl()` in the Station refuses any
+  address whose `/health` does not answer with exactly that string. Changing it makes
+  **every already-paired station** report "this is not a Walaa server" until someone
+  walks to each one and re-runs setup.
+
+#### What an existing installation would do if `productName` changed
+
+The question the operator asked, answered concretely (full walk-through in the
+README):
+
+`productName` sets the install directory. Point a new installer at
+`%PROGRAMFILES%\Customer loyalty\` and install over an existing shop, and the
+pre-install hook — which looks for `$INSTDIR\runtime\walaa-service.exe` to stop the
+service before copying — finds an empty new directory and **passes over silently**.
+The old service is never stopped. The post-install hook then tries to register
+`WalaaApi`, which already exists, and shows its "could not be registered" dialog.
+
+Result: **two installations on disk, one service still running the old binaries, and
+a warning box.** The shop keeps working, because the old service is still serving —
+which is the part that makes this dangerous rather than obvious. The data survives
+either way; `%PROGRAMDATA%\Walaa` is untouched by both installers, which is exactly
+why it is on the do-not-rename list.
+
+If the rename is wanted anyway, the fix is one addition, not a rewrite: read
+`InstallLocation` from the uninstall registry key — which is keyed on `identifier`,
+and `identifier` is not changing — and run `uninstall` against the service
+executable found there before the file copy. **It cannot be verified from a
+development machine**; it needs a real prior installation to upgrade over.
+
+#### The icon, and two things about the supplied asset
+
+All sixteen files in CLAUDE_v2.md §5.2 were generated from `customer_loyalty.ico`
+via the §5.3 workflow. `icon.ico` was then rebuilt with PIL, because the Tauri
+generator emits 16/24/32/48/64/256 and §5.2 names **128** — which the generator
+omits and a 24 px frame replaces. The rebuilt ICO carries exactly the six frames the
+spec lists. The unused `android/` and `ios/` output was deleted; this bundle targets
+NSIS only.
+
+Two properties of the supplied artwork, neither a defect exactly, both worth knowing:
+
+1. **It is fully opaque.** All 65,536 pixels are alpha 255, with a flat `#EDEBEC`
+   field around the glass tile at roughly 11% padding. App icons are normally
+   transparent outside the mark; this one will show a grey square on a dark taskbar.
+   In-app it showed as a grey patch with hard corners on a white card, so `BrandMark`
+   renders it with a 24% radius and a hairline ring — an icon chip. **The artwork
+   itself is untouched**: keying the field out would halo the soft glass edges, and
+   redrawing a supplied brand mark is not a component's job.
+2. **Its largest frame is 256 px.** `icon.png` (512) and `Square310x310Logo.png` are
+   therefore **upscaled**, and will be softer than the rest. A transparent 1024 px
+   master would fix both this and the point above in one step.
+
+#### The placeholder that was replaced
+
+The sidebar, both logins and both setup screens carried a teal square with the
+letterform «و» — written by CLAUDE_v2.md §5.3 step 3, which explicitly called it a
+stand-in *"to be replaced before first distribution"*. It has been. The mark is now
+the same artwork the taskbar and installer show, because two drawings of a brand are
+two brands.

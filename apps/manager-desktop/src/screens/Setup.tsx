@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ServerCog } from 'lucide-react';
 import { setApiUrl, testApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
+import { BrandMark } from '../components/BrandMark';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
 /**
@@ -40,9 +41,7 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }) {
     <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6">
       <Card className="glass w-full max-w-md border-transparent p-8">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent text-xl font-bold text-white">
-            و
-          </div>
+          <BrandMark size={48} />
           <div>
             <h1 className="font-display text-xl font-bold text-ink">{locale.appName}</h1>
             <p className="text-sm text-steel">{locale.setup.title}</p>

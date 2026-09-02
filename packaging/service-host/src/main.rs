@@ -42,13 +42,24 @@ use windows_service::service_control_handler::{self, ServiceControlHandlerResult
 use windows_service::service_manager::{ServiceManager, ServiceManagerAccess};
 use windows_service::{define_windows_service, service_dispatcher};
 
+/// The Service Control Manager key. **Do not rename** (§12.35).
+///
+/// It is how an upgrade finds the service it is replacing. Rename it and the
+/// installer registers a second service while the first keeps running from the old
+/// binaries — holding the API port and `walaa.db` open, so the new one cannot bind.
+/// The product was renamed to "Customer loyalty" on 2026-09-02 and this stayed.
 const SERVICE_NAME: &str = "WalaaApi";
-const DISPLAY_NAME: &str = "Walaa Loyalty API";
+/// What services.msc shows. Safe to change: the SCM keys on `SERVICE_NAME`.
+const DISPLAY_NAME: &str = "Customer loyalty API";
 /// Name of the inbound firewall rule that lets the Loyalty Station reach the API.
+///
+/// **Do not rename** without deleting the old rule by its old name first: the rule
+/// is created and removed by name, so a rename orphans the previous one — left open
+/// on the shop's network with nothing to close it — and adds a duplicate beside it.
 const FIREWALL_RULE: &str = "Walaa Loyalty API";
 
 const DESCRIPTION: &str =
-    "خدمة ولاء — واجهة البرمجة وقاعدة البيانات المحلية. Local API and SQLite datastore for the Walaa loyalty system.";
+    "خدمة Customer loyalty — واجهة البرمجة وقاعدة البيانات المحلية. Local API and SQLite datastore for the Customer loyalty system.";
 
 /// How long a stopping child gets to finish in-flight work before it is terminated.
 const STOP_GRACE: Duration = Duration::from_secs(15);

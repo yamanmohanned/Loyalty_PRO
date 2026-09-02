@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { locale } from '../lib/locale';
+import { BrandMark } from '../components/BrandMark';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
 /**
@@ -69,9 +70,7 @@ export function LoginScreen({
           placement where `steel` still clears 4.5:1 (4.76). */}
       <Card className="glass w-full max-w-md border-transparent p-8">
         <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent text-xl font-bold text-white">
-            و
-          </div>
+          <BrandMark size={48} />
           <div>
             <h1 className="font-display text-xl font-bold text-ink">{locale.login.title}</h1>
             <p className="text-sm text-steel">{locale.login.subtitle}</p>

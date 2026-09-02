@@ -19,7 +19,7 @@
 const group = (value: number): string => new Intl.NumberFormat('en-US').format(value);
 
 export const locale = {
-  appName: 'ولاء',
+  appName: 'Customer loyalty',
   appTagline: 'إدارة المتجر',
 
   nav: {

@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "ولاء — إدارة المتجر",
+        "title": "Customer loyalty — إدارة المتجر",
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
@@ -37,11 +37,11 @@
       "icons/icon.ico",
       "icons/icon.icns"
     ],
-    "publisher": "ولاء",
+    "publisher": "Customer loyalty",
     "copyright": "© 2026",
     "category": "Business",
-    "shortDescription": "إدارة برنامج الولاء",
-    "longDescription": "لوحة تحكم برنامج الولاء — إدارة القواعد والزبائن والتقارير.",
+    "shortDescription": "Customer loyalty — إدارة برنامج الولاء",
+    "longDescription": "Customer loyalty — لوحة تحكم برنامج الولاء لإدارة القواعد والزبائن والتقارير.",
     "windows": {
       "digestAlgorithm": "sha256",
       "certificateThumbprint": null,

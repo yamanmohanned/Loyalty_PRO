@@ -1,11 +1,11 @@
 import { useId, useState, type ReactNode } from 'react';
 import { BarChart3, Table2 } from 'lucide-react';
 import { GLOW, VIZ } from '../lib/viz';
+import { locale } from '../lib/locale';
+import { cn, Skeleton } from './ui';
 
 /** Grouped, so an ungrouped count never sits beside a grouped amount. */
 const group = (value: number): string => new Intl.NumberFormat('en-US').format(value);
-import { locale } from '../lib/locale';
-import { cn, Skeleton } from './ui';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════

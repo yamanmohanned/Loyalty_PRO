@@ -24,6 +24,7 @@ import { startRealtime } from './lib/realtime';
 import { getApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { cn } from './components/ui';
+import { BrandMark } from './components/BrandMark';
 import { StorageBanner, useStorageStatus } from './components/StorageBanner';
 import { SetupScreen } from './screens/Setup';
 import { LoginScreen, type SessionUser } from './screens/Login';
@@ -90,9 +91,7 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
     <aside className="glass flex w-rail shrink-0 flex-col border-0 border-e border-border">
       <div className="border-b border-border px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-lg font-bold text-white">
-            و
-          </div>
+          <BrandMark size={40} />
           <div>
             <p className="font-display text-lg font-bold leading-tight text-ink">{locale.appName}</p>
             <p className="text-xs text-steel">{locale.appTagline}</p>
