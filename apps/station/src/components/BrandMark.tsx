@@ -19,21 +19,26 @@ import { cn } from './ui';
  * that drifts from the icon at the first redraw. Served at 128 px for a 32–40 px
  * slot, which covers a 3× display without shipping bytes nobody sees.
  *
- * ── The asset is opaque, so it is rendered as a chip ───────────────────────
+ * ── This asset is the OPAQUE one, deliberately ─────────────────────────────
  *
- * `customer_loyalty.ico` has **no transparency** — every one of its 65,536 pixels
- * is alpha 255, and a flat `#EDEBEC` field surrounds the glass tile with roughly
- * 11% padding. Dropped onto a white card that field reads as a grey square patch
- * with hard corners.
+ * `customer_loyalty.ico` arrived with no transparency: every pixel alpha 255, a flat
+ * `#EDEBEC` field around the glass tile. That was fixed **for the icon files** — the
+ * ones Windows shows in the taskbar and the installer — because an opaque grey
+ * square is exactly what a dark taskbar makes look broken. `src-tauri/icons/` is
+ * keyed out and feathered now.
  *
- * So it wears a 24% corner radius and a hairline ring: the square edge stops
- * cutting against the surface, and the result reads as an app-icon chip, which is
- * what it is. **The artwork itself is untouched** — keying the field out would
- * halo the soft glass edges, and re-drawing a supplied brand mark is not this
- * component's business.
+ * `public/brand-mark.png` is **not**, and that is the decision rather than an
+ * oversight. In-app the mark sits in a chip: a 24% radius and a hairline ring. A
+ * transparent mark inside that chip would show the card straight through its
+ * corners, leaving the ring drawn around empty space — worse than the problem it
+ * solves. The chip wants a filled square, so it gets the original.
  *
- * A transparent 1024 px master would remove the need for the chip and would also
- * stop `icon.png` (512) and `Square310x310Logo.png` being upscaled from 256.
+ * The two assets are the same artwork with different alpha, chosen per context:
+ * transparent where the OS composites it against an unknown background, opaque
+ * where this component controls the background itself.
+ *
+ * A 1024 px master would still help: `icon.png` (512) and `Square310x310Logo.png`
+ * are upscaled from a 256 source and will be softer than the rest.
  *
  * `alt=""` and `aria-hidden`: the product name sits beside it in text on every
  * screen that uses this, so announcing the mark would just repeat it.
