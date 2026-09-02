@@ -2616,3 +2616,101 @@ The reprint confirmation first read «...للمدى 000002 — 000004 — 3 بط
 em-dashes in one line, one of which belongs inside the range. Read aloud it is not
 clear which dash separates what. The count moved to the front and the dash between
 them went — §12.27 applied to a sentence rather than a number.
+
+---
+
+### 12.33 Reports became charts, and the colour was computed rather than chosen — 2026-09-02
+*(operator request: a chart for every section, distinct colours per category,
+colourblind-safe, never meaning by colour alone, 2D, and every state covered)*
+
+#### The palette is a measurement, not a taste
+
+§6.2 gives the product **one** accent and reserves amber, red and green for status.
+That is right for the UI and insufficient for a chart: one accent cannot tell five
+capture modes apart, and painting a fifth series in the warning amber would make a
+colour that means *something is wrong* mean *series 4* instead.
+
+So charts get their own categorical scale, anchored on the brand accent and run
+through `dataviz/scripts/validate_palette.js` rather than eyeballed. Two findings
+worth keeping:
+
+- **The brand accent itself fails as a series colour.** `#0F6E56` measures OKLCH
+  chroma 0.091 against a 0.10 floor — the point below which a hue stops reading as
+  an identity and starts reading as grey. `#0E7C60` is the nearest step in the same
+  hue that clears it (under 4° of hue drift). The UI keeps `#0F6E56`; this is a
+  chart-only substitution with a number behind it.
+- **The slot order is the CVD-safety mechanism.** All 24 orderings of the four
+  non-status hues were enumerated against the validator; the chosen one maximises
+  the worst adjacent pair at ΔE 18.5 (deuteranopia) against a target of 8, and 19.3
+  against the normal-vision floor of 15. The order is recorded in `lib/viz.ts`
+  alongside the numbers, so a future edit can be checked rather than argued about.
+
+One check does not pass outright: magenta sits at 2.69:1 against the white surface,
+below the 3:1 mark. **That WARN is not dismissable — it obligates a relief
+channel**, so every series on every chart carries a visible direct label and every
+chart has a table view. Which is also, exactly, what the operator asked for.
+
+The tier ladder is **ordinal**, not categorical: swapping two tiers would change what
+the chart says, so it takes a one-hue ramp whose lightness carries the order. Its
+light end needed three attempts — `#9EDCC7` and `#6BC9AD` both looked fine and
+measured 1.55:1 and 1.98:1 against a 2.0 floor. **The eye cannot see a 2:1
+boundary.** That is the case for running the script.
+
+#### Colour follows the entity, never the row
+
+`CAPTURE_MODE_COLOR` and `CATEGORY_COLOR` are `Record`s keyed by the enum, so a
+filtered response cannot shift an assignment and there is no index to cycle past. A
+manager who learns that the orange bar is the serial bridge must not find orange
+meaning something else next week because one mode went quiet. **Verified by
+observation**: switching the range reorders the capture rows by count, and
+SPOOL_WATCH stayed teal while its position moved.
+
+An enum value this build has never seen gets grey, deliberately — "not one of the
+known things" rather than impersonating a slot that means something else.
+
+#### The glow, kept where it cannot cost legibility
+
+The operator asked for glow, shadow and light. It is implemented as a **shadow cast
+beneath the mark**, tinted with the mark's own hue — never a halo around the data
+and never a lift on the fill. Contrast between a series and the surface is the thing
+the validator measured; anything that alters the fill invalidates that measurement.
+The fill keeps the exact validated hex.
+
+#### Every state, in the same visual language
+
+Seed data never produces an empty panel, a single-point chart, a 4-million-to-1
+ratio or a label the width of the card — so the states were rendered by stubbing
+`window.fetch` in the running app and letting the **real components** draw them.
+That is the §12.20 principle applied to states rather than clients: a state that no
+real render has produced has not been checked.
+
+Two defects came out of it, and neither was visible in development:
+
+1. **Counts were not thousand-separated.** `4200000 زبون` sat one card away from
+   `987,654,321 د.ع` — the two most prominent numbers on the screen formatted by
+   different rules, the ungrouped one unreadable at a glance. Every real figure in
+   the seed data has four digits or fewer, which is why nothing showed it. All count
+   formatters now group the way money does.
+2. **The attribution rate disappeared in table view.** It lived in the chart's
+   children, so switching to the table replaced it — in the one view a reader most
+   wants the caption. `ChartFrame` grew a `footer` slot that survives the toggle.
+
+The states, and what each does:
+
+| State | Behaviour |
+|---|---|
+| Empty | Flat grey rules where the bars would be, and a **panel-specific sentence** — an empty capture panel and an empty tier panel mean different things |
+| Single point | Drawn at its true share of the scale; never stretched to full width unless it is 100% |
+| Zero row | No bar, label still present — the gap is visible as a gap |
+| Long label | Table view carries it in full; the bar row truncates rather than reflowing the chart |
+| Huge ratio | The bar cannot show 4,200,000 : 1, and **the direct label is why that is survivable** — the number is read, not measured off a sliver |
+| Refetch | Previous figures held at 45% opacity, never a skeleton flash — no layout jump |
+
+#### One deliberate divergence from the skill
+
+The dataviz guidance says a large standalone figure should use proportional digits,
+because `tabular-nums` makes `121` look loose at display sizes. **This product goes
+the other way**: §6.3 sets IBM Plex Mono with aligned digits on all money, and the
+reason is operational rather than typographic — the same figure is read off a screen,
+off a thermal slip, and down a phone line, and it should look the same in all three.
+`tabular-nums` stays. Recorded so the divergence reads as a decision.

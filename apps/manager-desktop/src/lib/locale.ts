@@ -2,6 +2,22 @@
  * Arabic UI copy, centralized (CLAUDE.md §9). Ported from the Next.js dashboard —
  * the copy survived the pivot; only the screens it labels changed.
  */
+/**
+ * Counts are grouped the same way money is.
+ *
+ * `4200000 زبون` sitting a card away from `987,654,321 د.ع` is the defect this
+ * fixes: the money was grouped and the count was not, so the two most prominent
+ * numbers on a screen were formatted by different rules and the ungrouped one could
+ * not be read at a glance. Found by rendering the screen against a stress payload
+ * rather than the seed data, which is the only way a grouping bug shows itself —
+ * every real figure in development has four digits or fewer (§12.27).
+ *
+ * `en-US` rather than `ar-IQ` deliberately: §6.3 sets Western digits in IBM Plex
+ * Mono across the product so a number reads the same on a screen, on a slip and
+ * down a phone line.
+ */
+const group = (value: number): string => new Intl.NumberFormat('en-US').format(value);
+
 export const locale = {
   appName: 'ولاء',
   appTagline: 'إدارة المتجر',
@@ -91,7 +107,7 @@ export const locale = {
     voidBatchReason: 'سبب الإتلاف',
     voidBatchConfirm: (count: number) =>
       `سيتم إتلاف ${count} بطاقة غير مُسلَّمة. البطاقات التي بيد الزبائن لا تتأثر. متابعة؟`,
-    voidedCount: (count: number) => `تم إتلاف ${count} بطاقة`,
+    voidedCount: (count: number) => `تم إتلاف ${group(count)} بطاقة`,
 
     /* ── The table ────────────────────────────────────────────────────────── */
 
@@ -130,7 +146,7 @@ export const locale = {
     sequenceReachedNone: 'لم تُنشأ أي دفعة بعد',
     sequenceNext: 'الدفعة القادمة تبدأ من',
     sequenceTotal: 'مجموع ما طُبع',
-    sequenceBatches: (count: number) => `${count} دفعة`,
+    sequenceBatches: (count: number) => `${group(count)} دفعة`,
 
     /* ── Batch card chrome ────────────────────────────────────────────────── */
 
@@ -493,8 +509,61 @@ export const locale = {
     tierTitle: 'أداء مستويات الخصم',
     tierSubtitle: 'عدد الزبائن الذين بلغوا كل مستوى في الفترة الحالية',
     tierEmpty: 'لم تُحدَّد مستويات خصم بعد',
-    tierReached: (count: number) => `${count} زبون`,
+    tierReached: (count: number) => `${group(count)} زبون`,
     ofThreshold: 'عتبة',
+
+    /* ── Charts (2026-09-02) ──────────────────────────────────────────────── */
+
+    funnelTitle: 'مسار القسائم',
+    funnelSubtitle: 'من الإصدار إلى الاستلام — كل مرحلة نسبة مما قبلها',
+    funnelEmpty: 'لم تصدر أي قسيمة في هذه الفترة',
+    funnelIssued: 'صدرت',
+    funnelRedeemed: 'وصلت الصندوق',
+    funnelOutstanding: 'لم تصل بعد',
+    funnelShare: (pct: number) => `${pct}٪ من الصادر`,
+
+    captureSubtitle: 'كيف وصلت الفواتير من الصندوق — الوضع المفضَّل هو مراقبة قائمة الطباعة',
+    captureEmpty: 'لم يصل أي التقاط بعد — تحقّق من وكيل الالتقاط على جهاز الصندوق',
+    captureColMode: 'طريقة الالتقاط',
+    captureColCount: 'عدد الفواتير',
+
+    categorySubtitle: 'عدد الزبائن المسجّلين في كل فئة',
+    categoryColCategory: 'الفئة',
+    categoryColCount: 'عدد الزبائن',
+
+    tierColTier: 'المستوى',
+    tierColReached: 'بلغوه',
+
+    reconTitle: 'تسوية اليوم',
+    reconSubtitle: 'القسائم الصادرة اليوم ومصيرها',
+    reconEmpty: 'لم تصدر قسائم اليوم',
+    reconStrategy: 'آلية التسوية',
+
+    /** Said in words beside the number, never left to the bar's width alone. */
+    shareOfTotal: (pct: number) => `${pct}٪`,
+
+    /**
+     * Counts carry their unit wherever a share sits beside them.
+     *
+     * §12.27's second instance was two bare adjacent numbers — `9` next to `75٪`
+     * read as `975٪`. Every panel on this screen puts a count beside a percentage,
+     * so every count here is a phrase rather than a numeral.
+     */
+    invoiceCount: (count: number) => `${group(count)} فاتورة`,
+    voucherCount: (count: number) => `${group(count)} قسيمة`,
+  },
+
+  /**
+   * Chart chrome, shared by every panel that draws one.
+   *
+   * The table toggle is offered on every chart rather than only the ones judged
+   * hard to read: a reader who wants numbers should not have to work out which
+   * charts were given the escape hatch.
+   */
+  viz: {
+    showTable: 'عرض كجدول',
+    showChart: 'عرض كرسم',
+    empty: 'لا توجد بيانات في هذه الفترة',
   },
 
   /**
