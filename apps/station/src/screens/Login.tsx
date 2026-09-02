@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import { BookOpen } from 'lucide-react';
 import { isStationRole, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
+import { Guide } from '../components/Guide';
 import { Button, Card, Field, Input } from '../components/ui';
 
 /**
@@ -12,6 +14,11 @@ import { Button, Card, Field, Input } from '../components/ui';
  * would authenticate perfectly and then present a station UI that hides everything
  * their role can actually do — better to say plainly that this is the wrong account
  * for this screen.
+ *
+ * The walkthrough opens from here, before anyone signs in (operator request,
+ * 2026-09-02). That placement is the point: a new operator who cannot get past this
+ * screen has nowhere else to look, and "ask the manager for the password" is one of
+ * the five things the guide tells them.
  */
 export function LoginScreen({
   onAuthenticated,
@@ -22,6 +29,7 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -86,6 +94,18 @@ export function LoginScreen({
           </Button>
         </form>
 
+        {/* Full width and a real button, not a footnote link: the reader who needs
+            it is the reader least likely to hunt for it. */}
+        <Button
+          variant="ghost"
+          onClick={() => setGuideOpen(true)}
+          className="mt-5 w-full"
+        >
+          <BookOpen size={20} aria-hidden />
+          {locale.guide.open}
+        </Button>
+        <p className="mt-2 text-center text-sm text-steel">{locale.guide.subtitle}</p>
+
         <div className="mt-6 text-center">
           <Button
             variant="quiet"
@@ -99,6 +119,8 @@ export function LoginScreen({
           </Button>
         </div>
       </Card>
+
+      {guideOpen ? <Guide onClose={() => setGuideOpen(false)} /> : null}
     </div>
   );
 }

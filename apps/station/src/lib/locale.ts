@@ -271,6 +271,20 @@ export const locale = {
     voucher: 'رقم القسيمة',
   },
 
+  /**
+   * The walkthrough's chrome. Its page copy lives in `lib/guide.ts`, which is long
+   * enough to deserve its own file and is reviewed as copy rather than as markup.
+   */
+  guide: {
+    title: 'دليل الاستخدام',
+    open: 'دليل الاستخدام',
+    subtitle: 'شرح قصير لكل ما تحتاجه على هذه الشاشة',
+    next: 'التالي',
+    previous: 'السابق',
+    done: 'إغلاق الدليل',
+    pageOf: (page: number, total: number) => `الصفحة ${page} من ${total}`,
+  },
+
   connection: {
     online: 'متصل',
     syncing: 'قيد المزامنة',

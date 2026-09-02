@@ -2479,3 +2479,46 @@ The primary action is pinned to the bottom of the viewport. The preview is a who
 receipt tall, and on a tablet in portrait the print button would otherwise sit below
 the fold — an operator with a queue does not scroll to find the button they press on
 every sale (§6.5).
+
+---
+
+### 12.31 The Station guide, and the surface it must not become — 2026-09-02
+*(operator request)*
+
+A «دليل الاستخدام» button on the Station login screen opens a five-screen
+walkthrough: logging in, the two-step scan order, what each scan outcome means,
+registering a customer and replacing a lost card, and what the connection indicator
+is telling you.
+
+**It opens from the login screen, before anyone signs in.** That placement is the
+whole point rather than an arbitrary spot: the operator most in need of it is the one
+who cannot get past that screen, and "the password comes from the manager and cannot
+be changed here" is one of the five things it says. A guide reachable only after a
+successful login would be missing its first reader.
+
+**It is reading matter, and that is a constraint with teeth.** Five screens, three
+controls — next, back, close — and nothing that changes any state. §6.4 forbids a
+settings screen anywhere in this app, and a help section is exactly where the first
+one arrives: as "just a link to the server address", then "just a way to re-pair the
+scanner", each one reasonable on its own. There is no such link here and none should
+be added. The way to change anything is the manager app, behind manager
+authentication.
+
+**The copy lives in `lib/guide.ts`, not in the component.** It is long enough to
+deserve reviewing as copy rather than as markup (CLAUDE.md §9), and the wording of
+what a station operator is told about an unrecorded sale is not a detail to find by
+reading JSX. The audience is a cashier: no field names, no endpoints, and none of
+"sync", "queue" or "token". Every line is either something to do or something they
+will see.
+
+**Currently reachable only from login.** Deliberate, and the narrower of the two
+options: adding an entry to the scan screen's header would put a fourth control on
+the one screen §6.4 wants at its most minimal. If mid-shift access turns out to
+matter, the header is where it goes — but it is a change to make on evidence rather
+than in anticipation.
+
+One RTL note worth recording because auto-generated designs get it backwards (§6.7
+#4): **on this page "back" points right and "next" points left.** `ChevronRight` is
+therefore on the back control and `ChevronLeft` on the forward one — the opposite of
+what the component names suggest, and correct. Verified by looking, along with the
+progress dots, whose index 0 must sit rightmost.
