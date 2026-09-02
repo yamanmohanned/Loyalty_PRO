@@ -470,10 +470,18 @@ executable name. Change it to `Customer loyalty` and install over an existing sh
 Note that the data survives all of this: `%PROGRAMDATA%\Walaa` is untouched by
 either install, which is exactly why it is on that list above.
 
-**If the rename is wanted anyway**, the fix is one addition rather than a rewrite:
-`NSIS_HOOK_PREINSTALL` should read `InstallLocation` from the uninstall registry key
-(which is keyed on `identifier`, and `identifier` is not changing) and run
-`uninstall` against the service executable it finds there, before the file copy.
-That turns the above into a clean upgrade. It cannot be verified from a development
-machine — it needs a real prior installation to upgrade over — so it should be
-tested on a spare machine before it reaches a shop.
+**The fix is in place, and it is unverified.** `NSIS_HOOK_POSTINSTALL` now runs
+`walaa-service.exe uninstall` unconditionally before `install`. The service is
+deregistered **by name**, and `SERVICE_NAME` is frozen (CLAUDE_v3.md §12.36), so the
+new build can retire a previous installation it cannot see on disk — different
+directory, different product name, different registry key, same `WalaaApi`. It stops
+the old service first, which releases the database before the new one starts.
+
+Note that reading `InstallLocation` from the uninstall registry key — the obvious
+approach — does **not** work: Tauri's NSIS template keys that entry on
+`${PRODUCTNAME}`, which is precisely the string a rename changes.
+
+> **This path has never run against a real prior installation** and cannot be tested
+> from a development machine. The no-op cases (first install, same-path upgrade) are
+> the only ones exercised. Test it on a machine that already has an installation
+> before it reaches a shop.

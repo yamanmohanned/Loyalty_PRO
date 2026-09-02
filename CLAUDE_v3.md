@@ -2866,3 +2866,87 @@ letterform «و» — written by CLAUDE_v2.md §5.3 step 3, which explicitly cal
 stand-in *"to be replaced before first distribution"*. It has been. The mark is now
 the same artwork the taskbar and installer show, because two drawings of a brand are
 two brands.
+
+---
+
+### 12.36 RULE — user-visible names are free; OS identifier strings are frozen — 2026-09-02
+*(operator ruling, made permanent. This is a standing rule, not a record of one
+rename.)*
+
+> **Any name a person reads may be changed at will. No string the operating system
+> keys on may be changed — not the installer's product name, not the Service Control
+> Manager's service name, not the firewall rule's name, not the data directory.
+> Renaming one of those does not rename an installation; it *isolates* it, leaving
+> the old one installed and running while the new one stands beside it.**
+
+The failure this prevents is specifically the one that looks fine: **a shop silently
+running a store of outdated executables.** Nothing errors, the tills keep working,
+and the only symptom is that the update did not take.
+
+#### The two lists
+
+| Free to change | Frozen |
+|---|---|
+| Window titles, browser tab titles | `tauri.conf.json` → `productName` |
+| In-app wordmark and branding | `tauri.conf.json` → `identifier` |
+| Installer publisher, descriptions | `SERVICE_NAME` (`WalaaApi`) |
+| Windows service **display** name | `FIREWALL_RULE` (`Walaa Loyalty API`) |
+| Every Arabic UI string | `%PROGRAMDATA%\Walaa\`, `walaa.db`, `walaa.env` |
+| App icon and mark | `/health` → `"service":"walaa-api"` |
+| | `WALAA_DATA_DIR`, `@walaa/*` package names |
+
+Each frozen entry has a distinct failure, and they are worth keeping separate
+because a future reader will be tempted to treat them as one squeamish rule:
+
+- **`productName`** sets `$INSTDIR` **and the uninstall registry key** — Tauri's NSIS
+  template defines `UNINSTKEY` as `…\Uninstall\${PRODUCTNAME}`, not the bundle id.
+  Rename it and the installer targets a new directory and writes a new registry
+  entry, so Add/Remove Programs shows two products and the old install is never
+  touched.
+- **`identifier`** is the bundle id. Not the uninstall key (see above — that was
+  checked in the generated template, not assumed), but still the app's identity to
+  the OS and to any future updater.
+- **`SERVICE_NAME`** is how an upgrade finds the service it is replacing. It is also
+  what makes the rename *recoverable* — see the fix below.
+- **`FIREWALL_RULE`** — rules are created and deleted by name. A rename orphans the
+  old rule, left open on the shop's network with nothing that knows how to close it,
+  and adds a duplicate beside it.
+- **`%PROGRAMDATA%\Walaa\`** holds the live database **and the backup encryption
+  key**. Renaming it strands both.
+- **`/health` → `"service":"walaa-api"`** — `testApiUrl()` in the Station refuses any
+  address that does not answer with exactly this string. Change it and **every
+  already-paired station** reports "this is not a Walaa server" until a person walks
+  to each one and re-runs setup.
+
+#### The hook that makes a future rename possible
+
+*(written 2026-09-02, **unverified** — see the warning below)*
+
+`NSIS_HOOK_POSTINSTALL` now runs `walaa-service.exe uninstall` unconditionally
+before `install`.
+
+That single line is the whole fix, and the reason it works is the rule above: **the
+service is deregistered by NAME, and the name is frozen.** So the new build can
+retire a previous installation it cannot even see on disk — different directory,
+different product name, different registry key, same `WalaaApi`. `uninstall` stops
+the old service with a grace period first, which is also what releases the SQLite
+file before the new service starts.
+
+It sits in POSTINSTALL rather than PREINSTALL because on a renamed install
+`runtime\` does not exist yet at PREINSTALL time. It is idempotent: `uninstall`
+returns success when nothing is registered, and on a same-path upgrade PREINSTALL
+has already done it.
+
+An earlier draft read `InstallLocation` from the uninstall registry key, on the
+assumption that the key was keyed on `identifier`. **Reading the generated
+`installer.nsi` showed it is keyed on `${PRODUCTNAME}`**, which is exactly the thing
+that would have changed — so that draft would have looked up a key that does not
+exist and silently found nothing. Recorded because the assumption was reasonable and
+wrong, and the only thing that caught it was opening the template.
+
+> **UNVERIFIED.** The renamed-install path has never executed against a real prior
+> installation and cannot be from a development machine — it needs a box that
+> already has one. The no-op cases (first install, same-path upgrade) are the only
+> ones exercised. **Do not describe this as working.** It is untested code with a
+> clear rationale, waiting for a machine that can prove it.
+
