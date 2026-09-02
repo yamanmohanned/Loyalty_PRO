@@ -2714,3 +2714,72 @@ the other way**: §6.3 sets IBM Plex Mono with aligned digits on all money, and 
 reason is operational rather than typographic — the same figure is read off a screen,
 off a thermal slip, and down a phone line, and it should look the same in all three.
 `tabular-nums` stays. Recorded so the divergence reads as a decision.
+
+---
+
+### 12.34 Glass, and the arithmetic that decided where it goes — 2026-09-02
+*(operator request, with three constraints: contrast must still meet accessibility
+standards over every background; not on dense tables or small text; the §6.2 palette
+stays — glass is a surface treatment, not a new palette)*
+
+#### The placement rule is computed, not aesthetic
+
+Text contrast through a translucent surface depends on what is behind it. This
+product has **no photographic background anywhere**, so the worst case is bounded and
+can be worked out rather than guessed. Measured, for §6.2's own ink and steel:
+
+| Glass sits over | ink `#1A1D21` | steel `#6B7280` |
+|---|---|---|
+| the canvas `#F7F8FA` (α 0.78) | 16.6:1 | **4.76:1** ✓ |
+| content — a chart bar, the accent (α 0.92) | 15.0:1 | **4.30:1** ✗ |
+| the guide's dim scrim (α 0.88) | 15.1:1 | **4.32:1** ✗ |
+
+**Steel does not reach 4.5:1 over content at any alpha worth using** — not even at
+1.0, where it measures 4.83:1 on pure white and has nowhere left to go. So:
+
+- `.glass` (α 0.78) — sits on the canvas with nothing behind it. **Any text.**
+- `.glass-panel` (α 0.92) — overlaps content. **Ink and controls only.**
+- `.glass-scrim` — the dimmer behind a dialog. The dialog stays opaque.
+
+A panel that must carry secondary prose stays opaque. That is not a limitation to
+design around; it is the answer.
+
+#### Where it went, and where it deliberately did not
+
+| Applied | Why it is safe there |
+|---|---|
+| Station login + first-run setup | On the canvas, alone. First surface anyone sees |
+| Manager login + first-run setup | Same |
+| Manager nav rail | On the canvas beside content, not over it — steel labels clear 4.76:1. The frosting is texture rather than refraction; nothing scrolls behind it |
+| Station result action bar | Overlaps the slip preview. Buttons and ink only — **verified: zero `steel` descendants in the live DOM** |
+| Station guide scrim | The dimmer only |
+
+| Refused | Why |
+|---|---|
+| **The guide panel itself** | Its body text is steel over a dimmed backdrop — the exact failing case. A help screen harder to read than the app it explains is a poor trade for a texture |
+| **Chart surfaces** | `viz.ts`'s categorical palette was validated against a SOLID surface. Translucency changes the effective background and **invalidates every contrast number in §12.33** |
+| **Data tables and small text** | The operator's own constraint, and correct |
+| **Status banners** | Their amber/danger tint *is* the signal. Diluting a warning's ground to make it prettier is making it quieter |
+| **The slip preview** | It is a picture of paper |
+
+#### The bug: a class that was present and doing nothing
+
+First implementation applied `.glass` via `addComponents` and it computed to
+`backdrop-filter: none` on an opaque white — **present in the DOM, correct in the
+source, and visually identical to an ordinary card.**
+
+Tailwind's `components` layer loses to `utilities`, and every card in this product
+already wears `bg-surface shadow-card`. The class was there; the cascade discarded
+it. The fix is a doubled selector — `.glass.glass`, specificity 0,2,0 — which beats
+a single utility class without `!important` and without callers having to strip the
+utilities being replaced.
+
+**It was caught by reading the computed style in the running app, not by looking at
+the markup.** That is §12.20's habit applied to CSS: a class name in a JSX file is a
+claim about what the browser will do, and the browser is the only thing that can
+confirm it. A second lesson came with it — the preset is a `.cjs` outside Vite's
+watched sources, so the change needed a dev-server restart before it appeared at all.
+
+`prefers-reduced-transparency` and `forced-colors` both switch every glass surface
+back to opaque white. `backdrop-filter` degrades to the flat translucent fill where
+unsupported, which is why the alpha is high enough to carry the contrast alone.

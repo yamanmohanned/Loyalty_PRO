@@ -38,7 +38,7 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }) {
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6">
-      <Card className="w-full max-w-md p-8">
+      <Card className="glass w-full max-w-md border-transparent p-8">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent text-xl font-bold text-white">
             و

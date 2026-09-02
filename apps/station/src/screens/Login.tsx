@@ -59,7 +59,9 @@ export function LoginScreen({
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6 py-10">
-      <Card className="w-full max-w-md">
+      {/* Glass rather than a plain card: this surface sits on the canvas, where
+          even `steel` clears 4.5:1 (4.76). It is the first thing anyone sees. */}
+      <Card className="glass w-full max-w-md border-transparent">
         <div className="mb-6 text-center">
           <h1 className="font-display text-3xl font-bold text-accent">{locale.app.name}</h1>
           <p className="text-base text-steel">{locale.app.station}</p>

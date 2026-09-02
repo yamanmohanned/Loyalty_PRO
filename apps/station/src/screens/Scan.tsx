@@ -787,7 +787,7 @@ function ResultView({
             whole receipt tall: on a tablet in portrait the primary action would
             otherwise sit below the fold, and an operator with a queue does not scroll
             to find the button they press on every sale (§6.5). */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 border-t border-border bg-surface/92 px-6 py-4 backdrop-blur-sm sm:flex-row">
+        <div className="glass-panel sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 rounded-b-lg px-6 py-4 sm:flex-row">
           <Button
             size="large"
             className="flex-1"

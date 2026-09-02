@@ -40,7 +40,7 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }): JSX
 
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6 py-10">
-      <Card className="w-full max-w-lg">
+      <Card className="glass w-full max-w-lg border-transparent">
         <div className="mb-6 flex items-center gap-3">
           <span className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-tint text-accent">
             <ServerCog size={24} aria-hidden />

@@ -30,6 +30,94 @@ const colors = {
   },
 };
 
+/**
+ * ── Glass (2026-09-02) ─────────────────────────────────────────────────────
+ *
+ * A surface treatment, not a new palette: the colours below are §6.2's white and
+ * ink at reduced alpha, and nothing else changes.
+ *
+ * **Where it goes was decided by arithmetic, not by taste.** Text contrast through a
+ * translucent surface depends on what is behind it, so the two backdrops this
+ * product actually has were measured — there is no photographic background anywhere,
+ * so the worst case is bounded and computable:
+ *
+ * | Surface sits over | ink #1A1D21 | steel #6B7280 |
+ * |---|---|---|
+ * | the canvas #F7F8FA (α 0.78) | 16.6:1 | **4.76:1** |
+ * | content — a chart bar, the accent (α 0.92) | 15.0:1 | **4.30:1** |
+ * | the guide's dim scrim (α 0.88) | 15.1:1 | **4.32:1** |
+ *
+ * So the rule, and it is a hard one:
+ *
+ *  - `.glass` — sits on the canvas with nothing behind it. **Any text.** Steel
+ *    clears 4.5:1 here and only here.
+ *  - `.glass-panel` — overlaps other content: a sticky bar, a floating toolbar.
+ *    **Ink and controls only, never steel body text.** Steel does not reach 4.5:1
+ *    over content at ANY practical alpha — not even at 1.0, where it measures
+ *    4.83:1 on pure white and has nowhere left to go. A panel that must carry
+ *    secondary prose stays opaque; that is not a limitation to design around, it is
+ *    the answer.
+ *  - `.glass-scrim` — the dimmer behind a dialog. The dialog itself stays opaque,
+ *    for the reason above: an overlay's body text is exactly the steel-over-content
+ *    case.
+ *
+ * Never on: dense data tables, small text, chart surfaces (the categorical palette
+ * in `viz.ts` was validated against a SOLID surface — translucency changes the
+ * effective background and invalidates every contrast number in it), or the printed
+ * slip preview, which is a picture of paper.
+ *
+ * `backdrop-filter` degrades to the flat translucent fill where unsupported, which
+ * is why the alpha is high enough to carry the contrast on its own.
+ */
+const glass = ({ addComponents }) => {
+  const base = {
+    backdropFilter: 'blur(16px) saturate(1.6)',
+    WebkitBackdropFilter: 'blur(16px) saturate(1.6)',
+    border: '1px solid rgba(255,255,255,0.55)',
+    /* The hairline highlight along the top edge is what makes it read as glass
+       rather than as a faded card — light catching an edge, not a lower opacity. */
+    boxShadow:
+      'inset 0 1px 0 rgba(255,255,255,0.75), 0 1px 2px rgba(17,24,39,0.05), 0 12px 32px rgba(17,24,39,0.07)',
+  };
+
+  /*
+   * The selectors are DOUBLED — `.glass.glass` — and that is not a typo.
+   *
+   * `addComponents` writes into Tailwind's `components` layer, which loses to the
+   * `utilities` layer that carries `bg-surface` and `shadow-card`. Every card in
+   * this product already wears those, so a single-class `.glass` applied on top
+   * computed to `backdrop-filter: none` and an opaque white — present in the DOM,
+   * doing nothing, and looking exactly like a card. Found by reading the computed
+   * style in the running app rather than by trusting the class name (§12.20's
+   * habit, applied to CSS).
+   *
+   * Doubling raises specificity to 0,2,0 so it beats a single utility class without
+   * `!important`, and without the caller having to strip the utilities it is
+   * replacing.
+   */
+  addComponents({
+    '.glass.glass': { ...base, backgroundColor: 'rgba(255,255,255,0.78)' },
+    '.glass-panel.glass-panel': { ...base, backgroundColor: 'rgba(255,255,255,0.92)' },
+    '.glass-scrim.glass-scrim': {
+      backgroundColor: 'rgba(26,29,33,0.45)',
+      backdropFilter: 'blur(6px)',
+      WebkitBackdropFilter: 'blur(6px)',
+    },
+    /* Forced-colors and reduced-transparency both mean "stop doing this". */
+    '@media (prefers-reduced-transparency: reduce), (forced-colors: active)': {
+      '.glass.glass, .glass-panel.glass-panel': {
+        backgroundColor: '#FFFFFF',
+        backdropFilter: 'none',
+        WebkitBackdropFilter: 'none',
+      },
+      '.glass-scrim.glass-scrim': {
+        backgroundColor: 'rgba(26,29,33,0.72)',
+        backdropFilter: 'none',
+      },
+    },
+  });
+};
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ['class'],
@@ -99,5 +187,5 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [glass],
 };

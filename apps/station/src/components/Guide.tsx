@@ -21,6 +21,14 @@ import { Button, cn } from './ui';
  * comment on `lib/guide.ts` for why that limit is load-bearing rather than a
  * stylistic preference.
  *
+ * ── The panel is deliberately NOT glass ────────────────────────────────────
+ *
+ * The scrim behind it is; the panel is not. Its body text is `steel` sitting over a
+ * dimmed backdrop, and that combination does not reach 4.5:1 through a translucent
+ * surface at any alpha worth using — the preset's glass comment carries the
+ * measurements. A help screen that is harder to read than the app it explains would
+ * be a poor trade for a texture.
+ *
  * ── RTL ────────────────────────────────────────────────────────────────────
  *
  * The chevrons are the thing auto-generated designs get wrong (§6.7 #4). On an
@@ -75,7 +83,7 @@ export function Guide({ onClose }: { onClose: () => void }): JSX.Element {
       role="dialog"
       aria-modal="true"
       aria-label={locale.guide.title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4 backdrop-blur-sm"
+      className="glass-scrim fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

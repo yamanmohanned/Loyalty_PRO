@@ -82,7 +82,12 @@ const NAV_ITEMS = [
 /** Fixed navigation rail on the RIGHT — the RTL reading position (§6.5). */
 function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   return (
-    <aside className="flex w-rail shrink-0 flex-col border-e border-border bg-surface">
+    // Glass on the rail: it sits on the canvas rather than over content, which is
+    // the one placement where the steel nav labels still clear 4.5:1 (4.76). The
+    // frosting here is texture rather than refraction — nothing scrolls behind it —
+    // and the top highlight is what makes it read as a lit edge rather than a
+    // faded panel.
+    <aside className="glass flex w-rail shrink-0 flex-col border-0 border-e border-border">
       <div className="border-b border-border px-6 py-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-lg font-bold text-white">
