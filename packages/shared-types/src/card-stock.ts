@@ -100,9 +100,74 @@ export const CardExportRowSchema = z.object({
 
 export type CardExportRow = z.infer<typeof CardExportRowSchema>;
 
+/**
+ * Which cards to put in the print file.
+ *
+ * Empty body means the whole batch, which is what a first print needs. The optional
+ * range is the reprint case: a stack that jammed in the card printer, a run that came
+ * out misaligned, a handful damaged in transit. Reprinting the batch to recover forty
+ * cards would mean pulling every number in it out of the machine again, and the
+ * export file is the one artefact of this feature worth stealing.
+ *
+ * **Bounding the range bounds the audit entry too.** `CARD_BATCH_EXPORTED` records
+ * what was actually read, so "who has seen these numbers" stays answerable — which it
+ * would not be if every reprint were logged as a full-batch export.
+ *
+ * Both ends are inclusive, and both are serials rather than card numbers: the serial
+ * is what is printed large on the card and what a person reads off the damaged stack
+ * in front of them.
+ */
+const ExportCardBatchRangeSchema = z
+  .object({
+    serialFrom: z.coerce.number().int().positive().optional(),
+    serialTo: z.coerce.number().int().positive().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.serialFrom === undefined ||
+      value.serialTo === undefined ||
+      value.serialFrom <= value.serialTo,
+    { message: 'بداية المدى يجب أن تكون أصغر من نهايته', path: ['serialFrom'] },
+  )
+  .refine((value) => (value.serialFrom === undefined) === (value.serialTo === undefined), {
+    // Half a range is ambiguous — "from 40" could mean to the end of the batch or a
+    // typo that drops the end. Neither reading is safe on a file of card numbers.
+    message: 'حدّد بداية المدى ونهايته معاً',
+    path: ['serialTo'],
+  });
+
+/**
+ * An absent body means the whole batch.
+ *
+ * `preprocess`, not `.default({})`, and the difference is the bug it fixes: a POST
+ * with **no body at all** reaches the validator as `null`, and a Zod default only
+ * fires on `undefined`. So the schema answered 400 to every client that had been
+ * calling this endpoint correctly since before the range existed — curl, a script,
+ * the packaging smoke test — while the browser, which sends `{}` with a JSON
+ * content-type, sailed through.
+ *
+ * That is §12.20 read from the other end. There the browser broke because the tests
+ * used curl; here curl breaks because the feature was built against the browser. The
+ * rule is the same one: **a request shape is only supported if some real client
+ * builds it that way in a test.** Both shapes are covered below this line.
+ */
+export const ExportCardBatchRequestSchema = z.preprocess(
+  (value) => value ?? {},
+  ExportCardBatchRangeSchema,
+);
+
+export type ExportCardBatchRequest = z.infer<typeof ExportCardBatchRequestSchema>;
+
 export const CardBatchExportResponseSchema = z.object({
   batch: CardBatchSchema,
   rows: z.array(CardExportRowSchema),
+  /**
+   * The range this file actually covers, formatted for reading, or null for the whole
+   * batch. The client names it on screen and in the filename so a reprint file and a
+   * full-batch file are never mistaken for one another on disk.
+   */
+  exportedRangeFormatted: z.string().nullable(),
   /** Ready-to-save CSV for the card printer's variable-data import. */
   csv: z.string(),
   /** Human-readable manifest for the merchant's records — Arabic, no card numbers. */

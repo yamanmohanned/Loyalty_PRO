@@ -224,6 +224,167 @@ describe('generating batches', () => {
     expect(manifest).toContain(formatCardSerial(1));
   });
 
+  /* ── Reprinting a slice (2026-09-02) ───────────────────────────────────── */
+
+  it('exports the whole batch for a caller that sends no body at all', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 4);
+
+    // No payload and no content-type — the shape curl, a script and the packaging
+    // smoke test send. It reaches the validator as `null`, which is why the schema
+    // preprocesses rather than defaulting (§12.20 read from the other end).
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: bearer(token),
+    });
+
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().rows).toHaveLength(4);
+    expect(exported.json().exportedRangeFormatted).toBeNull();
+  });
+
+  it('exports the whole batch for a browser sending an empty JSON body', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 4);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: {},
+    });
+
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().rows).toHaveLength(4);
+  });
+
+  it('exports only the requested serial range', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 3, serialTo: 5 },
+    });
+
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().rows.map((row: { serial: string }) => row.serial)).toEqual([
+      formatCardSerial(3),
+      formatCardSerial(4),
+      formatCardSerial(5),
+    ]);
+    expect(exported.json().exportedRangeFormatted).toBe(
+      `${formatCardSerial(3)} — ${formatCardSerial(5)}`,
+    );
+  });
+
+  it('still reports the tallies for the WHOLE batch when only a slice is exported', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 3, serialTo: 5 },
+    });
+
+    // Counting the exported rows instead — which is what the first version of this
+    // did — makes a batch appear to shrink every time somebody reprints part of it,
+    // on the very screen that renders this response.
+    expect(exported.json().rows).toHaveLength(3);
+    expect(exported.json().batch.counts.printed).toBe(10);
+    expect(exported.json().batch.quantity).toBe(10);
+  });
+
+  it('does not advance a batch to EXPORTED on a partial reprint', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 1, serialTo: 2 },
+    });
+
+    // Reprinting two cards does not mean the batch has been sent to the printer.
+    expect(exported.json().batch.status).toBe('GENERATED');
+  });
+
+  it('names only the reprinted range in the audit trail', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 3, serialTo: 5 },
+    });
+
+    // "Who has seen these numbers" has to stay answerable, and it would not be if a
+    // three-card reprint were logged the same way as a ten-card export.
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { action: 'card_batch.exported' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const after = JSON.parse(entry.afterJson ?? '{}');
+    expect(after.rows).toBe(3);
+    expect(after.range).toBe(`${formatCardSerial(3)} — ${formatCardSerial(5)}`);
+  });
+
+  it('refuses half a range — "from 40" with no end is ambiguous', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 3 },
+    });
+
+    expect(exported.statusCode).toBe(400);
+  });
+
+  it('refuses a range lying entirely outside the batch', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 10);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 900, serialTo: 999 },
+    });
+
+    expect(exported.statusCode).toBe(400);
+  });
+
+  it('clamps a range that overhangs the end rather than refusing it', async () => {
+    const token = await tokenFor('owner');
+    const batch = await generateBatch(token, 5);
+
+    const exported = await app.inject({
+      method: 'POST',
+      url: url(`/cards/batches/${batch.json().batch.id}/export`),
+      headers: { ...bearer(token), 'content-type': 'application/json' },
+      payload: { serialFrom: 4, serialTo: 40 },
+    });
+
+    // The merchant is reading serials off a damaged stack. An off-by-one at the end
+    // of the run should produce the cards that exist, not an error message.
+    expect(exported.statusCode).toBe(200);
+    expect(exported.json().rows).toHaveLength(2);
+    expect(exported.json().exportedRangeFormatted).toBe(
+      `${formatCardSerial(4)} — ${formatCardSerial(5)}`,
+    );
+  });
+
   it('is refused to the station — stock is the owner\'s business', async () => {
     const response = await generateBatch(await tokenFor('station'), 5);
     expect(response.statusCode).toBe(403);

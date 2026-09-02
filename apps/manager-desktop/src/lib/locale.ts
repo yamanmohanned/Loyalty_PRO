@@ -54,6 +54,27 @@ export const locale = {
     export: 'تنزيل ملف الطباعة',
     exportManifest: 'تنزيل كشف الدفعة',
     exporting: 'جاري التحضير…',
+    exportSection: 'الطباعة',
+    exportWhole: 'تنزيل ملف الطباعة (الدفعة كاملة)',
+    exportWholeHint: 'ملف CSV للمطبعة يحتوي كل بطاقات الدفعة، مع كشف بالتفاصيل',
+    /* ── Reprinting a slice (2026-09-02) ──────────────────────────────────── */
+    reprint: 'إعادة طباعة مدى محدّد',
+    reprintHint: 'لطباعة بديل عن بطاقات تلفت أو خرجت غير مقروءة — دون سحب أرقام الدفعة كلها مرة أخرى',
+    reprintFrom: 'من مسلسل',
+    reprintTo: 'إلى مسلسل',
+    reprintSubmit: 'تنزيل ملف إعادة الطباعة',
+    reprintRangeError: 'حدّد بداية المدى ونهايته داخل مدى هذه الدفعة',
+    /**
+     * The count comes first and the range last, with no dash between them.
+     *
+     * The first draft read «...للمدى 000002 — 000004 — 3 بطاقة» and put three
+     * em-dashes in one line, one of which belongs to the range itself. Read aloud it
+     * is not clear which dash separates what — a §12.27 rendered check, on a sentence
+     * rather than a number.
+     */
+    reprintedRange: (range: string, count: number) =>
+      `تم تحضير ملف إعادة طباعة لـ ${count} بطاقة، المدى ${range}`,
+    exportedRows: (count: number) => `${count} بطاقة في الملف`,
     /**
      * The warning has to be on the screen, not in a manual. The file necessarily
      * contains every card number in the batch — that is what a card printer needs —
@@ -95,6 +116,30 @@ export const locale = {
     empty: 'لا توجد دفعات بعد',
     emptyBody:
       'البطاقات المطبوعة مسبقاً تُنشأ هنا ثم تُطبع لدى مطبعة. حتى ذلك الحين تطبع المحطة بطاقات ورقية.',
+
+    /* ── The sequence, made prominent (2026-09-02) ────────────────────────── */
+
+    /**
+     * The whole answer to the merchant's collision worry, so it is stated rather than
+     * left to be inferred from a serial in a corner: the last number that exists, the
+     * first number the next batch would take, and the fact that he does not choose it.
+     */
+    sequenceTitle: 'تسلسل المسلسلات',
+    sequenceHint: 'النظام يختار المسلسلات بنفسه — لا يمكن أن تتداخل دفعتان',
+    sequenceReached: 'وصل التسلسل إلى',
+    sequenceReachedNone: 'لم تُنشأ أي دفعة بعد',
+    sequenceNext: 'الدفعة القادمة تبدأ من',
+    sequenceTotal: 'مجموع ما طُبع',
+    sequenceBatches: (count: number) => `${count} دفعة`,
+
+    /* ── Batch card chrome ────────────────────────────────────────────────── */
+
+    batchLabel: (number: number) => `الدفعة ${number}`,
+    batchDetails: 'تفاصيل الدفعة',
+    batchNote: 'ملاحظة',
+    exportedNever: 'لم يُنزّل بعد',
+    countsTitle: 'حالة بطاقات هذه الدفعة',
+    dangerZone: 'إجراء لا رجعة فيه',
   },
 
   common: {

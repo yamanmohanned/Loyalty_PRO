@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   DASHBOARD_ROLES,
+  ExportCardBatchRequestSchema,
   GenerateCardBatchRequestSchema,
   ReplaceCardRequestSchema,
   ReportCardLostRequestSchema,
@@ -9,6 +10,7 @@ import {
   STATION_ROLES,
   VoidCardBatchRequestSchema,
   VoidCardRequestSchema,
+  type ExportCardBatchRequest,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import {
@@ -76,19 +78,23 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
    * The print-ready export.
    *
    * Rate-limited harder than a read deserves on its own: this response contains every
-   * card number in the batch, and repeatedly pulling it is what harvesting would look
-   * like. It is audited with an actor for the same reason.
+   * card number in the requested range, and repeatedly pulling it is what harvesting
+   * would look like. It is audited with an actor for the same reason.
+   *
+   * An empty body exports the whole batch; a serial range exports a reprint slice and
+   * is audited as exactly that, so "who has seen these numbers" stays answerable.
    */
   app.post(
     '/batches/:id/export',
     {
       config: { roles: DASHBOARD_ROLES, rateLimit: { max: 10, timeWindow: '1 minute' } },
-      schema: { params: IdParamSchema },
+      schema: { params: IdParamSchema, body: ExportCardBatchRequestSchema },
     },
     async (request) => {
       const auth = requireDashboardRole(request);
       const { id } = request.params as { id: string };
-      return exportCardBatch({ merchantId: auth.merchantId, actorUserId: auth.sub }, id);
+      const body = request.body as ExportCardBatchRequest;
+      return exportCardBatch({ merchantId: auth.merchantId, actorUserId: auth.sub }, id, body);
     },
   );
 

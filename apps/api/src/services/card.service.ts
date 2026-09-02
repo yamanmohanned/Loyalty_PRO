@@ -369,6 +369,7 @@ function csvField(value: string): string {
 export async function exportCardBatch(
   params: { merchantId: string; actorUserId: string },
   batchId: string,
+  range?: { serialFrom?: number; serialTo?: number },
 ): Promise<CardBatchExportResponse> {
   const batch = await prisma.cardBatch.findFirst({
     where: { id: batchId, merchantId: params.merchantId },
@@ -376,11 +377,37 @@ export async function exportCardBatch(
   });
   if (!batch) throw notFound('الدفعة غير موجودة');
 
+  // A reprint range is clamped to the batch rather than rejected when it overhangs.
+  // The merchant is reading serials off a damaged stack, and an off-by-one at the
+  // end of the run should produce the cards that exist, not an error message.
+  const from = range?.serialFrom;
+  const to = range?.serialTo;
+  const ranged = from !== undefined && to !== undefined;
+
+  if (ranged && (to < batch.serialStart || from > batch.serialEnd)) {
+    throw validationFailed('المدى المطلوب خارج نطاق هذه الدفعة');
+  }
+
   const cards = await prisma.card.findMany({
-    where: { batchId: batch.id, merchantId: params.merchantId },
+    where: {
+      batchId: batch.id,
+      merchantId: params.merchantId,
+      ...(ranged
+        ? {
+            serial: {
+              gte: Math.max(from, batch.serialStart),
+              lte: Math.min(to, batch.serialEnd),
+            },
+          }
+        : {}),
+    },
     orderBy: { serial: 'asc' },
-    select: { serial: true, cardNumber: true, status: true },
+    select: { serial: true, cardNumber: true },
   });
+
+  const exportedRangeFormatted = ranged
+    ? `${formatCardSerial(Math.max(from, batch.serialStart))} — ${formatCardSerial(Math.min(to, batch.serialEnd))}`
+    : null;
 
   const rows: CardExportRow[] = cards
     .filter((card) => card.serial !== null)
@@ -398,10 +425,12 @@ export async function exportCardBatch(
   ].join('\r\n');
 
   const manifest = [
-    'دفعة بطاقات ولاء',
+    ranged ? 'إعادة طباعة بطاقات ولاء' : 'دفعة بطاقات ولاء',
     `رقم الدفعة: ${batch.batchNumber}`,
     `المدى: ${formatCardSerial(batch.serialStart)} — ${formatCardSerial(batch.serialEnd)}`,
+    ranged ? `المدى في هذا الملف: ${exportedRangeFormatted}` : null,
     `الكمية: ${batch.quantity}`,
+    ranged ? `عدد البطاقات في هذا الملف: ${rows.length}` : null,
     `أنشأها: ${batch.generatedBy?.name ?? '—'}`,
     `تاريخ الإنشاء: ${batch.generatedAt.toISOString()}`,
     batch.note ? `ملاحظة: ${batch.note}` : null,
@@ -418,7 +447,11 @@ export async function exportCardBatch(
       // back a step because somebody re-downloaded the file to reprint a few cards.
       data: {
         exportedAt: new Date(),
-        status: batch.status === 'GENERATED' ? 'EXPORTED' : batch.status,
+        // GENERATED → EXPORTED only, and only on a whole-batch export. A reprint of
+        // forty cards does not mean the batch has been sent to the printer, and a
+        // batch already RECEIVED must not fall back a step because somebody
+        // re-downloaded a slice of it.
+        status: !ranged && batch.status === 'GENERATED' ? 'EXPORTED' : batch.status,
       },
       include: { generatedBy: { select: { name: true } } },
     });
@@ -430,7 +463,13 @@ export async function exportCardBatch(
         action: AUDIT_ACTIONS.CARD_BATCH_EXPORTED,
         entityType: 'card_batch',
         entityId: batch.id,
-        after: { batchNumber: batch.batchNumber, rows: rows.length },
+        // What was actually read, not what could have been. A reprint logged as a
+        // full export would make "who has seen these numbers" unanswerable.
+        after: {
+          batchNumber: batch.batchNumber,
+          rows: rows.length,
+          range: exportedRangeFormatted,
+        },
       },
       db,
     );
@@ -438,13 +477,37 @@ export async function exportCardBatch(
     return next;
   });
 
-  const counts = emptyCounts();
-  for (const card of cards) {
-    const key = card.status.toLowerCase() as keyof CardBatchCounts;
-    if (key in counts) counts[key] += 1;
-  }
+  return {
+    batch: serializeBatch(updated, await batchCounts(params.merchantId, batch.id)),
+    rows,
+    csv,
+    manifest,
+    exportedRangeFormatted,
+  };
+}
 
-  return { batch: serializeBatch(updated, counts), rows, csv, manifest };
+/**
+ * A batch's status tallies, over the WHOLE batch.
+ *
+ * A `groupBy` rather than a tally of the rows just exported, and the distinction is
+ * not cosmetic: a reprint of three cards would otherwise report a batch of five as
+ * containing three, and the screen that renders the response would show a batch
+ * shrinking every time somebody reprinted part of it. Counting in the database also
+ * means the numbers are read without pulling a single card number out of it.
+ */
+async function batchCounts(merchantId: string, batchId: string): Promise<CardBatchCounts> {
+  const grouped = await prisma.card.groupBy({
+    by: ['status'],
+    where: { merchantId, batchId },
+    _count: { _all: true },
+  });
+
+  const counts = emptyCounts();
+  for (const row of grouped) {
+    const key = row.status.toLowerCase() as keyof CardBatchCounts;
+    if (key in counts) counts[key] = row._count._all;
+  }
+  return counts;
 }
 
 /**

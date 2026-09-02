@@ -2522,3 +2522,97 @@ One RTL note worth recording because auto-generated designs get it backwards (§
 therefore on the back control and `ChevronLeft` on the forward one — the opposite of
 what the component names suggest, and correct. Verified by looking, along with the
 progress dots, whose index 0 must sit rightmost.
+
+---
+
+### 12.32 The cards screen, and two bugs the rebuild produced — 2026-09-02
+*(operator request: layout, a fuller batch section, obvious printing, a quieter
+destructive action)*
+
+#### Why the content sat against the edges
+
+`Card` in the manager app carries no padding of its own — `CardHeader` brings its
+own `px-6 py-4` and the body is whatever the screen puts there. Every other screen
+wraps its body in a `p-6`; the cards screen did not, so its figures and its table
+touched the card border on three sides. Not a missing token, just a missing wrapper,
+and it is worth naming because the same omission is invisible in review: the markup
+looks like every other screen's.
+
+#### The table became one panel per batch
+
+A batch is not a row of five values. It is a serial range, five status tallies, a
+provenance line, two printing actions and one destructive one, and pressing that into
+table cells is what produced the cramped rows. Each batch now has its own panel with
+its own sections — which is also what lets the destructive action sit visually
+**below** the others rather than beside them at equal weight.
+
+Every tally is shown even at zero. A row that appears only when non-zero leaves the
+reader wondering whether it is missing or absent, and zero is drawn plainly whatever
+the tone: colouring a nought amber says a batch has losses when it has none.
+
+#### The sequence is stated, not implied
+
+§12.25 removed the merchant's ability to choose a starting serial precisely so two
+batches could not collide. The screen showed the next serial in a corner and left the
+guarantee to be inferred. It now has its own panel — where the sequence has reached,
+what the next batch takes, how much has been printed — under a line saying the system
+picks the serials. **An unstated guarantee reassures nobody**, and the reassurance was
+the point of the design.
+
+#### Reprinting a serial range
+
+`POST /cards/batches/:id/export` now takes an optional `serialFrom`/`serialTo`. The
+case is ordinary: a stack jams in the card printer, a run comes out misaligned, a
+handful are damaged in transit. Reprinting the whole batch to recover forty cards
+means pulling every number in it out of the machine again, and the export file is the
+one artefact of this feature worth stealing.
+
+Three properties, each with a reason:
+
+- **The audit entry records what was actually read** — rows and range. "Who has seen
+  these numbers" stays answerable, which it would not be if every reprint were logged
+  as a full-batch export.
+- **A partial reprint does not advance the batch's status.** Reprinting two cards does
+  not mean the batch has been sent to the printer.
+- **An overhanging range is clamped, not refused.** The merchant is reading serials
+  off a damaged stack; an off-by-one at the end of the run should produce the cards
+  that exist. A range entirely outside the batch is still an error, and **half a
+  range is refused** — "from 40" with no end could mean to the end of the batch or a
+  typo that dropped it, and neither reading is safe on a file of card numbers.
+
+#### Two bugs this produced, and what they have in common
+
+Both were introduced by the change and both were caught by looking at real output
+rather than by any test that existed.
+
+**1. The range filter leaked into the batch tallies.** `counts` was computed by
+tallying the rows just fetched, which used to be the whole batch and now was the
+requested slice. A three-card reprint reported a five-card batch as containing three
+— on the screen that renders that very response. The counts come from a `groupBy`
+over the whole batch now, which also reads the tallies without pulling a single card
+number out of the database.
+
+**2. A body schema broke every client that sends no body.** Adding
+`ExportCardBatchRequestSchema` to the route made a POST with **no body at all** fail
+with 400: Fastify hands the validator `null`, and a Zod `.default({})` only fires on
+`undefined`. The browser was fine — it sends `{}` with a JSON content-type — so the
+new UI worked perfectly while curl, scripts and the packaging smoke test broke.
+
+That second one is **§12.20 read from the other end**. There, the browser broke
+because the tests used curl; here curl broke because the feature was built against
+the browser. The rule generalises past HTTP verbs and header defaults to this:
+
+> **A request shape is supported only if some real client builds it that way in a
+> test.** Adding a body schema to an endpoint that previously took no body is a
+> breaking change to every caller that sends none, and it is invisible from the app
+> that prompted the change.
+
+Both shapes are now covered by tests, and the schema uses `z.preprocess` rather than
+a default so `null` and `undefined` both mean "the whole batch".
+
+#### One more rendered check
+
+The reprint confirmation first read «...للمدى 000002 — 000004 — 3 بطاقة»: three
+em-dashes in one line, one of which belongs inside the range. Read aloud it is not
+clear which dash separates what. The count moved to the front and the dash between
+them went — §12.27 applied to a sentence rather than a number.
