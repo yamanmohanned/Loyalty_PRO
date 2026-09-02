@@ -44,8 +44,89 @@ export const locale = {
     hint: 'أو اكتب رقم البطاقة أو رقم الهاتف واضغط Enter',
     working: 'جاري المعالجة…',
     placeholder: 'رقم البطاقة',
-    again: 'مسح بطاقة أخرى',
+    again: 'زبون جديد',
     offline: 'غير متصل — سيُرسل عند عودة الاتصال',
+  },
+
+  /**
+   * The guided two-step flow (CLAUDE.md §0 rule 1, §1.2).
+   *
+   * **Card first, invoice second, always.** The order is not a preference: an invoice
+   * scanned before a customer is an unowned pending invoice waiting for someone to
+   * claim it, which is the mis-attribution this design exists to prevent. The step
+   * numbers are on screen so that an operator who is interrupted mid-customer can see
+   * where they were without guessing.
+   *
+   * Every state below names the next action. An operator who has to work out what to
+   * do next does it slowly, and does it differently each time.
+   */
+  flow: {
+    stepOf: (step: number, total: number) => `الخطوة ${step} من ${total}`,
+
+    /* Step 1 — identity. */
+    cardTitle: 'امسح بطاقة الزبون',
+    cardHint: 'أو اكتب رقم البطاقة واضغط Enter',
+    cardStepName: 'بطاقة الزبون',
+    cardWaiting: 'ابدأ بالبطاقة — قبل الفاتورة',
+    identifying: 'جاري التعرّف على الزبون…',
+
+    /* Step 2 — the invoice. */
+    invoiceTitle: 'امسح الفاتورة',
+    invoiceHint: 'امسح الباركود المطبوع على الفاتورة',
+    invoiceStepName: 'الفاتورة',
+    invoicePlaceholder: 'رقم الفاتورة',
+    invoiceWorking: 'جاري ربط الفاتورة…',
+    /** Shown when the scanned symbol matched no known receipt format (§13.6). */
+    invoiceUnreadable: 'تعذّرت قراءة الباركود — اكتب رقم الفاتورة يدوياً',
+
+    /* Who we are linking to — visible at every moment of step 2. */
+    linkingTo: 'الفاتورة ستُربط بـ',
+    /**
+     * Label and number are separate strings on purpose.
+     *
+     * As one interpolated string — `بطاقة ••••1234` — the bidi algorithm resolved the
+     * mask and the digits as one neutral-then-number run inside an Arabic line and
+     * the reader saw `1234••••`: the mask on the wrong side, which is §12.27's exact
+     * failure. The component pairs them with a `<bdi>` around the number so its
+     * internal order is fixed no matter what surrounds it.
+     */
+    cardLabel: 'بطاقة',
+    cardTail: (tail: string) => `••••${tail}`,
+    changeCustomer: 'تغيير الزبون',
+    periodTotal: 'مشتريات هذه الفترة',
+
+    /**
+     * The capture the agent already forwarded, offered by name and amount.
+     *
+     * The operator compares it against the paper in their hand before committing, so
+     * the fallback for an unreadable barcode is a checked choice rather than "take
+     * whatever printed last".
+     */
+    pendingTitle: 'آخر فاتورة وصلت من الصندوق',
+    pendingUse: 'استخدم هذه الفاتورة',
+    pendingCheck: 'طابق الرقم والمبلغ مع الفاتورة الورقية قبل التأكيد',
+    pendingNone: 'لم تصل أي فاتورة من الصندوق بعد',
+    pendingNoneHint: 'اطلب من الكاشير طباعة الفاتورة، ثم امسح الباركود عليها',
+
+    /* The result. */
+    invoiceTotal: 'إجمالي الفاتورة',
+    startOver: 'البدء من جديد',
+  },
+
+  /**
+   * The on-screen preview of the paper (operator request, 2026-09-02).
+   *
+   * The same component the printer receives, shown at paper width before anything is
+   * printed — so the customer sees the figures they are about to be charged while the
+   * operator can still stop. A separately-built "preview" would drift from the real
+   * slip and would be lying by the second edit.
+   */
+  preview: {
+    title: 'معاينة القسيمة',
+    hint: 'هكذا ستخرج القسيمة من الطابعة',
+    print: 'طباعة القسيمة',
+    printed: 'تمت الطباعة — سلّم القسيمة للكاشير',
+    printAgain: 'طباعة مرة أخرى',
   },
 
   outcome: {

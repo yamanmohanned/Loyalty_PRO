@@ -1,8 +1,11 @@
 import {
   computeDiscount,
   formatIqd,
+  type IdentifyCardRequest,
+  type IdentifyCardResponse,
   type ScanCardRequest,
   type ScanCardResponse,
+  type ScanCustomer,
   type Voucher as VoucherDto,
 } from '@walaa/shared-types';
 import { forbidden } from '../lib/errors';
@@ -93,6 +96,97 @@ export interface ScanOptions {
    * basket, not their progress toward the next.
    */
   issueDiscount?: boolean;
+}
+
+function toScanCustomer(customer: {
+  id: string;
+  name: string;
+  phone: string;
+  category: string;
+}): ScanCustomer {
+  return {
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone,
+    category: customer.category,
+  };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  IDENTIFY — step 1 of the guided flow: who is this, and nothing else
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * CLAUDE.md §0 rule 1 and §1.2: **customer identity is always captured before the
+ * invoice.** The station asks for the card first, and until it knows who is standing
+ * there it must not touch a sale.
+ *
+ * So this reads and returns. It claims no invoice, computes no discount, issues no
+ * voucher, and writes no row. Everything that commits lives in `scanCard` below,
+ * and the separation is the point: a lookup that could commit is a lookup that
+ * eventually will.
+ *
+ * The pending capture travels back with the answer so the operator can check the
+ * invoice number and total against the paper in their hand before attributing it —
+ * a read of what the POS already recorded, never a computation (§0 rule 4).
+ */
+export async function identifyCard(
+  context: ScanContext,
+  request: IdentifyCardRequest,
+): Promise<IdentifyCardResponse> {
+  const branchId = context.branchId;
+  if (!branchId) throw forbidden('هذه المحطة غير مرتبطة بفرع');
+
+  const lookup = await lookupCard(context.merchantId, request.barcodeToken.trim());
+
+  if (!lookup.ok) {
+    // The same two doors as `scanCard`, for the same reason (§12.25): an unknown or
+    // blank card is an enrolment opportunity, a dead one is a conversation.
+    const enrolment = lookup.rejection === 'UNKNOWN' || lookup.rejection === 'UNASSIGNED';
+    return {
+      outcome: enrolment ? 'UNKNOWN_CARD' : 'CARD_REJECTED',
+      cardRejection: lookup.rejection,
+      scannedCard: lookup.card,
+      customer: null,
+      balance: null,
+      pendingInvoice: null,
+    };
+  }
+
+  const customer = await prisma.customer.findFirst({
+    where: { id: lookup.customerId, merchantId: context.merchantId, isActive: true },
+  });
+
+  if (!customer) {
+    return {
+      outcome: 'CARD_REJECTED',
+      cardRejection: 'INACTIVE_CUSTOMER',
+      scannedCard: null,
+      customer: null,
+      balance: null,
+      pendingInvoice: null,
+    };
+  }
+
+  const [balance, pending] = await Promise.all([
+    buildBalance(context.merchantId, customer.id),
+    findPendingInvoice(context.merchantId, branchId),
+  ]);
+
+  return {
+    outcome: 'IDENTIFIED',
+    cardRejection: null,
+    scannedCard: null,
+    customer: toScanCustomer(customer),
+    balance,
+    pendingInvoice: pending
+      ? {
+          invoiceId: pending.invoiceId,
+          amountGross: pending.amountGross,
+          capturedAt: pending.capturedAt.toISOString(),
+        }
+      : null,
+  };
 }
 
 export async function scanCard(
@@ -187,12 +281,7 @@ export async function scanCard(
         outcome: alreadyAttributed.discountValue > 0 ? 'QUALIFIED' : 'NOT_QUALIFIED',
         cardRejection: null,
         scannedCard: null,
-        customer: {
-          id: customer.id,
-          name: customer.name,
-          phone: customer.phone,
-          category: customer.category,
-        },
+        customer: toScanCustomer(customer),
         transaction: serializeTransaction(alreadyAttributed, alreadyAttributed.branch.code),
         balance,
         voucher: voucher ? serializeVoucher(voucher) : null,
@@ -210,6 +299,7 @@ export async function scanCard(
               discountLabel: formatDiscountLabel(
                 alreadyAttributed.discountType,
                 alreadyAttributed.discountRate,
+                alreadyAttributed.discountValue,
               ),
               discountValue: alreadyAttributed.discountValue,
               amountNet: alreadyAttributed.amountNet,
@@ -226,6 +316,7 @@ export async function scanCard(
                 discountLabel: formatDiscountLabel(
                   alreadyAttributed.discountType,
                   alreadyAttributed.discountRate,
+                  alreadyAttributed.discountValue,
                 ),
                 issuedAt: voucher.issuedAt,
               }).cashierInstruction,
@@ -289,7 +380,11 @@ export async function scanCard(
       };
 
   const now = new Date();
-  const discountLabel = formatDiscountLabel(computation.discountType, computation.discountRate);
+  const discountLabel = formatDiscountLabel(
+    computation.discountType,
+    computation.discountRate,
+    computation.discountValue,
+  );
 
   const result = await prisma.$transaction(async (db) => {
     // Claim the invoice conditionally: `customerId: null` in the WHERE means two
@@ -443,12 +538,7 @@ export async function scanCard(
         : 'NOT_QUALIFIED',
     cardRejection: null,
     scannedCard: null,
-    customer: {
-      id: customer.id,
-      name: customer.name,
-      phone: customer.phone,
-      category: customer.category,
-    },
+    customer: toScanCustomer(customer),
     transaction: serializeTransaction(result.transaction, result.transaction.branch.code),
     balance,
     voucher: result.voucher ? serializeVoucher(result.voucher) : null,
@@ -548,9 +638,27 @@ export function serializeTransaction(
   };
 }
 
-/** `3٪` or `7,500 د.ع`, however the rule was configured. */
-function formatDiscountLabel(discountType: string, discountRate: number): string {
-  return discountType === 'PERCENTAGE' ? `${discountRate}٪` : formatIqd(discountRate);
+/**
+ * `3٪` or `5,000 د.ع` — how the discount reads on the slip and on screen.
+ *
+ * **A fixed-amount label states the value that was APPLIED, not the rate that was
+ * configured.** The two differ whenever a cap bit: §2.3's absolute ceiling, a tier's
+ * own `maxDiscountValue`, or a basket smaller than the discount. Labelling the
+ * configured 7,500 beside an applied 5,000 puts two different sums of money on one
+ * line of a slip a cashier acts on, and the cashier has no way to know which one to
+ * take off the till. Found by looking at the printed slip rendered on screen — a unit
+ * test on the formatter could not see it, which is §12.27 exactly.
+ *
+ * A percentage keeps its rate, because a rate and a sum are in different units and
+ * cannot be confused for one another: `3٪` beside `− 5,000 د.ع` reads correctly even
+ * when the cap has bitten.
+ */
+function formatDiscountLabel(
+  discountType: string,
+  discountRate: number,
+  discountValue: number,
+): string {
+  return discountType === 'PERCENTAGE' ? `${discountRate}٪` : formatIqd(discountValue);
 }
 
 /** Everything the station needs to print the discount slip (§6.3). */

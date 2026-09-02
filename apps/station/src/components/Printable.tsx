@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { DiscountSlip } from '@walaa/shared-types';
 import { Barcode } from './Barcode';
 import { locale, money } from '../lib/locale';
@@ -19,6 +20,26 @@ const printDate = (iso: string): string =>
     hour: '2-digit',
     minute: '2-digit',
   });
+
+/**
+ * A value whose internal order must survive the RTL page around it.
+ *
+ * The page is `dir="rtl"` and the print root inherits it. A Latin-digit string with a
+ * neutral character in it — the comma in `02/09/2026, 19:42`, a hyphen in a code —
+ * has its neutrals resolved against the *paragraph* direction, so the comma migrates
+ * to the far side and the reader gets `19:42 ,02/09/2026`. Found by looking at the
+ * slip preview, which is precisely the check §12.27 requires and the reason it
+ * exists: the string was right, the DOM was right, and only the reading was wrong.
+ *
+ * `<bdi dir="ltr">` isolates the run so its neutrals resolve inside it.
+ */
+function Ltr({ children }: { children: string }): JSX.Element {
+  return (
+    <bdi dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+      {children}
+    </bdi>
+  );
+}
 
 /* ── Customer card ─────────────────────────────────────────────────────────── */
 
@@ -64,7 +85,7 @@ function Row({
   strong = false,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   strong?: boolean;
 }): JSX.Element {
   return (
@@ -109,9 +130,9 @@ export function PrintableSlip({
         <div style={{ fontSize: '11pt', marginBottom: '3mm' }}>{locale.slip.title}</div>
       </div>
 
-      <Row label={locale.slip.invoice} value={slip.invoiceId} />
+      <Row label={locale.slip.invoice} value={<Ltr>{slip.invoiceId}</Ltr>} />
       <Row label={locale.slip.customer} value={slip.customerName} />
-      <Row label={locale.slip.issuedAt} value={printDate(slip.issuedAt)} />
+      <Row label={locale.slip.issuedAt} value={<Ltr>{printDate(slip.issuedAt)}</Ltr>} />
 
       <div style={rule} />
 
@@ -149,7 +170,7 @@ export function PrintableSlip({
       <div style={{ textAlign: 'center', marginTop: '2mm' }}>
         <div style={{ fontSize: '9pt' }}>{locale.slip.voucher}</div>
         <div style={{ fontSize: '13pt', fontWeight: 700, letterSpacing: '0.08em' }}>
-          {slip.voucherCode}
+          <Ltr>{slip.voucherCode}</Ltr>
         </div>
       </div>
     </div>

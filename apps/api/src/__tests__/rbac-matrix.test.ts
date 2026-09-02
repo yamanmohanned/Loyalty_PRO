@@ -71,6 +71,12 @@ const CASES: Case[] = [
     allowed: INGEST,
     why: 'the agent declares sales; a tablet on the shop floor does not',
   },
+  {
+    method: 'POST',
+    path: '/scan/identify',
+    allowed: STATION,
+    why: 'step 1 of the guided flow reads a customer; the capture agent never should',
+  },
   { method: 'POST', path: '/scan/card', allowed: STATION },
   { method: 'POST', path: '/sync/batch', allowed: STATION },
 
@@ -349,6 +355,7 @@ describe('the route inventory', () => {
         'POST /api/v1/discount/assess',
         'POST /api/v1/ingest/invoice',
         'POST /api/v1/scan/card',
+        'POST /api/v1/scan/identify',
         'POST /api/v1/sync/batch',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',

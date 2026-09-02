@@ -2357,3 +2357,125 @@ now has one answer: the dep cache is stale. Clear it and restart —
 ```
 rm -rf apps/manager-desktop/node_modules/.vite apps/station/node_modules/.vite
 ```
+
+---
+
+### 12.30 The Station's guided two-step flow, and the order it enforces — 2026-09-02
+*(operator ruling: card first, then invoice. Settled, not a question.)*
+
+The Station was one screen and one field: scan the card, and the server took the
+most recent unattributed capture from the branch. It worked, and it left two things
+to chance.
+
+**The order is now enforced by the UI, not merely by habit.** Card first, invoice
+second, with the step named on screen at all times. CLAUDE.md §0 rule 1 and §1.2
+have said identity comes before the transaction since v1, and the reason is
+concrete rather than procedural: **an invoice scanned before a customer is an
+unowned pending invoice waiting for whoever scans next to claim it** — precisely the
+mis-attribution the design exists to prevent. Practically the order is also the easy
+one, because the card is already in the customer's hand while the invoice is still
+with the cashier.
+
+**A lookup that could commit is a lookup that eventually will.** Step 1 is a new
+endpoint, `POST /scan/identify`, and it writes nothing: no attribution, no discount,
+no voucher, no row. It was not folded into `/scan/card` behind a flag, because an
+endpoint that sometimes commits and sometimes does not is one wrong argument away
+from claiming a sale during what the operator believed was a lookup. The two acts
+have different consequences and get different doors. A test asserts the invariant
+directly — after an identify, the captured transaction is still unattributed and no
+voucher exists.
+
+**Step 2 names the invoice instead of guessing it.** The receipt barcode is parsed
+with the §13.6 parsers and the invoice number is passed to `/scan/card`, which
+already accepted an `invoiceId` and matches the capture exactly. Attribution now
+lands on the invoice in the operator's hand rather than on whatever printed most
+recently — the same guard, moved from "usually right" to "checked".
+
+**The amount never comes from the receipt scan.** It comes from what the Print
+Capture Agent recorded, which is what the POS recorded (§0 rule 4). The receipt
+barcode's job at the Station is to *identify* an invoice, not to price one, and a
+`pipe-delimited` payload carrying a total does not change that.
+
+**The fallback is a comparison, not a guess.** Registers that print no barcode, and
+barcodes that will not read, both exist. So the identify response carries the
+branch's pending capture, and the Station offers it **by invoice number and amount**
+with the instruction to match it against the paper before confirming. That is the
+old automatic behaviour, made visible and made the operator's choice. Manual typing
+of an invoice number is also accepted — an operator typing `INV-9824` is a supported
+path, not an error.
+
+**Offline is unchanged in what it costs.** Identification is impossible with the
+server unreachable, so a network failure at step 1 queues the card alone, exactly as
+the one-step flow did: the spend is credited on reconnect, there is no slip for that
+basket, and the screen says so rather than implying one is coming. A failure at
+step 2 queues the card *with* the invoice number, so the replay attributes the sale
+the operator chose.
+
+**Printing became an explicit act.** The slip used to print automatically on a
+qualified scan. It now renders on screen first — at paper width, as a preview — and
+prints when the operator presses the button. Two reasons: the customer sees the
+figures before the paper exists, which is what was asked for; and `window.print()`
+opens a modal dialog, which would have covered the preview and stolen focus from the
+scan field in the same instant.
+
+**The preview renders `PrintableSlip` itself.** Not a second markup of the same
+paper. A separate preview is a second description that stays plausible while it
+drifts, and the first person to notice would be a customer holding a slip that does
+not match what they were shown. `zoom` magnifies the block rather than
+`transform: scale()`, because zoom reflows and cannot overlap what follows it.
+
+#### Three defects the preview found by being looked at
+
+All three are §12.27's class — right string, right DOM, wrong reading — and none was
+visible to a test.
+
+1. **`بطاقة ••••1234` rendered as `بطاقة 1234••••`.** Label and masked digits shared
+   one interpolated string; the bidi algorithm resolved the mask against the Arabic
+   paragraph and put it on the far side of the number. The label is now a separate
+   string and the number sits in a `<bdi dir="ltr">`.
+
+2. **The slip's date printed as `19:42 ,02/09/2026`.** `toLocaleString('en-GB')`
+   produces `02/09/2026, 19:42`; the comma is bidi-neutral, so under the RTL page it
+   migrated. This was on the **printed paper** as well as the screen and had been
+   since the slip was written — it took putting the paper on a screen to see it.
+   The date, the invoice number and the voucher code are now each wrapped in an
+   isolating `Ltr` helper.
+
+3. **The slip's discount label disagreed with its own value.** A fixed-amount ladder
+   of 7,500 capped by §2.3's absolute ceiling to 5,000 printed
+   `الخصم (7,500 د.ع)` beside `− 5,000 د.ع` — two different sums of money on one
+   line of a slip a cashier takes money off a till for, with no way to tell which one
+   to use. `formatDiscountLabel` now states the value **applied** for a fixed amount.
+   A percentage keeps its rate, because a rate and a sum are different units and
+   cannot be confused: `3٪` beside `− 5,000 د.ع` reads correctly even when capped.
+
+The third one is worth naming separately: **it is not a formatting bug.** It is a
+money-communication defect on the one piece of paper that instructs a cashier, and
+it reached the screen only because the slip was rendered where a person could read
+it. §12.27 said human-readable formats need a rendered check; this says the check
+catches more than formatting.
+
+#### What the operator sees, per state
+
+Every state names its next action, because an operator who has to work it out does
+it slowly and differently each time:
+
+| State | What it says |
+|---|---|
+| Step 1 idle | «ابدأ بالبطاقة — قبل الفاتورة» |
+| Unknown / blank card | enrolment offered; the field stays live for the next scan |
+| Lost / replaced / void | the honest reason, and «بحث عن الزبون» — never "retry" |
+| Step 2 idle, capture waiting | the invoice by number and amount, with «طابق الرقم والمبلغ…» |
+| Step 2 idle, nothing captured | «اطلب من الكاشير طباعة الفاتورة، ثم امسح الباركود عليها» |
+| Qualified | total large, then the slip preview, then «طباعة القسيمة» |
+| Not qualified | the progress sentence — a sales prompt, never a rejection |
+| Named invoice not captured | «لا توجد فاتورة بانتظار الربط» plus what to do |
+
+The scan field stays live through a card refusal, so the next card needs no tap
+first. It is deliberately **not** live on the result screen: a stray scan there would
+wipe the slip the customer is reading.
+
+The primary action is pinned to the bottom of the viewport. The preview is a whole
+receipt tall, and on a tablet in portrait the print button would otherwise sit below
+the fold — an operator with a queue does not scroll to find the button they press on
+every sale (§6.5).

@@ -107,6 +107,96 @@ export const CustomerBalanceSchema = z.object({
 
 export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
 
+/* ── The person behind the card ────────────────────────────────────────────── */
+
+/**
+ * The customer as the station needs them: enough to greet by name and to show the
+ * operator who they are about to attribute a sale to, and nothing more.
+ *
+ * Declared once and shared by both station responses. The identify step and the
+ * attribute step describe the same person, and two copies of that shape is exactly
+ * the drift §12.27 forbids — one of them would grow a field and the other would
+ * quietly go on rendering `undefined`.
+ */
+export const ScanCustomerSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  phone: z.string(),
+  category: z.string(),
+});
+
+export type ScanCustomer = z.infer<typeof ScanCustomerSchema>;
+
+/* ── Step 2a: identify ───────────────────────────────────────────── */
+
+/**
+ * **Identity before transaction** (CLAUDE.md §0 rule 1, §1.2).
+ *
+ * The station's guided flow asks for the card first and the invoice second, so it
+ * needs a step that answers *who is this* while changing nothing. That is this call:
+ * it reads a card, reports the person or the reason it will not, and does not
+ * attribute, discount, or write anything.
+ *
+ * Why a separate endpoint rather than a flag on the attribute call: an endpoint that
+ * sometimes commits and sometimes does not is one wrong argument away from
+ * attributing a sale during what the operator believed was a lookup. The two acts
+ * have different consequences and get different doors.
+ */
+export const IdentifyCardRequestSchema = z
+  .object({
+    /** What the keyboard-wedge scanner typed — the customer's permanent card code. */
+    barcodeToken: z.string().trim().min(1, 'رمز البطاقة مطلوب').max(256),
+  })
+  .strict();
+
+export type IdentifyCardRequest = z.infer<typeof IdentifyCardRequestSchema>;
+
+export const IdentifyOutcomeSchema = z.enum([
+  /** A live card belonging to an active customer. The flow may proceed to step 2. */
+  'IDENTIFIED',
+  /** Unknown number, or a real blank card — both doors lead to registration. */
+  'UNKNOWN_CARD',
+  /** Known and refused: lost, replaced, voided, or a deactivated account. */
+  'CARD_REJECTED',
+]);
+export type IdentifyOutcome = z.infer<typeof IdentifyOutcomeSchema>;
+
+/**
+ * A capture waiting to be claimed at this branch.
+ *
+ * Shown to the operator so the invoice they are about to attribute can be checked
+ * against the paper in their hand *before* it is committed. The amount is the one
+ * the POS recorded; the station never computes it (§0 rule 4).
+ */
+export const PendingInvoiceSchema = z.object({
+  invoiceId: z.string(),
+  amountGross: PositiveIqdAmountSchema,
+  capturedAt: z.string().datetime({ offset: true }),
+});
+
+export type PendingInvoice = z.infer<typeof PendingInvoiceSchema>;
+
+export const IdentifyCardResponseSchema = z.object({
+  outcome: IdentifyOutcomeSchema,
+  /** Why the card was refused, on `UNKNOWN_CARD` and `CARD_REJECTED`; null otherwise. */
+  cardRejection: CardRejectionSchema.nullable().default(null),
+  /** The card that was scanned, when this server minted it. */
+  scannedCard: ScannedCardSchema.nullable().default(null),
+  customer: ScanCustomerSchema.nullable(),
+  balance: CustomerBalanceSchema.nullable(),
+  /**
+   * The most recent unclaimed capture at this branch, if there is one.
+   *
+   * Offered as a checkable fallback for the receipt whose barcode will not read, or
+   * the register that prints none. Naming the invoice number and the amount turns
+   * "take whatever was captured last" from a blind guess into something the operator
+   * compares against the paper before committing.
+   */
+  pendingInvoice: PendingInvoiceSchema.nullable(),
+});
+
+export type IdentifyCardResponse = z.infer<typeof IdentifyCardResponseSchema>;
+
 /**
  * The three outcomes of a card scan (§6.2 #3). The station renders exactly one.
  *
@@ -157,14 +247,7 @@ export const ScanCardResponseSchema = z.object({
    * name a serial in its message and carry an unassigned card into registration.
    */
   scannedCard: ScannedCardSchema.nullable().default(null),
-  customer: z
-    .object({
-      id: z.string().uuid(),
-      name: z.string(),
-      phone: z.string(),
-      category: z.string(),
-    })
-    .nullable(),
+  customer: ScanCustomerSchema.nullable(),
   transaction: TransactionSchema.nullable(),
   balance: CustomerBalanceSchema.nullable(),
   /** Present only on QUALIFIED — the issued voucher record. */
