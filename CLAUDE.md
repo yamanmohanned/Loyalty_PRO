@@ -286,6 +286,44 @@ meaningful motion (5/10). Instantly legible under queue pressure.
   `green` #1E7B4D (success/linked)
 - One accent. Semantic colors carry status meaning only, never decoration.
 
+#### 6.2.1 Two teals, and why they must not be merged
+*(operator ruling, 2026-09-02. Both values are correct. Do not "fix" the
+inconsistency by collapsing them — this section exists to stop exactly that.)*
+
+| Token | Value | Used for |
+|---|---|---|
+| `accent` | **#0F6E56** | Every UI surface: buttons, focus rings, chips, links, active nav |
+| chart series slot 1 | **#0E7C60** | Data-visualisation marks only — `packages/…/viz.ts` |
+
+They differ because a **UI accent and a data-series colour are measured against
+different requirements**, and #0F6E56 passes the first and fails the second.
+
+**The measurement.** #0F6E56 has OKLCH chroma **0.091**, against a **0.10 floor** for
+categorical series colour. Below that floor a hue stops reading as an *identity* and
+starts reading as grey — which is fatal for a mark whose entire job is to say *which
+series this is*, and irrelevant for a button, whose job is done by its shape,
+position and label. #0E7C60 is the nearest step in the same hue that clears the floor
+(hue drift under 4°, so it still reads as the brand teal).
+
+This was computed, not chosen: `dataviz/scripts/validate_palette.js` reports the
+chroma, the CVD separation and the contrast for any candidate. The numbers behind the
+whole chart palette are recorded in `apps/manager-desktop/src/lib/viz.ts`.
+
+**Why the resolution is two values rather than one:**
+
+- *Move the UI to #0E7C60 too?* That changes the brand colour of every button in the
+  product to satisfy a constraint that only applies to charts. **Changing the brand
+  colour is a brand decision, not a fallout of a chart palette** — if it is ever
+  wanted, it gets made deliberately and on its own terms.
+- *Use #0F6E56 in charts anyway?* It measurably fails, and the failure is invisible
+  in review: a slightly-grey teal beside four other hues looks fine to the person who
+  chose it and reads as "no colour assigned" to someone scanning a chart.
+
+So: **the UI palette above is unchanged and authoritative for the product. The chart
+scale is a separate, validated instrument that happens to start at the brand hue.**
+A future reader who notices the two hex values and wants to reconcile them should
+re-read this section rather than pick one.
+
 ### 6.3 Typography
 - Display/headings: **Cairo** (Arabic). Body/UI: **IBM Plex Sans Arabic**.
   All money/numbers: **IBM Plex Mono** (aligned digits in tables/cards).
