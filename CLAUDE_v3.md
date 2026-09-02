@@ -2949,4 +2949,71 @@ wrong, and the only thing that caught it was opening the template.
 > already has one. The no-op cases (first install, same-path upgrade) are the only
 > ones exercised. **Do not describe this as working.** It is untested code with a
 > clear rationale, waiting for a machine that can prove it.
+---
 
+### 12.37 §2.3's cap is now reported, not only enforced — 2026-09-02
+*(operator ruling, following §12.30's slip defect)*
+
+§12.30 fixed a display bug: a slip printing `الخصم (7,500 د.ع)` beside `− 5,000 د.ع`
+after the absolute cap trimmed the discount. **The operator's point was that the
+display was the smaller half of the problem.**
+
+> The cap binding is not a neutral fact. It means the tier ladder is asking for more
+> than the merchant decided to give. If it binds on every qualifying sale, the ladder
+> is misconfigured — and §2.3 exists to protect the margin, so it should say so.
+
+**A guardrail that never reports is a guardrail nobody can tune.** The system was
+computing exactly how much it withheld on every sale and throwing the number away.
+
+#### What is stored, and why it had to be
+
+`transaction.discount_uncapped_value` — what the ladder called for **before** §2.3's
+absolute ceiling, a tier's own `maxDiscountValue`, or a basket smaller than the
+discount trimmed it.
+
+It is set equal to `discountValue` whenever nothing bound, which makes the pair
+self-describing: `uncapped > value` **is** the test for "the cap bit here", and the
+difference is what it saved. No flag column, no second source of truth.
+
+The migration backfills existing rows with `discount_value`, i.e. "nothing was
+trimmed". That is **absence of evidence, not a claim that no cap ever bound** — the
+uncapped figure for a historical row is genuinely unknowable. It keeps
+`uncapped >= value` true everywhere, so the reported saving can never come out
+negative, which a test pins.
+
+#### What the manager sees
+
+A panel on Reports, beside capture health — both answer *is this configured right?*
+
+| Figure | Meaning |
+|---|---|
+| «فواتير طُبّق عليها الحد الأقصى» | Count, **as a share of discounted sales** |
+| «ما وفّره الحد الأقصى» | Σ(uncapped − applied) over the range |
+| Amber advice, at ≥ 67% | «الحد الأقصى يعمل في أغلب الخصومات — مستويات الخصم أعلى مما قرّرته» |
+
+**The share is against discounted sales, not all captures.** "The cap binds on most
+discounts" and "the cap binds on 2% of footfall" are different sentences, and only
+the first says the ladder is wrong. Two thirds is the threshold because a cap that
+catches the occasional wholesale invoice is the cap working as designed; a hair
+trigger would train the manager to ignore it.
+
+#### The gap this closed, found while testing it
+
+Setting a rule above the cap through the API is **already refused** —
+`PUT /discount/rules` answers «القواعد تتجاوز الحدود المسموحة في إعدادات المتجر». So
+in principle the misconfiguration cannot be created.
+
+In practice the dev database contains exactly that state: a 7,500 fixed-amount rule
+under a 5,000 cap, written by the seed, which goes to the database directly and never
+passes the validator. **Any path that is not the API can produce a configuration the
+API would reject** — a seed, a restore, a hand-edit, a future import. Reporting is
+what catches the configuration that validation never saw, which is a better argument
+for this feature than the one it was requested on.
+
+#### Bounds
+
+`forgoneDiscountValue` sums across every transaction in the range, so §13.5's per-row
+Int32 bound does not cover it. It accumulates in JavaScript rather than SQL — exact
+to 2^53, which a year of a supermarket's discounts does not approach — matching how
+`discountsGranted` beside it has always been computed. A partial index carries the
+capped rows, which are a small minority of a table that grows with every sale.

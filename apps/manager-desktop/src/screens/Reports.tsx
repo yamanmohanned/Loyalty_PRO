@@ -13,7 +13,13 @@ import {
   type BarDatum,
   type FunnelStep,
 } from '../components/charts';
-import { colorForCaptureMode, colorForCategory, colorForTier, TIER_RAMP } from '../lib/viz';
+import {
+  colorForCaptureMode,
+  colorForCategory,
+  colorForTier,
+  SERIES,
+  TIER_RAMP,
+} from '../lib/viz';
 import { Card, CardHeader, EmptyState, Money, Notice, PageHeader, Skeleton } from '../components/ui';
 
 /**
@@ -144,6 +150,10 @@ export function ReportsScreen() {
           </Card>
         </div>
 
+        {/* ── The margin guardrail, reported ────────────────────────────── */}
+
+        <CapImpact report={r} loading={firstLoad} stale={stale} />
+
         {/* ── Capture health ────────────────────────────────────────────── */}
 
         <CaptureHealth report={r} loading={firstLoad} stale={stale} />
@@ -230,6 +240,85 @@ function VoucherFunnel({ report, loading, stale }: PanelProps) {
       }
     >
       <Funnel steps={steps} />
+    </ChartFrame>
+  );
+}
+
+/**
+ * What §2.3's absolute cap actually did (§12.37).
+ *
+ * The cap exists to stop a tier ladder that loses money on every qualifying sale.
+ * Until now it did that silently: the system computed how much it withheld and threw
+ * the number away, so a merchant whose ladder was set far too high saw a working
+ * discount programme and no signal at all.
+ *
+ * Two figures, and a sentence when they mean something. **The share is against
+ * discounted sales, not all captures** — "the cap binds on most discounts" and "the
+ * cap binds on 2% of footfall" are different statements, and only the first one says
+ * the ladder is misconfigured.
+ */
+function CapImpact({ report, loading, stale }: PanelProps) {
+  const capped = report?.cappedDiscountCount ?? 0;
+  const discounted = report?.discountedTransactionCount ?? 0;
+  const pct = share(capped, discounted);
+
+  // Two thirds is the point where this stops being an occasional large basket and
+  // starts being the configuration. Deliberately not a hair-trigger: a cap that
+  // catches the odd wholesale invoice is the cap working as designed.
+  const misconfigured = discounted > 0 && pct >= 67;
+
+  const rows: BarDatum[] = report
+    ? [
+        {
+          key: 'capped',
+          label: locale.reports.capTimes,
+          value: capped,
+          color: SERIES[2],
+          display: locale.reports.invoiceCount(capped),
+          note: locale.reports.capOfDiscounted(pct),
+        },
+      ]
+    : [];
+
+  return (
+    <ChartFrame
+      title={locale.reports.capTitle}
+      subtitle={locale.reports.capSubtitle}
+      empty={locale.reports.capEmpty}
+      isLoading={loading}
+      isEmpty={Boolean(report) && capped === 0}
+      isStale={stale}
+      table={
+        <BarTable
+          data={rows}
+          labelHeader={locale.reports.capTitle}
+          valueHeader={locale.reports.captureColCount}
+        />
+      }
+      footer={
+        report ? (
+          <div className="mt-6 space-y-4 border-t border-border pt-4">
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <p className="text-base text-ink">{locale.reports.capSaved}</p>
+                <p className="mt-0.5 text-sm text-steel">{locale.reports.capSavedHint}</p>
+              </div>
+              <Money value={report.forgoneDiscountValue} className="text-xl" />
+            </div>
+
+            {/* The line that turns a statistic into an instruction. Amber, because
+                it is a warning about configuration rather than a failure — and it
+                carries an icon and words, never colour alone. */}
+            {misconfigured ? (
+              <Notice tone="warning">{locale.reports.capAdvice}</Notice>
+            ) : null}
+          </div>
+        ) : null
+      }
+    >
+      {/* One bar against the discounted total, so the share is read as a proportion
+          rather than inferred from a bare count. */}
+      <BarRows data={rows} scaleTo={Math.max(discounted, 1)} />
     </ChartFrame>
   );
 }

@@ -400,6 +400,11 @@ export async function scanCard(
         discountType: computation.discountValue > 0 ? computation.discountType : 'NONE',
         discountRate: computation.discountValue > 0 ? computation.discountRate : 0,
         discountValue: computation.discountValue,
+        // What the ladder called for before §2.3's cap, a tier's own ceiling, or a
+        // basket smaller than the discount trimmed it. Equal to `discountValue`
+        // when nothing bound, so the pair is self-describing: `uncapped > value`
+        // means the cap bit, and the difference is what it saved (§12.37).
+        discountUncappedValue: computation.discountValue > 0 ? computation.uncappedValue : 0,
         amountNet: computation.amountNet,
       },
     });

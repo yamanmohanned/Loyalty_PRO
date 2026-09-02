@@ -534,6 +534,25 @@ export const locale = {
     tierColTier: 'المستوى',
     tierColReached: 'بلغوه',
 
+    /* ── The cap, reported (§12.37) ───────────────────────────────────────── */
+
+    /**
+     * §2.3's guardrails exist to protect the margin, and a guardrail that never
+     * reports is one nobody can tune. The copy names the *consequence* — your tiers
+     * are asking for more than you decided to give — rather than the mechanism.
+     */
+    capTitle: 'أثر الحد الأقصى للخصم',
+    capSubtitle: 'كم مرة خفّض الحد الأقصى قيمة الخصم، وكم وفّر عليك',
+    capEmpty: 'لم يُخفَّض أي خصم في هذه الفترة — مستويات الخصم ضمن الحد الأقصى',
+    capTimes: 'فواتير طُبّق عليها الحد الأقصى',
+    capOfDiscounted: (pct: number) => `${pct}٪ من الفواتير التي استحقت خصماً`,
+    capSaved: 'ما وفّره الحد الأقصى',
+    capSavedHint: 'الفرق بين ما طلبته مستويات الخصم وما مُنح فعلياً',
+    /** The line that turns a statistic into an instruction. */
+    capAdvice:
+      'الحد الأقصى يعمل في أغلب الخصومات — مستويات الخصم أعلى مما قرّرته. راجع «قواعد الخصم».',
+    capAdviceLink: 'قواعد الخصم',
+
     reconTitle: 'تسوية اليوم',
     reconSubtitle: 'القسائم الصادرة اليوم ومصيرها',
     reconEmpty: 'لم تصدر قسائم اليوم',

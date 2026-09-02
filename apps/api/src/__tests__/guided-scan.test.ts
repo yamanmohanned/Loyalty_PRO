@@ -264,3 +264,105 @@ describe('the discount label a cashier acts on', () => {
     expect(slip.discountLabel).not.toContain('7,500');
   });
 });
+
+/* ── §2.3's cap, reported (§12.37) ──────────────────────────────────────────── */
+
+describe('reporting what the absolute cap withheld', () => {
+  /** A fixed-amount ladder well above the cap, so every discount is trimmed. */
+  async function ladderAboveTheCap(rate: number, cap: number) {
+    await prisma.discountSettings.update({
+      where: { merchantId: world.merchantId },
+      data: { discountType: 'FIXED_AMOUNT', absoluteMaxDiscountValue: cap },
+    });
+    await prisma.discountRule.deleteMany({ where: { merchantId: world.merchantId } });
+    await prisma.discountRule.create({
+      data: {
+        merchantId: world.merchantId,
+        thresholdAmount: 25_000,
+        discountType: 'FIXED_AMOUNT',
+        discountRate: rate,
+        maxDiscountValue: null,
+        sortOrder: 0,
+        isActive: true,
+      },
+    });
+  }
+
+  const programme = async (token: string) =>
+    app.inject({
+      method: 'GET',
+      url: url('/reports/programme?range=30d'),
+      headers: bearer(token),
+    });
+
+  it('counts the sales where the cap bit, and totals what it held back', async () => {
+    const token = await tokenFor('owner');
+    const station = await tokenFor('station');
+    await ladderAboveTheCap(7_500, 5_000);
+
+    await capture('INV-CAP-1', 200_000);
+    await app.inject({
+      method: 'POST',
+      url: url('/scan/card'),
+      headers: { ...bearer(station), 'content-type': 'application/json' },
+      payload: { barcodeToken: world.customerBarcode, invoiceId: 'INV-CAP-1' },
+    });
+
+    const report = (await programme(token)).json().report;
+    expect(report.cappedDiscountCount).toBe(1);
+    expect(report.discountedTransactionCount).toBe(1);
+    // 7,500 asked for, 5,000 given: the guardrail kept 2,500.
+    expect(report.forgoneDiscountValue).toBe(2_500);
+  });
+
+  it('reports nothing withheld when the ladder sits under the cap', async () => {
+    const token = await tokenFor('owner');
+    const station = await tokenFor('station');
+    await ladderAboveTheCap(3_000, 5_000);
+
+    await capture('INV-CAP-2', 200_000);
+    await app.inject({
+      method: 'POST',
+      url: url('/scan/card'),
+      headers: { ...bearer(station), 'content-type': 'application/json' },
+      payload: { barcodeToken: world.customerBarcode, invoiceId: 'INV-CAP-2' },
+    });
+
+    const report = (await programme(token)).json().report;
+    expect(report.discountedTransactionCount).toBe(1);
+    expect(report.cappedDiscountCount).toBe(0);
+    expect(report.forgoneDiscountValue).toBe(0);
+  });
+
+  it('never reports a negative saving', async () => {
+    const token = await tokenFor('owner');
+    const station = await tokenFor('station');
+    await ladderAboveTheCap(3_000, 5_000);
+    await capture('INV-CAP-3', 200_000);
+    await app.inject({
+      method: 'POST',
+      url: url('/scan/card'),
+      headers: { ...bearer(station), 'content-type': 'application/json' },
+      payload: { barcodeToken: world.customerBarcode, invoiceId: 'INV-CAP-3' },
+    });
+
+    // `uncapped >= value` is an invariant, including for rows the migration
+    // backfilled, where the uncapped figure is unknowable and is set equal to the
+    // applied one. A negative total here would mean that invariant broke.
+    const report = (await programme(token)).json().report;
+    expect(report.forgoneDiscountValue).toBeGreaterThanOrEqual(0);
+  });
+
+  it('counts an unattributed capture in neither figure', async () => {
+    const token = await tokenFor('owner');
+    await ladderAboveTheCap(7_500, 5_000);
+    await capture('INV-CAP-4', 200_000);
+
+    // Captured and never scanned — the ordinary case for most shoppers. It earned no
+    // discount, so it is not a sale the cap could have bitten and must not dilute
+    // the share.
+    const report = (await programme(token)).json().report;
+    expect(report.discountedTransactionCount).toBe(0);
+    expect(report.cappedDiscountCount).toBe(0);
+  });
+});

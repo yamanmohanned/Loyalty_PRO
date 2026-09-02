@@ -246,6 +246,16 @@ model Transaction {
   discountRate Int @default(0) @map("discount_rate")
   /// Actual IQD discounted, AFTER the absolute cap. Zero when nothing was earned.
   discountValue Int @default(0) @map("discount_value")
+  /// What the ladder called for BEFORE §2.3's absolute cap, a tier's own
+  /// `maxDiscountValue`, or a basket smaller than the discount trimmed it.
+  ///
+  /// Equal to `discountValue` whenever nothing bound, so `uncapped > value` is the
+  /// test for "the cap bit here" and the difference is what it saved. Persisted
+  /// because §2.3's guardrails exist to protect the margin and a guardrail that
+  /// never reports is a guardrail nobody can tune: if the cap binds on every
+  /// qualifying sale, the tier ladder is set wrong and the manager needs to see
+  /// that rather than discover it in the accounts (§12.37).
+  discountUncappedValue Int @default(0) @map("discount_uncapped_value")
   /// amountGross - discountValue. Stored because it is what the customer pays and
   /// what reconciliation compares against; it is not an aggregate.
   amountNet Int @map("amount_net")

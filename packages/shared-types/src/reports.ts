@@ -81,6 +81,25 @@ export interface ProgrammeReport {
   redemptionRatePct: number;
   averageBasket: number;
   attributionRatePct: number;
+  /**
+   * How often §2.3's guardrails actually bound, and what they saved.
+   *
+   * **A guardrail that never reports is a guardrail nobody can tune.** §2.3 exists to
+   * stop a configuration that loses money on every qualifying sale, and the cap doing
+   * its job is not a neutral fact — it means the tier ladder is asking for more than
+   * the merchant decided to give. If it binds on every sale, the ladder is set wrong,
+   * and the manager should see that here rather than find it in the accounts (§12.37).
+   *
+   * `forgoneDiscountValue` sums across every transaction in the range, so §13.5's
+   * per-row Int32 bound does not cover it. It is accumulated in JavaScript rather
+   * than in SQL — exact to 2^53, which a year of a supermarket's discounts does not
+   * approach — matching how `discountsGranted` beside it has always been computed.
+   */
+  cappedDiscountCount: number;
+  /** Qualifying sales in the range, as the denominator `cappedDiscountCount` needs. */
+  discountedTransactionCount: number;
+  /** Total IQD the caps withheld: Σ(uncapped − applied) over the range. */
+  forgoneDiscountValue: number;
   captureByMode: Array<{ mode: CaptureMode | string; count: number }>;
   /**
    * Registered customers by category.

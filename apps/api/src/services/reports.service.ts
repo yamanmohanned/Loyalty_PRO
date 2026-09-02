@@ -182,7 +182,13 @@ export async function getProgrammeReport(
     await Promise.all([
       prisma.transaction.findMany({
         where: { merchantId, occurredAt: { gte: from } },
-        select: { amountGross: true, discountValue: true, customerId: true, captureMode: true },
+        select: {
+          amountGross: true,
+          discountValue: true,
+          discountUncappedValue: true,
+          customerId: true,
+          captureMode: true,
+        },
       }),
       prisma.voucher.findMany({ where: { merchantId, issuedAt: { gte: from } } }),
       reconcileDay(merchantId),
@@ -211,8 +217,23 @@ export async function getProgrammeReport(
     modeCounts.set(t.captureMode, (modeCounts.get(t.captureMode) ?? 0) + 1);
   }
 
+  // §2.3's guardrails, reported rather than merely enforced (§12.37).
+  //
+  // A row where the ladder asked for more than was given is a row where the cap
+  // bit. Counted against the qualifying sales rather than all captures, because
+  // "the cap binds on most discounts" and "the cap binds on 2% of footfall" are
+  // different sentences and only the first one means the ladder is misconfigured.
+  const discounted = transactions.filter((t) => t.discountValue > 0);
+  const capped = discounted.filter((t) => t.discountUncappedValue > t.discountValue);
+
   return {
     discountsGranted: transactions.reduce((sum, t) => sum + t.discountValue, 0),
+    cappedDiscountCount: capped.length,
+    discountedTransactionCount: discounted.length,
+    forgoneDiscountValue: capped.reduce(
+      (sum, t) => sum + (t.discountUncappedValue - t.discountValue),
+      0,
+    ),
     vouchersIssued: vouchers.length,
     vouchersRedeemed: redeemed.length,
     vouchersOutstanding: outstanding.length,
