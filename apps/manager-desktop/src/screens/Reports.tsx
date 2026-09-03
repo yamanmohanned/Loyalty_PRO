@@ -9,6 +9,7 @@ import {
   BarTable,
   ChartFrame,
   Funnel,
+  VerifiedEmpty,
   VizDefs,
   type BarDatum,
   type FunnelStep,
@@ -244,6 +245,16 @@ function VoucherFunnel({ report, loading, stale }: PanelProps) {
   );
 }
 
+/** The neutral empty: nothing has happened yet, said in two lines rather than one. */
+function EmptyNote({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div className="rounded-md border border-border bg-canvas px-5 py-4">
+      <p className="text-base text-ink">{title}</p>
+      <p className="mt-1 text-sm leading-relaxed text-steel">{hint}</p>
+    </div>
+  );
+}
+
 /**
  * What §2.3's absolute cap actually did (§12.37).
  *
@@ -284,7 +295,23 @@ function CapImpact({ report, loading, stale }: PanelProps) {
     <ChartFrame
       title={locale.reports.capTitle}
       subtitle={locale.reports.capSubtitle}
-      empty={locale.reports.capEmpty}
+      // Two different zeros. Zero capped OUT OF N discounted sales is a verified
+      // absence — the guardrail was exercised N times and never had to bite. Zero
+      // out of zero is silence: nothing has happened for it to apply to. A bare "0"
+      // reads as "the feature is not working" in both cases.
+      empty={
+        discounted > 0 ? (
+          <VerifiedEmpty
+            title={locale.reports.capNeverApplied}
+            detail={locale.reports.capNeverAppliedOf(discounted)}
+          />
+        ) : (
+          <EmptyNote
+            title={locale.reports.capNoDiscounts}
+            hint={locale.reports.capNoDiscountsHint}
+          />
+        )
+      }
       isLoading={loading}
       isEmpty={Boolean(report) && capped === 0}
       isStale={stale}

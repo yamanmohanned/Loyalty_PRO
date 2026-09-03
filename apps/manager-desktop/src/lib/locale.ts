@@ -543,7 +543,23 @@ export const locale = {
      */
     capTitle: 'أثر الحد الأقصى للخصم',
     capSubtitle: 'كم مرة خفّض الحد الأقصى قيمة الخصم، وكم وفّر عليك',
-    capEmpty: 'لم يُخفَّض أي خصم في هذه الفترة — مستويات الخصم ضمن الحد الأقصى',
+    /**
+     * Two different zeros, and they must not read alike.
+     *
+     * **Zero out of N discounted sales is a verified absence** — the check ran across
+     * N sales and found nothing wrong. **Zero out of zero is silence** — nothing has
+     * happened yet that the cap could have applied to. A bare "0" collapses the two,
+     * and the first is a reassurance while the second is just an empty period.
+     *
+     * Same principle as the backup screen showing dates and gaps rather than a blank:
+     * the absence of a problem should be stated, with the denominator that makes it
+     * a statement rather than a shrug.
+     */
+    capNeverApplied: 'لم يُطبَّق الحد الأقصى على أي عملية',
+    capNeverAppliedOf: (count: number) =>
+      `من أصل ${group(count)} فاتورة استحقت خصماً في هذه الفترة — مستويات الخصم ضمن الحد الأقصى`,
+    capNoDiscounts: 'لم تستحق أي فاتورة خصماً في هذه الفترة',
+    capNoDiscountsHint: 'لا يوجد ما يُقاس عليه الحد الأقصى بعد',
     capTimes: 'فواتير طُبّق عليها الحد الأقصى',
     capOfDiscounted: (pct: number) => `${pct}٪ من الفواتير التي استحقت خصماً`,
     capSaved: 'ما وفّره الحد الأقصى',

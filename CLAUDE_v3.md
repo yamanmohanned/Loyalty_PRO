@@ -2991,6 +2991,31 @@ A panel on Reports, beside capture health — both answer *is this configured ri
 | «ما وفّره الحد الأقصى» | Σ(uncapped − applied) over the range |
 | Amber advice, at ≥ 67% | «الحد الأقصى يعمل في أغلب الخصومات — مستويات الخصم أعلى مما قرّرته» |
 
+#### Two zeros, and they must not read alike
+*(operator addition, 2026-09-02)*
+
+A zero here is correct and **momentarily indistinguishable from "the feature is not
+working"**. So the panel distinguishes the two zeros it can produce:
+
+- **0 capped out of N discounted sales** is a *verified absence*: the guardrail was
+  exercised N times and never had to bite. Shown affirmatively — a check mark, success
+  tone, and **the denominator**, which is the thing that turns it into a statement:
+  «لم يُطبَّق الحد الأقصى على أي عملية — من أصل 44 فاتورة استحقت خصماً». Without the
+  denominator a reader cannot tell a working guardrail from a panel nobody wired up.
+- **0 discounted sales at all** is *silence*: nothing has happened that the cap could
+  apply to. Shown neutrally, saying exactly that — «لا يوجد ما يُقاس عليه الحد الأقصى
+  بعد».
+
+This is the backup screen's principle — dates and gaps rather than a blank —
+generalised: **the absence of a problem should read as a verified absence, not as
+silence.** A bare `0` collapses a reassurance and an empty period into the same
+glyph.
+
+Mechanically, `ChartFrame.empty` takes a `ReactNode` now. A string still gets the
+standard treatment (flat grey rules where the bars would be, then the sentence);
+anything else takes the space over, because a panel saying "checked, nothing wrong"
+must not sit underneath a skeleton that reads as "no data".
+
 **The share is against discounted sales, not all captures.** "The cap binds on most
 discounts" and "the cap binds on 2% of footfall" are different sentences, and only
 the first says the ladder is wrong. Two thirds is the threshold because a cap that

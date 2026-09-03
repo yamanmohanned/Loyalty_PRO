@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react';
-import { BarChart3, Table2 } from 'lucide-react';
+import { BarChart3, CheckCircle2, Table2 } from 'lucide-react';
 import { GLOW, VIZ } from '../lib/viz';
 import { locale } from '../lib/locale';
 import { cn, Skeleton } from './ui';
@@ -37,8 +37,14 @@ const group = (value: number): string => new Intl.NumberFormat('en-US').format(v
 export interface ChartFrameProps {
   title: string;
   subtitle?: string;
-  /** Rendered when there is nothing to draw — its own sentence, never "no data". */
-  empty?: string;
+  /**
+   * Rendered when there is nothing to draw — its own sentence, never "no data".
+   *
+   * A node rather than a string, because "empty" is not always the same statement:
+   * a panel that verified something and found nothing wrong should say so, and that
+   * takes more than one line. `VerifiedEmpty` below is the affirmative variant.
+   */
+  empty?: ReactNode;
   isLoading?: boolean;
   /** True when the data loaded and contains nothing. */
   isEmpty?: boolean;
@@ -117,7 +123,15 @@ export function ChartFrame({
             <Skeleton className="h-6 w-3/5" />
           </div>
         ) : isEmpty ? (
-          <EmptyChart message={empty ?? locale.viz.empty} />
+          // A string gets the standard treatment — flat grey rules where the bars
+          // would be, then the sentence. Anything else takes the space over, because
+          // a panel saying "checked, nothing wrong" must not sit under a skeleton
+          // that reads as "no data".
+          typeof empty === 'string' || empty === undefined ? (
+            <EmptyChart message={empty ?? locale.viz.empty} />
+          ) : (
+            empty
+          )
         ) : (
           <div className={cn('transition-opacity duration-normal', isStale && 'opacity-45')}>
             {showTable ? table : children}
@@ -136,7 +150,7 @@ export function ChartFrame({
  * an empty capture-health panel and an empty tier panel mean different things and
  * each caller says which.
  */
-function EmptyChart({ message }: { message: string }) {
+function EmptyChart({ message }: { message: ReactNode }) {
   return (
     <div className="py-2">
       <div className="space-y-3" aria-hidden>
@@ -148,6 +162,29 @@ function EmptyChart({ message }: { message: string }) {
         ))}
       </div>
       <p className="mt-5 text-base text-steel">{message}</p>
+    </div>
+  );
+}
+
+/**
+ * "We checked, and there is nothing here" — as distinct from "there is nothing".
+ *
+ * A zero that was arrived at by measuring something is a different fact from a zero
+ * that means nothing has happened yet, and a bare empty state collapses the two. The
+ * denominator is what turns the first into a statement: *no sale was capped, out of
+ * the 44 that earned a discount*. Without it the reader cannot tell a working
+ * guardrail from a panel that is not wired up.
+ *
+ * Success tone, and it carries an icon **and** words — never colour alone.
+ */
+export function VerifiedEmpty({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-md border border-success/20 bg-success-tint px-5 py-4">
+      <CheckCircle2 size={20} aria-hidden className="mt-0.5 shrink-0 text-success" />
+      <div>
+        <p className="text-base font-semibold text-success">{title}</p>
+        <p className="mt-1 text-sm leading-relaxed text-ink">{detail}</p>
+      </div>
     </div>
   );
 }
