@@ -156,6 +156,84 @@ export const UpdateDiscountRulesRequestSchema = z
 
 export type UpdateDiscountRulesRequest = z.infer<typeof UpdateDiscountRulesRequestSchema>;
 
+/* ── The ladder against the settings (§12.38) ───────────────────────────────── */
+
+/** One thing wrong with one rule, in the shape the API's error envelope wants. */
+export interface RuleViolation {
+  path: string;
+  message: string;
+}
+
+/**
+ * Whether a discount ladder is legal under a merchant's own settings.
+ *
+ * **This is a business rule, and it lives here so there is exactly one of it.**
+ *
+ * It used to live inline in `updateDiscountRules`, which meant it protected the API
+ * path and nothing else. The dev seed writes rules straight to the database and
+ * therefore produced a configuration the API would reject — a 7,500 fixed-amount
+ * rule under a 5,000 absolute cap — which is how §12.37 found it. That is §12.27's
+ * lesson about duplicated DTOs, one level up: **a rule enforced in one caller is not
+ * enforced, it is merely usually applied.**
+ *
+ * Pure, synchronous and dependency-free, so every writer can call it: the API
+ * service, the seed, a future importer, a test factory. It takes the settings and
+ * the rules as plain data rather than reading the database itself, precisely so that
+ * a caller cannot be locked out by not having a Prisma client to hand.
+ *
+ * Returns the violations rather than throwing. The API turns them into its
+ * `VALIDATION_FAILED` envelope with per-field paths; the seed prints them and stops.
+ * A shared rule that threw an HTTP-shaped error would drag the transport into every
+ * caller that is not HTTP.
+ */
+export function validateRulesAgainstSettings(
+  rules: readonly Pick<
+    DiscountRuleInput,
+    'discountType' | 'discountRate' | 'maxDiscountValue'
+  >[],
+  settings: Pick<DiscountSettings, 'minRate' | 'maxRate' | 'absoluteMaxDiscountValue'>,
+): RuleViolation[] {
+  const violations: RuleViolation[] = [];
+
+  rules.forEach((rule, index) => {
+    if (rule.discountType === 'PERCENTAGE') {
+      if (rule.discountRate < settings.minRate || rule.discountRate > settings.maxRate) {
+        violations.push({
+          path: `rules.${index}.discountRate`,
+          message: `النسبة يجب أن تكون بين ${settings.minRate}٪ و ${settings.maxRate}٪ حسب إعدادات المتجر`,
+        });
+      }
+    }
+
+    // A fixed amount above the absolute ceiling could never actually be granted —
+    // the engine would cap it. Rejecting it stops a manager configuring a number the
+    // system will silently ignore, and §12.37's report exists because a writer that
+    // skipped this check produced exactly that state.
+    if (
+      rule.discountType === 'FIXED_AMOUNT' &&
+      rule.discountRate > settings.absoluteMaxDiscountValue
+    ) {
+      violations.push({
+        path: `rules.${index}.discountRate`,
+        message: `قيمة الخصم تتجاوز الحد الأقصى المطلق (${settings.absoluteMaxDiscountValue})`,
+      });
+    }
+
+    if (
+      rule.maxDiscountValue !== null &&
+      rule.maxDiscountValue !== undefined &&
+      rule.maxDiscountValue > settings.absoluteMaxDiscountValue
+    ) {
+      violations.push({
+        path: `rules.${index}.maxDiscountValue`,
+        message: 'الحد الأقصى للقاعدة لا يمكن أن يتجاوز الحد الأقصى المطلق',
+      });
+    }
+  });
+
+  return violations;
+}
+
 /* ── The calculation ───────────────────────────────────────────────────────── */
 
 export interface DiscountComputationInput {

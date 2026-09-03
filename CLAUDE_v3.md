@@ -3017,3 +3017,69 @@ Int32 bound does not cover it. It accumulates in JavaScript rather than SQL — 
 to 2^53, which a year of a supermarket's discounts does not approach — matching how
 `discountsGranted` beside it has always been computed. A partial index carries the
 capped rows, which are a small minority of a table that grows with every sale.
+
+---
+
+### 12.38 RULE — business rules live at the service layer, and every writer must go through it — 2026-09-02
+*(operator ruling, made permanent. Prompted by §12.37, where the report found a
+configuration the API considers impossible.)*
+
+> **Any writer that reaches the database without passing the service layer can
+> produce a state the API believes cannot exist.** A validator that lives in one
+> caller is not enforced — it is merely usually applied. Where a business rule must
+> hold for more than one writer, it goes in `packages/shared-types` as a pure
+> function and every writer calls it. Do not write a second implementation "that
+> also validates": that drifts exactly the way the duplicated DTOs in §12.27 did.
+
+**The danger is not the one bypass that was found. It is that bypassing is
+structurally possible** — so this section records the audit as well as the fix, and
+the audit is the part worth repeating when something new starts writing.
+
+#### What was actually wrong
+
+`updateDiscountRules` refused a fixed-amount rule above §2.3's absolute ceiling. The
+dev seed wrote `discountRate: 7_500, maxDiscountValue: 7_500` under a 5,000 cap
+**straight into the database**, and had done since it was written. Every qualifying
+sale in development was silently capped, and the engine was working correctly the
+whole time. §12.37's report is what made it visible.
+
+Two things now:
+
+- The check moved to `validateRulesAgainstSettings()` in
+  `packages/shared-types/src/discount.ts` — pure, synchronous, taking settings and
+  rules as plain data so no caller is locked out by lacking a Prisma client. It
+  returns violations rather than throwing, because a shared rule that threw an
+  HTTP-shaped error would drag the transport into every caller that is not HTTP. The
+  API turns them into its `VALIDATION_FAILED` envelope; the seed prints them and
+  stops.
+- The seed calls it and **refuses to run** if its own ladder is illegal. Verified by
+  putting the bad rule back: the seed named both violations and exited non-zero.
+
+#### The audit — every writer that skips the service layer
+
+| Writer | Verdict |
+|---|---|
+| `src/routes/`, `src/plugins/` | **Clean.** Zero direct writes; every route goes through a service. Confirmed by grep, not by assumption |
+| `prisma/seed.ts` | **Was the bypass. Fixed** — validates the ladder, and its rules are now typed against `DiscountRuleInput` so a bad edit is a compile error too |
+| `prisma/seed.ts` — phones | **Second bypass, fixed.** It carried its own `toE164`: a one-line approximation of `normalizePhone`'s twenty. It agreed for every fixture in the file, which is how it survived — but it validated nothing and would have written a non-E.164 value for a fixture entered as `+964…`, `00964…` or with spaces. §13.4 says the UNIQUE constraint on `customer.phone` is only meaningful if every write normalises. It imports the shared one now and throws on an invalid fixture |
+| `prisma/seed.ts` — transactions | **Already correct**, and deliberately so: it writes `discountType: NONE, discountValue: 0` with a comment saying that inventing a discount would let an engine bug hide. It uses the shared `computePeriodKey` |
+| `prisma/seed.ts` — cards | **Already correct.** Uses `generateBarcodeToken` from `src/lib`, so the §12.12 scheme and check digit are the real ones |
+| `__tests__/helpers/fixtures.ts` | **Fixed.** Its baseline ladder now runs the same check — a suite whose default world the product would reject proves things about a system that cannot exist. Individual tests stay free to write directly: §12.37's cap tests deliberately install an illegal ladder, because a state the API refuses is exactly what reporting must cope with |
+| `prisma/verify.ts` | **Not a bypass.** Its one direct write is an intentionally illegal insert, asserting that the unique constraint refuses it. The write is *expected to fail* |
+| `prisma/reset-ceremony.ts` | **A known, documented exception.** It deletes audit rows, which §7.10 makes append-only, and refuses to run in production. Left alone — it is the tool for undoing a one-way ceremony and says so |
+| Migrations — `pre_printed_cards` | **Checked, safe.** Its `INSERT INTO card` copies each customer's existing `barcode_token`; it mints no new numbers, so the card scheme cannot be violated |
+| Migrations — `settlement_default…` | **Safe.** A SQLite table-rebuild copy, no business data invented |
+| Migrations — `discount_uncapped_value` | **Safe.** Backfills `uncapped = value`, preserving the `uncapped >= value` invariant a test pins |
+| Sync replay (`sync.service`) | **Clean.** Offline operations replay through `scanCard`, the same service the online path uses, with `issueDiscount: false`. It does not re-implement attribution |
+| Card batch generation | **Clean.** `generateCardBatch` is a service, reached only through its route |
+
+#### Why the seed is the one that got away
+
+It is the writer nobody thinks of as a writer. It exists to *set up* the world, so
+it is read as configuration rather than as code that must obey the product's rules —
+and it is the only writer whose output every developer then treats as the reference
+example of a correct system.
+
+The generalisation, and the thing to check when anything new starts writing:
+**a script that seeds, imports, restores or migrates is a client of the business
+rules, not an exception to them.**

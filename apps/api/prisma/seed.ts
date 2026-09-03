@@ -16,7 +16,14 @@
 
 import { PrismaClient, type PrismaClient as PrismaClientType } from '@prisma/client';
 import { hash as argon2Hash } from '@node-rs/argon2';
-import { computePeriodKey, DEFAULT_FEATURE_FLAGS, type FeatureFlagKey } from '@walaa/shared-types';
+import {
+  computePeriodKey,
+  DEFAULT_FEATURE_FLAGS,
+  normalizePhone,
+  validateRulesAgainstSettings,
+  type DiscountRuleInput,
+  type FeatureFlagKey,
+} from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
 import { applySqlitePragmas } from '../src/lib/prisma';
 import { generateBarcodeToken, verifyBarcodeToken } from '../src/lib/barcode-token';
@@ -45,11 +52,36 @@ const NOW = new Date();
  * The absolute cap is set to 5,000 IQD: at 3%, that binds on any basket above
  * roughly 167,000 IQD, which is where a percentage starts to hurt.
  */
-const DISCOUNT_RULES = [
+/**
+ * The ladder this seed installs. Validated below against the settings it also
+ * installs, by the same function the API uses (§12.38).
+ *
+ * The third rule was `7_500` until 2026-09-02, above the 5,000 absolute ceiling in
+ * the settings a few lines down — a configuration `PUT /discount/rules` refuses and
+ * this file created anyway, because it writes to the database directly. It is
+ * 5,000 now: 2.5% of the 200,000 threshold, inside §2.3's recommended band, and a
+ * number the engine can actually grant rather than one it silently caps.
+ */
+const DISCOUNT_RULES: Array<
+  Pick<DiscountRuleInput, 'thresholdAmount' | 'discountType' | 'discountRate' | 'maxDiscountValue'> & {
+    sortOrder: number;
+  }
+> = [
   { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2, maxDiscountValue: null, sortOrder: 0 },
   { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 3, maxDiscountValue: null, sortOrder: 1 },
-  { thresholdAmount: 200_000, discountType: 'FIXED_AMOUNT', discountRate: 7_500, maxDiscountValue: 7_500, sortOrder: 2 },
+  { thresholdAmount: 200_000, discountType: 'FIXED_AMOUNT', discountRate: 5_000, maxDiscountValue: 5_000, sortOrder: 2 },
 ];
+
+/** The settings the ladder above is checked against, and the ones written below. */
+const DISCOUNT_SETTINGS = {
+  discountType: 'PERCENTAGE' as const,
+  minRate: 1,
+  maxRate: 3,
+  /** The last line of defence (§2.3). Never ship a percentage without it. */
+  absoluteMaxDiscountValue: 5_000,
+  periodType: 'MONTHLY' as const,
+  settlementStrategy: 'MERCHANT_DEFINED' as const,
+};
 
 interface SeedTransaction {
   invoiceId: string;
@@ -157,8 +189,22 @@ function daysBefore(days: number): Date {
   return d;
 }
 
-/** E.164 normalisation, mirroring packages/shared-types/src/phone.ts. */
-const toE164 = (local: string): string => `+964${local.replace(/^0/, '')}`;
+/**
+ * E.164 normalisation — the SHARED one, not a copy (§12.38).
+ *
+ * This was `` `+964${local.replace(/^0/, '')}` ``: a one-line approximation of a
+ * twenty-line function. It agreed with the real one for every phone number in this
+ * file, which is how it survived — but it validated nothing, and it would have
+ * written a non-E.164 value for any fixture entered as `+964…`, `00964…`, or with
+ * spaces. §13.4 is explicit that the per-merchant UNIQUE constraint on
+ * `customer.phone` is only meaningful if **every** write normalises first, and this
+ * file writes customers directly.
+ */
+const toE164 = (local: string): string => {
+  const normalized = normalizePhone(local);
+  if (!normalized) throw new Error(`seed fixture has an invalid phone number: ${local}`);
+  return normalized;
+};
 
 async function seed(db: PrismaClientType): Promise<void> {
   await applySqlitePragmas(prisma);
@@ -227,17 +273,23 @@ async function seed(db: PrismaClientType): Promise<void> {
   await db.discountSettings.upsert({
     where: { merchantId: merchant.id },
     update: {},
-    create: {
-      merchantId: merchant.id,
-      discountType: 'PERCENTAGE',
-      minRate: 1,
-      maxRate: 3,
-      // The last line of defence (§2.3). Never ship a percentage without it.
-      absoluteMaxDiscountValue: 5_000,
-      periodType: 'MONTHLY',
-      settlementStrategy: 'MERCHANT_DEFINED',
-    },
+    create: { merchantId: merchant.id, ...DISCOUNT_SETTINGS },
   });
+
+  // ── The same check the API runs, on the same implementation (§12.38) ───────
+  //
+  // This file writes to the database directly, so nothing else stands between it
+  // and a configuration the API considers impossible. It got one: a fixed amount
+  // above the absolute ceiling, which the engine then silently capped on every
+  // qualifying sale. Failing here is the point — a seed that quietly installs an
+  // illegal ladder is worse than one that will not run.
+  const violations = validateRulesAgainstSettings(DISCOUNT_RULES, DISCOUNT_SETTINGS);
+  if (violations.length > 0) {
+    for (const violation of violations) {
+      console.error(`  ✗ ${violation.path}: ${violation.message}`);
+    }
+    throw new Error('DISCOUNT_RULES is not valid under DISCOUNT_SETTINGS — fix the seed');
+  }
 
   for (const rule of DISCOUNT_RULES) {
     await db.discountRule.upsert({

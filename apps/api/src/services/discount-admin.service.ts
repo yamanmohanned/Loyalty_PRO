@@ -1,5 +1,6 @@
 import {
   assessMargin,
+  validateRulesAgainstSettings,
   type DiscountRule,
   type DiscountSettings,
   type UpdateDiscountRulesRequest,
@@ -174,42 +175,10 @@ export async function updateDiscountRules(
   });
   if (!settings) throw notFound('لا توجد إعدادات خصم لهذا التاجر');
 
-  const fields: Array<{ path: string; message: string }> = [];
-
-  request.rules.forEach((rule, index) => {
-    if (rule.discountType === 'PERCENTAGE') {
-      if (rule.discountRate < settings.minRate || rule.discountRate > settings.maxRate) {
-        fields.push({
-          path: `rules.${index}.discountRate`,
-          message: `النسبة يجب أن تكون بين ${settings.minRate}٪ و ${settings.maxRate}٪ حسب إعدادات المتجر`,
-        });
-      }
-    }
-
-    // A fixed amount above the absolute ceiling could never actually be granted —
-    // the engine would cap it. Rejecting it here stops the manager configuring a
-    // number the system will silently ignore.
-    if (
-      rule.discountType === 'FIXED_AMOUNT' &&
-      rule.discountRate > settings.absoluteMaxDiscountValue
-    ) {
-      fields.push({
-        path: `rules.${index}.discountRate`,
-        message: `قيمة الخصم تتجاوز الحد الأقصى المطلق (${settings.absoluteMaxDiscountValue})`,
-      });
-    }
-
-    if (
-      rule.maxDiscountValue !== null &&
-      rule.maxDiscountValue !== undefined &&
-      rule.maxDiscountValue > settings.absoluteMaxDiscountValue
-    ) {
-      fields.push({
-        path: `rules.${index}.maxDiscountValue`,
-        message: 'الحد الأقصى للقاعدة لا يمكن أن يتجاوز الحد الأقصى المطلق',
-      });
-    }
-  });
+  // The rule itself lives in `@walaa/shared-types` so every writer uses one
+  // implementation — this service, the dev seed, anything added later. It used to be
+  // inline here, which protected the API path and nothing else (§12.38).
+  const fields = validateRulesAgainstSettings(request.rules, settings);
 
   if (fields.length > 0) {
     throw validationFailed('القواعد تتجاوز الحدود المسموحة في إعدادات المتجر', fields);

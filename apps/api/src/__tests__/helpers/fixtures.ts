@@ -1,5 +1,9 @@
 import type { PrismaClient } from '@prisma/client';
-import { computePeriodKey } from '@walaa/shared-types';
+import {
+  computePeriodKey,
+  validateRulesAgainstSettings,
+  type DiscountRuleInput,
+} from '@walaa/shared-types';
 import { loadEnv } from '../../config/env';
 import { generateBarcodeToken } from '../../lib/barcode-token';
 import { hashPassword } from '../../lib/password';
@@ -37,7 +41,11 @@ export interface World {
  * The ladder used across the suite. Inside the 1–3% safe band (§2.3), because a
  * fixture is also a worked example and should not model a rate that loses money.
  */
-export const DISCOUNT_RULES = [
+export const DISCOUNT_RULES: Array<
+  Pick<DiscountRuleInput, 'thresholdAmount' | 'discountType' | 'discountRate' | 'maxDiscountValue'> & {
+    sortOrder: number;
+  }
+> = [
   { thresholdAmount: 25_000, discountType: 'PERCENTAGE', discountRate: 2, maxDiscountValue: null, sortOrder: 0 },
   { thresholdAmount: 75_000, discountType: 'PERCENTAGE', discountRate: 3, maxDiscountValue: null, sortOrder: 1 },
 ];
@@ -119,6 +127,25 @@ export async function createWorld(
       settlementStrategy: 'VOUCHER_AS_PAYMENT',
     },
   });
+
+  // The baseline ladder passes the same check the API applies (§12.38). This
+  // fixture writes straight to the database, so nothing else would catch a future
+  // edit that made the default world illegal — and a test suite whose baseline the
+  // product would reject proves things about a system that cannot exist.
+  //
+  // Individual tests remain free to write whatever they need directly: §12.37's cap
+  // tests deliberately install a ladder above the ceiling, because a state the API
+  // refuses is exactly the state that reporting has to cope with.
+  const baselineViolations = validateRulesAgainstSettings(DISCOUNT_RULES, {
+    minRate: 1,
+    maxRate: 3,
+    absoluteMaxDiscountValue: ABSOLUTE_MAX_DISCOUNT,
+  });
+  if (baselineViolations.length > 0) {
+    throw new Error(
+      `fixture DISCOUNT_RULES is illegal: ${baselineViolations.map((v) => v.message).join('; ')}`,
+    );
+  }
 
   for (const rule of DISCOUNT_RULES) {
     await prisma.discountRule.create({
