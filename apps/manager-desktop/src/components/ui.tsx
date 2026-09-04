@@ -185,7 +185,13 @@ export function Chip({
         tone === 'neutral' && 'bg-canvas text-steel',
         tone === 'accent' && 'bg-accent-tint text-accent',
         tone === 'success' && 'bg-success-tint text-success',
-        tone === 'warning' && 'bg-amber-tint text-amber',
+        // Ink rather than amber, and only for this tone. §6.2 describes a chip as a
+        // tinted ground with "text in its darkest stop" — but the palette has ONE
+        // stop per semantic, and amber #B26B00 on amber-tint #FDF3E3 measures
+        // **3.82:1** against a 4.5 floor. Every other tone clears it; amber is the
+        // one whose single token is too light against its own tint, so ink is the
+        // darkest stop actually available. The tinted ground still carries the tone.
+        tone === 'warning' && 'bg-amber-tint text-ink',
         tone === 'danger' && 'bg-danger-tint text-danger',
         className,
       )}
@@ -270,12 +276,27 @@ export function Notice({
 }) {
   return (
     <div
+      /*
+        **The text is ink on every tone, and the tone is carried by the ground and
+        the start-border instead.**
+
+        It used to be the semantic colour on that colour's tint — which §6.2
+        describes for a *chip*, where the text is a word or two at chip weight. On a
+        sentence at 14px it fails: amber #B26B00 on amber-tint #FDF3E3 measures
+        **3.82:1** against a 4.5 floor, and neutral's `text-steel` on canvas is 4.55,
+        which is passing by 0.05 and fails the moment the surface changes (§12.34's
+        scoping note, which this is the second instance of).
+
+        Meaning is still not carried by colour alone (§2.3): the 4px start-border and
+        the tinted ground both change with the tone, and every Notice that matters
+        also has a title. What changes is that the words are legible.
+      */
       className={cn(
-        'rounded-md border-s-4 px-4 py-3 text-sm leading-relaxed',
-        tone === 'neutral' && 'border-s-border bg-canvas text-steel',
-        tone === 'accent' && 'border-s-accent bg-accent-tint text-accent',
-        tone === 'warning' && 'border-s-amber bg-amber-tint text-amber',
-        tone === 'danger' && 'border-s-danger bg-danger-tint text-danger',
+        'rounded-md border-s-4 px-4 py-3 text-sm leading-relaxed text-ink',
+        tone === 'neutral' && 'border-s-border bg-canvas',
+        tone === 'accent' && 'border-s-accent bg-accent-tint',
+        tone === 'warning' && 'border-s-amber bg-amber-tint',
+        tone === 'danger' && 'border-s-danger bg-danger-tint',
       )}
     >
       {title ? <p className="mb-1 font-semibold">{title}</p> : null}

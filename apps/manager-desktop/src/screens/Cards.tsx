@@ -550,7 +550,11 @@ function Tally({
         value > 0 && !tone && 'border-border bg-canvas',
       )}
     >
-      <p className="text-sm text-steel">{label}</p>
+      {/* Ink, not steel. These labels sit on four different tinted grounds, where
+          steel measures 4.15–4.40 against a 4.5 floor — and 4.55 even on the plain
+          canvas, which is passing by a rounding error. The number beside it carries
+          the tone; the label only has to be readable (§12.34, §2.3). */}
+      <p className="text-sm text-ink">{label}</p>
       <p
         className={cn(
           'amount mt-1 text-2xl',
