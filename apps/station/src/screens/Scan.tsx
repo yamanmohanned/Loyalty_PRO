@@ -362,11 +362,31 @@ function ScanField({
       ) : null}
 
       <form onSubmit={onSubmit}>
-        <label htmlFor="scan-input" className="mb-3 block text-center">
-          <span className="block font-display text-3xl font-bold">
+        {/*
+          The icon above the heading, taken from `customer_found.png`.
+          §3.2 is the reason it earns its place rather than decorating: this screen is
+          read at arm's length under shop lighting, and the two steps differ by one
+          Arabic word. A card and a receipt are distinguishable before either is read,
+          which is what an operator with a queue actually does.
+
+          `aria-hidden` — the heading beside it says the same thing, so nothing here
+          is carried by the icon alone (§2.3).
+        */}
+        <div className="mb-4 flex justify-center">
+          <span className="flex size-16 items-center justify-center rounded-full bg-accent-tint text-accent">
+            {isCard ? (
+              <CreditCard size={30} aria-hidden />
+            ) : (
+              <Receipt size={30} aria-hidden />
+            )}
+          </span>
+        </div>
+
+        <label htmlFor="scan-input" className="mb-4 block text-center">
+          <span className="block font-display text-[clamp(1.75rem,5vw,2.25rem)] font-bold leading-tight">
             {isCard ? locale.flow.cardTitle : locale.flow.invoiceTitle}
           </span>
-          <span className="mt-1 block text-base text-steel">
+          <span className="mt-2 block text-lg text-steel">
             {isCard ? locale.flow.cardHint : locale.flow.invoiceHint}
           </span>
         </label>

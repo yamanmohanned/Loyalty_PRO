@@ -198,17 +198,23 @@ export function ReprintScreen({ shopName }: { shopName: string }): JSX.Element {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-5 px-5 py-6">
-      <Card className="space-y-5">
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-tint text-accent">
-            <Search size={24} aria-hidden />
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold">{locale.reprint.title}</h1>
-            <p className="text-base text-steel">{locale.reprint.subtitle}</p>
-          </div>
-        </div>
+      {/*
+        The hero above the card rather than a header inside it, taken from
+        `card_reprint.png`. It is the arrangement that suits the screen: this is a
+        single-purpose page reached from one button, and an operator arriving here
+        mid-queue should recognise it before reading it (§3.2).
+      */}
+      <div className="flex flex-col items-center text-center">
+        <span className="mb-4 flex size-16 items-center justify-center rounded-full bg-accent-tint text-accent">
+          <Search size={30} aria-hidden />
+        </span>
+        <h1 className="font-display text-[clamp(1.75rem,5vw,2.25rem)] font-bold leading-tight">
+          {locale.reprint.title}
+        </h1>
+        <p className="mt-2 text-lg text-steel">{locale.reprint.subtitle}</p>
+      </div>
 
+      <Card className="space-y-5">
         <form onSubmit={search} className="space-y-4">
           <Field label={locale.reprint.queryLabel} error={error}>
             <Input
@@ -230,6 +236,15 @@ export function ReprintScreen({ shopName }: { shopName: string }): JSX.Element {
               {busy ? locale.reprint.searching : locale.reprint.search}
             </Button>
           </div>
+
+          {/*
+            Taken from the reference's info strip, and it says something true and
+            useful: the operator does not classify the input. All three identifiers go
+            in one field and the SERVER decides which it is (§12.13), because the
+            shapes are distinguishable and asking a person with a queue to pick a
+            search mode first is asking them to think about the wrong thing.
+          */}
+          <Notice tone="info">{locale.reprint.queryHint}</Notice>
         </form>
       </Card>
 
