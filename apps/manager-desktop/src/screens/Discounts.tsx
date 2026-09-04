@@ -287,7 +287,29 @@ export function DiscountsScreen() {
               const assessment = assessments[index];
               return (
                 <div key={rule.id ?? `new-${index}`} className="p-6">
-                  <div className="grid grid-cols-[2fr_1.4fr_1.4fr_auto] items-end gap-4">
+                  {/*
+                    A rule the engine will not apply, said out loud.
+                    `updateDiscountRules` writes `isActive: true` unconditionally, so
+                    this state cannot be created from this screen — but §12.38 is
+                    exactly about writers that are not this screen. A seed, a restore
+                    or a hand-edit can leave a rule inactive, `getActiveRules` filters
+                    it out, and the editor would otherwise render it identically to the
+                    ones that actually run. The tone is a warning rather than an error
+                    because the data is not corrupt; it is just not doing anything.
+
+                    Read from the SERVER's rules rather than the draft: the draft type
+                    carries no `isActive` — the editor cannot set one — so the fact
+                    belongs to what was loaded, not to what is being edited.
+                  */}
+                  {rule.id !== undefined &&
+                  data?.rules.find((r) => r.id === rule.id)?.isActive === false ? (
+                    <div className="mb-4">
+                      <Notice tone="warning" title={locale.discounts.inactiveRule}>
+                        {locale.discounts.inactiveRuleHint}
+                      </Notice>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-[1.6fr_1.2fr_1.2fr_1.4fr_auto] items-end gap-4">
                     <Field label={locale.discounts.colThreshold}>
                       <AmountInput
                         value={rule.thresholdAmount}
@@ -324,6 +346,35 @@ export function DiscountsScreen() {
                       )}
                     </Field>
 
+                    {/*
+                      The per-rule ceiling — **present in the data and invisible until
+                      now.** `maxDiscountValue` was sent on save and returned on load,
+                      the seed sets 5,000 on the top tier, and nothing on this screen
+                      rendered it: a cap that silently trimmed a discount, on the one
+                      screen whose whole job is §2.3's guardrails. Found by the §10.9
+                      standing check.
+
+                      Empty means "no rule of its own — the shop's absolute ceiling
+                      applies", which is what `null` means in the contract. It is the
+                      common case, so it is the empty state rather than a number the
+                      manager has to think about.
+                    */}
+                    <Field
+                      label={locale.discounts.colRuleCap}
+                      hint={locale.discounts.colRuleCapHint}
+                    >
+                      <AmountInput
+                        value={rule.maxDiscountValue ?? ''}
+                        placeholder={String(settings.absoluteMaxDiscountValue)}
+                        onChange={(e) =>
+                          updateRule(index, {
+                            maxDiscountValue:
+                              e.target.value === '' ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+
                     <Button
                       variant="ghost"
                       aria-label={locale.discounts.removeRule}
@@ -342,12 +393,15 @@ export function DiscountsScreen() {
                   {assessment ? (
                     <div className="mt-4">
                       <div className="mb-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-steel">
+                        {/* Copy lives in the locale file, not in JSX (§9). These two
+                            were written inline and are the sentences a manager reads
+                            while deciding a rate — they deserve reviewing as copy. */}
                         <span>
-                          الخصم عند العتبة:{' '}
+                          {locale.discounts.assessmentDiscount}{' '}
                           <Money value={assessment.discountAtThreshold} className="text-ink" />
                         </span>
                         <span>
-                          الربح الصافي التقديري:{' '}
+                          {locale.discounts.assessmentProfit}{' '}
                           <Money value={assessment.estimatedNetProfit} className="text-ink" />
                         </span>
                       </div>
@@ -357,7 +411,7 @@ export function DiscountsScreen() {
                         </Notice>
                       ) : (
                         <Notice tone="accent">
-                          ضمن النطاق الآمن ({SAFE_PERCENTAGE_MIN}–{SAFE_PERCENTAGE_MAX}٪).
+                          {locale.discounts.assessmentSafe(SAFE_PERCENTAGE_MIN, SAFE_PERCENTAGE_MAX)}
                         </Notice>
                       )}
                     </div>
