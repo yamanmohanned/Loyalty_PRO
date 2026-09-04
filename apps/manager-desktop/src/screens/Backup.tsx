@@ -78,7 +78,7 @@ export function BackupScreen() {
       <PageHeader title={locale.backup.title} subtitle={locale.backup.subtitle} />
 
       <div className="mb-6">
-        <Notice tone="danger" title="خطر فقدان البيانات">
+        <Notice tone="danger" title={locale.backup.riskTitle}>
           {locale.backup.riskNotice}
         </Notice>
       </div>

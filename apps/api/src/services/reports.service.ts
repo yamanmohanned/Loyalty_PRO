@@ -192,7 +192,6 @@ export async function getProgrammeReport(
   const redeemed = vouchers.filter((v) => v.status === 'REDEEMED');
   const outstanding = vouchers.filter((v) => v.status === 'ISSUED');
   const attributed = transactions.filter((t) => t.customerId !== null).length;
-  const grossTotal = transactions.reduce((sum, t) => sum + t.amountGross, 0);
 
   const modeCounts = new Map<string, number>();
   for (const t of transactions) {
@@ -221,7 +220,6 @@ export async function getProgrammeReport(
     vouchersOutstanding: outstanding.length,
     outstandingValue: outstanding.reduce((sum, v) => sum + v.value, 0),
     redemptionRatePct: vouchers.length > 0 ? Math.round((redeemed.length / vouchers.length) * 100) : 0,
-    averageBasket: transactions.length > 0 ? Math.round(grossTotal / transactions.length) : 0,
     attributionRatePct:
       transactions.length > 0 ? Math.round((attributed / transactions.length) * 100) : 0,
     captureByMode: [...modeCounts.entries()].map(([mode, count]) => ({ mode, count })),

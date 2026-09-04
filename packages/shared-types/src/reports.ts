@@ -79,7 +79,19 @@ export interface ProgrammeReport {
   vouchersOutstanding: number;
   outstandingValue: number;
   redemptionRatePct: number;
-  averageBasket: number;
+  /**
+   * `averageBasket` used to sit here too, and is gone.
+   *
+   * It was returned by `/reports/programme` and consumed by nothing:
+   * `OverviewReport` carries the same figure over the same range from the same
+   * query, and the Overview screen renders it. Two fields with one meaning in two
+   * responses is the duplication §12.27 is about — nothing would have caught them
+   * drifting, and the one nobody reads is the one that would drift.
+   *
+   * Found by the §10.9 standing check on the Reports screen. The reference's layout
+   * had a slot that looked like it wanted this number; the honest answer was that the
+   * number already has a home, not that this screen needed a tile.
+   */
   attributionRatePct: number;
   /**
    * How often §2.3's guardrails actually bound, and what they saved.
