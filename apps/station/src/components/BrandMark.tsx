@@ -40,6 +40,28 @@ import { cn } from './ui';
  *
  * `alt=""` and `aria-hidden`: the product name sits beside it in text on every
  * screen that uses this, so announcing the mark would just repeat it.
+*
+ * ── The asset is 384 px, re-exported from the master (v4 §2.5) ────────────
+ *
+ * It shipped at **160 px**, which covers a ~53 px slot at 3× and no more — and §2.5
+ * asks for the mark at size, which the login screens now render at 112–120 px. So it
+ * was re-exported from the transparent master `LOGO_2.png` (1312×1199 RGBA): uniform
+ * scale into a transparent square, centred. Nothing cropped, redrawn or recoloured.
+ * 384 px covers a 128 px render at 3× and costs 171 KB against the old 37 KB, on a
+ * LAN-served app that caches it.
+ *
+ * **A correction worth keeping, because the mistake is easy to repeat.** The first
+ * reading of this said the re-export would change the mark's framing, because the
+ * master's alpha bounding box measured 1296×1181 — aspect 1.097 — against the shipped
+ * file's 0.972. That comparison was wrong: `getbbox()` on an alpha channel reports any
+ * pixel above zero, so it was measuring anti-alias haze across the master's whole
+ * canvas rather than the mark. Thresholding alpha at a visible level gives the master
+ * **1126×1163, aspect 0.968** — the same shape as the shipped mark and as the new
+ * export. The framing did not change; only the resolution did.
+ *
+ * That is §12.27's measuring-instrument corollary landing twice in one session: a
+ * number that did not match the situation was a defect in the measurement, not in the
+ * thing measured.
  */
 export function BrandMark({
   size = 40,
