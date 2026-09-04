@@ -534,3 +534,37 @@ different claims, and only the first is covered.
 keyboard-wedge scanner is the only thing that proves what a keyboard-wedge scanner does,
 and it belongs to the field validation that already owes item (d) from §12.11. Writing a
 cleverer browser test would move the claim sideways, not forward.
+
+### 10.9 A fabricated number is indistinguishable from a real one
+*(operator ruling, 2026-09-04. §12.26's discipline applied to a figure rather than a
+feature.)*
+
+§2.2 forbids taking from a design reference "anything implying a feature we do not
+have". **The same prohibition binds one level down, on individual numbers**, and that
+level is more dangerous because the tell is smaller.
+
+The instance: `dashboard.png` gives every KPI tile a sparkline and a
+«+18٪ عن الفترة السابقة» delta. `OverviewReport` has no per-KPI series and no
+prior-period comparison, so both would have had to be manufactured to fill the shape.
+
+A missing feature announces itself — a screen for coupons in a product with no coupons
+is visibly wrong to anyone who knows the product. **A manufactured percentage announces
+nothing.** It renders in the same font, at the same size, in the same tile as the four
+figures beside it that are real, and there is no reading of the screen that separates
+them. A merchant deciding whether the programme is working cannot tell which numbers
+came from their shop.
+
+So the rule, stated plainly:
+
+> **Every figure on a screen must trace to something the system measured.** If a
+> reference's layout asks for a number the data does not contain, the number is refused
+> and the layout changes — the same ruling as for a panel, for the same reason, with
+> less warning attached.
+
+Corollary, and it is what made the Overview's KPI row better rather than sparser:
+**before dropping a shape, check for real data that is computed and not rendered.**
+`capturedSales` and `averageBasket` were both returned by the API and shown nowhere,
+and they are what replaced the reference's points tiles. This has now happened twice —
+§10.5's per-customer discount report was built and never displayed — so it is a
+**standing check per screen**, not a coincidence: for every screen redesigned, list what
+its endpoint returns and confirm each field either renders or is deliberately unused.

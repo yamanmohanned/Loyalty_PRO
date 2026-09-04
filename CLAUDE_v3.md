@@ -2913,6 +2913,28 @@ claim about what the browser will do, and the browser is the only thing that can
 confirm it. A second lesson came with it — the preset is a `.cjs` outside Vite's
 watched sources, so the change needed a dev-server restart before it appeared at all.
 
+#### Every clearance number in this section is scoped to a NAMED surface
+
+*(added 2026-09-04, after a real failure)*
+
+The table above says `steel` clears 4.5:1 on the canvas at 4.76. That was true when
+measured and is true now. **It stopped describing the surfaces some `steel` text
+actually sat on**, which is a different thing, and the difference cost seven contrast
+failures on the Overview screen: the currency suffix «د.ع» rendered `text-steel` at
+13 px and measured **4.24:1**.
+
+Nothing about the measurement decayed. What decayed was the assumption that a token
+measured on one surface stays measured everywhere it is later used — §0 rule 9 in the
+colour layer, where the control is a number in a table and the change that breaks it is
+somebody putting the same token somewhere else.
+
+**So: a clearance claim is a claim about a token AND a surface, never about a token.**
+Moving a colour to a new background re-opens the measurement, and the way to close it is
+to compute the ratio from the painted colours in the running app rather than to look it
+up here. A token that must sit on many surfaces has to clear the *worst* of them, or
+carry its hierarchy by size and weight instead of by colour — which is what the currency
+suffix does now.
+
 `prefers-reduced-transparency` and `forced-colors` both switch every glass surface
 back to opaque white. `backdrop-filter` degrades to the flat translucent fill where
 unsupported, which is why the alpha is high enough to carry the contrast alone.
