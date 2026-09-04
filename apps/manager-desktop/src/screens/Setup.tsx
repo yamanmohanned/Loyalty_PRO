@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { ServerCog } from 'lucide-react';
 import { setApiUrl, testApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
-import { BrandMark } from '../components/BrandMark';
-import { Button, Card, Field, Input, Notice } from '../components/ui';
+import { AuthLayout } from '../components/AuthLayout';
+import { Button, Field, Input, Notice } from '../components/ui';
 
 /**
  * First-run setup (CLAUDE_v2.md §9.3).
@@ -38,48 +38,49 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }) {
   }
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6">
-      <Card className="glass w-full max-w-md border-transparent p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <BrandMark size={48} />
-          <div>
-            <h1 className="font-display text-xl font-bold text-ink">{locale.appName}</h1>
-            <p className="text-sm text-steel">{locale.setup.title}</p>
-          </div>
-        </div>
+    // The same shell as Login (v4-4). It was left on the old centred card while its
+    // sibling was redesigned — and `AuthLayout`'s own docblock already claimed it
+    // covered "login and first-run setup", which it did not. A comment describing a
+    // system that had moved, written the same day: §0 rule 9 at its shortest range.
+    //
+    // No `serverUrl` here, deliberately: this screen exists precisely because there
+    // is not one yet, and the panel would show an empty box asking a question this
+    // form is about to answer.
+    <AuthLayout tagline={locale.login.tagline}>
+      <div className="mb-7">
+        <h2 className="font-display text-2xl font-bold text-ink">{locale.setup.title}</h2>
+        <p className="mt-1 text-base leading-relaxed text-steel">{locale.setup.subtitle}</p>
+      </div>
 
-        <p className="mb-6 text-base leading-relaxed text-steel">{locale.setup.subtitle}</p>
+      <form onSubmit={submit} className="space-y-4">
+        <Field
+          label={locale.setup.urlLabel}
+          hint={locale.setup.urlHint}
+          error={error ?? undefined}
+        >
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder={locale.setup.urlPlaceholder}
+            dir="ltr"
+            className="text-start font-mono"
+            autoFocus
+          />
+        </Field>
 
-        <form onSubmit={submit} className="space-y-4">
-          <Field
-            label={locale.setup.urlLabel}
-            hint={locale.setup.urlHint}
-            error={error ?? undefined}
-          >
-            <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={locale.setup.urlPlaceholder}
-              dir="ltr"
-              className="text-start font-mono"
-              autoFocus
-            />
-          </Field>
+        <Button type="submit" disabled={testing} className="h-14 w-full text-lg">
+          {testing ? locale.setup.testing : locale.setup.connect}
+        </Button>
+      </form>
 
-          <Button type="submit" disabled={testing} className="w-full">
-            {testing ? locale.setup.testing : locale.setup.connect}
-          </Button>
-        </form>
-
-        <div className="mt-6">
-          <Notice tone="neutral">
-            <span className="inline-flex items-center gap-2">
-              <ServerCog size={16} aria-hidden />
-              {locale.setup.support}
-            </span>
-          </Notice>
-        </div>
-      </Card>
-    </div>
+      <div className="mt-7 border-t border-border pt-5">
+        <Notice tone="neutral">
+          <span className="inline-flex items-center gap-2">
+            <ServerCog size={16} aria-hidden />
+            {locale.setup.support}
+          </span>
+        </Notice>
+      </div>
+    </AuthLayout>
   );
 }

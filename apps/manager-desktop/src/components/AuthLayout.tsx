@@ -5,6 +5,11 @@ import { locale } from '../lib/locale';
 /**
  * The shell every pre-session screen sits in: login and first-run setup.
  *
+ * Both, verified — this said so before it was true. Setup was left on the old centred
+ * card when Login was redesigned, and the docblock claimed coverage it did not have,
+ * which is §0 rule 9 at its shortest possible range: a comment describing a system
+ * that had moved, written the same day.
+ *
  * ═══════════════════════════════════════════════════════════════════════════
  *  What this takes from `login.png`, and what it refuses
  * ═══════════════════════════════════════════════════════════════════════════
@@ -80,8 +85,8 @@ export function AuthLayout({
         </div>
 
         {/* The card. `glass` is legal here and only here: it sits on the canvas with
-            nothing behind it, the one placement where `steel` still clears 4.5:1 at
-            4.76 (§12.34). */}
+            nothing behind it, the one placement where `steel` still clears 4.5:1 —
+            at 4.55 computed from the painted colours, not the 4.76 §12.34 recorded. */}
         <div className="w-full justify-self-center lg:justify-self-end">
           <div className="glass mx-auto w-full max-w-md rounded-lg border border-transparent p-8 shadow-card">
             {children}

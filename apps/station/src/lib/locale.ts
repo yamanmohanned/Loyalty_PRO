@@ -20,6 +20,9 @@ export const locale = {
   setup: {
     title: 'إعداد المحطة',
     subtitle: 'أدخل عنوان خادم ولاء على شبكة المتجر',
+    /* The operator is standing at a till, not reading documentation (§9: copy lives
+       here, not in JSX). */
+    askManager: 'اسأل مدير المتجر عن عنوان جهاز الإدارة على الشبكة.',
     urlLabel: 'عنوان الخادم',
     urlHint: 'مثال: http://192.168.0.106:4000',
     submit: 'اتصال',
