@@ -485,24 +485,43 @@ describe('offline sync reconciliation (§7.2)', () => {
 
     const stored = await prisma.transaction.findFirstOrThrow({ where: { invoiceId: 'OFF-JULY' } });
     expect(stored.occurredAt.toISOString()).toBe('2026-07-20T08:30:00.000Z');
-    expect(stored.periodKey).toBe('2026-07');
   });
 
   it('reconciles a full offline session end to end', async () => {
-    // Device offline: three captures, then a scan that qualifies on the total.
+    // Device offline: four captures, then a scan for each.
+    //
+    // Under v3 the three small baskets summed to 27,000 and the last one was
+    // discounted for clearing 25,000 cumulatively. Under v4 they are judged
+    // individually and none of them reaches a bracket — so the fourth invoice, which
+    // reaches one on its own, is what produces the single voucher. Same assertion,
+    // entirely different reason, which is exactly why the invoice was added rather
+    // than the number changed.
     const response = await processSyncBatch(syncContext, {
       deviceId: 'agent-01',
-      operations: [ingestOp('OFF-1', 12_000), ingestOp('OFF-2', 9_000), ingestOp('OFF-3', 6_000)],
+      operations: [
+        ingestOp('OFF-1', 12_000),
+        ingestOp('OFF-2', 9_000),
+        ingestOp('OFF-3', 6_000),
+        ingestOp('OFF-4', 40_000),
+      ],
     });
     expect(response.results.every((r) => r.status === 'APPLIED')).toBe(true);
 
-    for (const invoiceId of ['OFF-1', 'OFF-2', 'OFF-3']) {
+    for (const invoiceId of ['OFF-1', 'OFF-2', 'OFF-3', 'OFF-4']) {
       await scan(invoiceId);
     }
 
-    // 27,000 cumulative clears the 25,000 threshold, so the last basket is discounted.
     const vouchers = await prisma.voucher.count();
     expect(vouchers).toBe(1);
+
+    const discounted = await prisma.transaction.findFirstOrThrow({
+      where: { invoiceId: 'OFF-4' },
+    });
+    expect(discounted.discountValue).toBe(800); // 2% of 40,000
+    for (const invoiceId of ['OFF-1', 'OFF-2', 'OFF-3']) {
+      const row = await prisma.transaction.findFirstOrThrow({ where: { invoiceId } });
+      expect(row.discountValue, invoiceId).toBe(0);
+    }
   });
 
   it('returns a server clock so a skewed device can correct itself', async () => {
@@ -620,7 +639,7 @@ describe('a scan that arrives after the sale was settled (§7.2 offline queue)',
       { issueDiscount: false },
     );
 
-    expect(outcome.balance?.cumulativeAmount).toBe(150_000);
+    expect(outcome.lifetime?.totalSpend).toBe(150_000);
   });
 
   it('is distinguishable from a customer who simply did not qualify', async () => {

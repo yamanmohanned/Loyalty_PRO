@@ -6,7 +6,6 @@ import {
 } from '@walaa/shared-types';
 import { forbidden, notFound } from '../lib/errors';
 import { isUniqueViolation, prisma } from '../lib/prisma';
-import { getPeriodContext, periodKeyFor } from './balance.service';
 import { publish } from './realtime.service';
 
 /**
@@ -59,9 +58,6 @@ export async function ingestInvoice(
     throw forbidden('لا يمكن تسجيل فاتورة لفرع آخر');
   }
 
-  const periodContext = await getPeriodContext(context.merchantId);
-  const periodKey = periodKeyFor(periodContext, occurredAt);
-
   // Pre-check. The common duplicate is a retry, and answering it from here avoids
   // provoking a constraint violation on the happy-ish path.
   const existing = await prisma.transaction.findUnique({
@@ -100,7 +96,6 @@ export async function ingestInvoice(
         amountNet: invoice.amount_gross,
         currency: invoice.currency,
         captureMode: toCaptureModeOrDefault(invoice.capture_mode),
-        periodKey,
         occurredAt,
         capturedAt,
         linkedAt: null,

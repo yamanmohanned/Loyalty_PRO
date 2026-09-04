@@ -3,7 +3,6 @@ import { CardRejectionSchema, ScannedCardSchema } from './card-stock';
 import { CaptureModeSchema, DiscountTypeSchema } from './enums';
 import { CapturedInvoiceSchema } from './invoice';
 import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
-import { PeriodKeySchema } from './period';
 import { DiscountSlipSchema, VoucherSchema } from './voucher';
 
 /**
@@ -79,7 +78,6 @@ export const TransactionSchema = z.object({
   amountNet: IqdAmountSchema,
   currency: z.literal('IQD'),
   captureMode: CaptureModeSchema,
-  periodKey: PeriodKeySchema,
   occurredAt: z.string().datetime({ offset: true }),
   capturedAt: z.string().datetime({ offset: true }),
   linkedAt: z.string().datetime({ offset: true }).nullable(),
@@ -88,24 +86,53 @@ export const TransactionSchema = z.object({
 
 export type Transaction = z.infer<typeof TransactionSchema>;
 
+/* ── Two shapes for two facts (v4 §10.4) ───────────────────────────────────── */
+
 /**
- * A customer's standing within the active period.
+ * A customer's history. **Reporting only — never an input to a discount** (§1.4).
  *
- * **Always computed from transaction rows, never read from a stored total**
- * (§5.3). v1's `balance_snapshot` cache is gone: a stored aggregate drifts from the
- * log that produced it and then lies quietly. There is no cache to reconcile
- * because there is no cache.
+ * v3 had one `CustomerBalance` carrying a period total *and* the gap to the next
+ * threshold, because both were facts about the same thing: a customer's standing
+ * inside the active window. v4 splits them, because they stopped being one fact.
+ *
+ * At step 1 of the station flow there is no invoice yet, so "the next bracket" and
+ * the gap to it are **undefined — there is nothing to compute them against**. At the
+ * result there is. One shape carrying both would mean different things depending on
+ * when it was read, and a field that is null at one moment and meaningful at another
+ * does not fail loudly; it stays plausible. That is §12.27 with a new surface.
+ *
+ * Still computed from transaction rows, never stored (§5.3). The reasoning survives
+ * the model change intact: a stored aggregate drifts from the log that produced it
+ * and then lies quietly. The only difference is that no calendar bounds it now.
  */
-export const CustomerBalanceSchema = z.object({
-  periodKey: PeriodKeySchema,
-  cumulativeAmount: IqdAmountSchema,
+export const CustomerLifetimeSchema = z.object({
+  /** Σ `amountGross` across every attributed invoice, all time. */
+  totalSpend: IqdAmountSchema,
   transactionCount: z.number().int().min(0),
-  nextThresholdAmount: IqdAmountSchema.nullable(),
-  amountToNextThreshold: IqdAmountSchema.nullable(),
+});
+
+export type CustomerLifetime = z.infer<typeof CustomerLifetimeSchema>;
+
+/**
+ * Where ONE invoice landed on the ladder. **Exists only where an invoice does.**
+ *
+ * Every field here is a fact about a single invoice amount, so the whole object is
+ * absent rather than half-null when no invoice has been named yet.
+ */
+export const InvoiceOutcomeSchema = z.object({
+  /** The invoice total this was computed from — as the POS recorded it (§0 rule 4). */
+  amountGross: PositiveIqdAmountSchema,
+  /** The bracket this invoice reached, or null when it reached none. */
+  bracketAmount: IqdAmountSchema.nullable(),
+  /** The next bracket up. Null once the top bracket is reached. */
+  nextBracketAmount: IqdAmountSchema.nullable(),
+  /** What this invoice would have needed to reach it. Null with the above. */
+  amountToNextBracket: IqdAmountSchema.nullable(),
+  /** `3٪` or `5,000 د.ع` — what that next bracket pays. */
   nextDiscountLabel: z.string().nullable(),
 });
 
-export type CustomerBalance = z.infer<typeof CustomerBalanceSchema>;
+export type InvoiceOutcome = z.infer<typeof InvoiceOutcomeSchema>;
 
 /* ── The person behind the card ────────────────────────────────────────────── */
 
@@ -183,7 +210,8 @@ export const IdentifyCardResponseSchema = z.object({
   /** The card that was scanned, when this server minted it. */
   scannedCard: ScannedCardSchema.nullable().default(null),
   customer: ScanCustomerSchema.nullable(),
-  balance: CustomerBalanceSchema.nullable(),
+  /** History, not progress: at step 1 there is no invoice to measure against. */
+  lifetime: CustomerLifetimeSchema.nullable(),
   /**
    * The most recent unclaimed capture at this branch, if there is one.
    *
@@ -249,7 +277,9 @@ export const ScanCardResponseSchema = z.object({
   scannedCard: ScannedCardSchema.nullable().default(null),
   customer: ScanCustomerSchema.nullable(),
   transaction: TransactionSchema.nullable(),
-  balance: CustomerBalanceSchema.nullable(),
+  lifetime: CustomerLifetimeSchema.nullable(),
+  /** Present wherever an invoice was named; absent when none was. */
+  invoiceOutcome: InvoiceOutcomeSchema.nullable(),
   /** Present only on QUALIFIED — the issued voucher record. */
   voucher: VoucherSchema.nullable(),
   /**

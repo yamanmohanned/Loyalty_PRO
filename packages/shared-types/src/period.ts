@@ -1,32 +1,35 @@
-import { z } from 'zod';
-import { PeriodTypeSchema, type PeriodType } from './enums';
-
 /**
- * Loyalty period keys.
+ * Local-calendar arithmetic.
  *
- * Decision (confirmed 2026-08-24): a loyalty period is a **fixed calendar window
- * shared by every customer**, and cumulative spend **resets to zero at each
- * boundary**. Everyone on a MONTHLY rule set resets together on the 1st. This is
- * the version a shop owner can explain to a customer in one sentence, and it makes
- * `period_key` a stable, sortable, cacheable string.
+ * ## What this module used to be, and what happened to it
  *
- * Timezone: boundaries are computed in the **merchant's local timezone**, not UTC.
- * A purchase at 01:00 on 1 September in Baghdad is 22:00 on 31 August UTC — computing
- * the key in UTC would file it under the wrong month and silently corrupt the reset.
- * Timestamps are still *stored* in UTC (CLAUDE.md §4.2); only the bucketing is local.
+ * Until v4 this file also owned **period keys** — `computePeriodKey`, `PeriodKey`,
+ * `PeriodKeySchema` and the ISO-week arithmetic behind them — because a discount was
+ * earned by cumulative spend inside a fixed calendar window, and every transaction
+ * carried the key of the window it counted toward.
+ *
+ * v4 decides the discount from the invoice amount alone (CLAUDE_UPDATE_4.md §1.1), so
+ * there is no window for spend to accumulate over. All of that is **deleted, not
+ * deprecated** (§10.6): reporting windows come from `ReportRange`, and a per-customer
+ * figure is now a lifetime total that no calendar bounds.
+ *
+ * ## What survives, and why it had to
+ *
+ * The timezone half. **A day boundary is local, never UTC**, and that is not a
+ * leftover of the period model — it is the fix for a real bug (§12.23). Baghdad is
+ * UTC+3, so a UTC day begins at 03:00 local and a voucher issued before then was being
+ * filed under the previous day. End-of-day reconciliation that disagrees with the cash
+ * drawer by one day of vouchers is worse than no report at all: it sends somebody
+ * looking for a theft that did not happen.
+ *
+ * `voucher.service.ts` depends on `localDayBounds` and `localDateKey` for exactly that.
+ * Deleting this module wholesale along with the period model would have quietly
+ * reopened §12.23.
+ *
+ * Timestamps are still *stored* in UTC (CLAUDE.md §4.2). Only the bucketing is local.
  */
 
 export const DEFAULT_MERCHANT_TIMEZONE = 'Asia/Baghdad';
-
-/** `2026-08` (monthly) · `2026-W35` (weekly) · `custom:2026-08-01..2026-08-31`. */
-export const PeriodKeySchema = z
-  .string()
-  .regex(
-    /^(\d{4}-\d{2}|\d{4}-W\d{2}|custom:\d{4}-\d{2}-\d{2}\.\.\d{4}-\d{2}-\d{2})$/,
-    'صيغة مفتاح الفترة غير صحيحة',
-  );
-
-export type PeriodKey = z.infer<typeof PeriodKeySchema>;
 
 /** The calendar parts of an instant, as seen in a given IANA timezone. */
 interface ZonedParts {
@@ -66,12 +69,6 @@ export function localDateKey(instant: Date, timeZone: string): string {
 
 /**
  * The instant at which a local calendar day begins, and the one at which it ends.
- *
- * The same rule as §13.1, applied to a day instead of a period: **a day boundary is
- * local, never UTC.** Baghdad is UTC+3, so a UTC day begins at 03:00 local and a sale
- * made in the first three hours of a local day is filed under the previous one. Today
- * that error is hidden by opening hours rather than prevented by anything, and it stops
- * being hidden the moment a shop trades late or a merchant is in another timezone.
  *
  * Takes either an instant — "whatever day this moment falls on, locally" — or a local
  * date key, `YYYY-MM-DD`. The second form exists because a caller that has been *given*
@@ -144,62 +141,3 @@ function zoneOffsetMs(instant: Date, timeZone: string): number {
     ) - instant.getTime()
   );
 }
-
-/**
- * ISO-8601 week number and week-year for a calendar date.
- * Weeks start Monday; week 1 is the week containing the first Thursday of the year.
- */
-function isoWeek({ year, month, day }: ZonedParts): { weekYear: number; week: number } {
-  // Work in UTC on a date carrying the *local* calendar parts, so no offset math leaks in.
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const dayOfWeek = date.getUTCDay() || 7; // Sunday 0 -> 7
-  date.setUTCDate(date.getUTCDate() + 4 - dayOfWeek); // shift to the week's Thursday
-  const weekYear = date.getUTCFullYear();
-  const jan1 = new Date(Date.UTC(weekYear, 0, 1));
-  const week = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
-  return { weekYear, week };
-}
-
-export interface PeriodKeyInput {
-  periodType: PeriodType;
-  /** The instant the purchase occurred (stored UTC). */
-  occurredAt: Date;
-  /** IANA zone the merchant trades in. */
-  timeZone?: string;
-  /** Required when `periodType` is CUSTOM — the fixed window's bounds. */
-  customStart?: Date | null;
-  customEnd?: Date | null;
-}
-
-/**
- * Computes the period bucket a transaction belongs to. Pure and deterministic:
- * the same instant always maps to the same key, on the device and on the server —
- * which is what lets the offline assistant app compute a provisional balance.
- */
-export function computePeriodKey(input: PeriodKeyInput): PeriodKey {
-  const timeZone = input.timeZone ?? DEFAULT_MERCHANT_TIMEZONE;
-  const parts = zonedParts(input.occurredAt, timeZone);
-
-  switch (input.periodType) {
-    case 'MONTHLY':
-      return `${parts.year}-${pad2(parts.month)}`;
-
-    case 'WEEKLY': {
-      const { weekYear, week } = isoWeek(parts);
-      return `${weekYear}-W${pad2(week)}`;
-    }
-
-    case 'CUSTOM': {
-      if (!input.customStart || !input.customEnd) {
-        throw new Error('الفترة المخصصة تتطلب تاريخ بداية ونهاية');
-      }
-      const start = zonedParts(input.customStart, timeZone);
-      const end = zonedParts(input.customEnd, timeZone);
-      const fmt = (p: ZonedParts) => `${p.year}-${pad2(p.month)}-${pad2(p.day)}`;
-      return `custom:${fmt(start)}..${fmt(end)}`;
-    }
-  }
-}
-
-/** Narrowing helper for callers holding an unvalidated string. */
-export const parsePeriodType = (value: unknown): PeriodType => PeriodTypeSchema.parse(value);

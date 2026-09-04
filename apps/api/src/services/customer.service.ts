@@ -21,7 +21,6 @@ import { customerAlreadyExists, notFound, validationFailed } from '../lib/errors
 import { looksLikeBarcodeToken } from '../lib/barcode-token';
 import { isUniqueViolation, prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
-import { getPeriodContext, periodKeyFor } from './balance.service';
 import {
   assignCardInTransaction,
   CARD_REJECTION_MESSAGES,
@@ -363,11 +362,6 @@ export async function getCustomerCard(
   };
 }
 
-/** The active period's key, computed in the merchant's timezone (§13.1). */
-async function currentPeriodKeyFor(merchantId: string): Promise<string> {
-  return periodKeyFor(await getPeriodContext(merchantId), new Date());
-}
-
 /* ── The dashboard list (Stitch: الزبائن) ─────────────────────────────────── */
 
 export interface CustomerListRow {
@@ -376,7 +370,7 @@ export interface CustomerListRow {
   phone: string;
   category: string;
   cardNumber: string | null;
-  cumulativeAmount: number;
+  lifetimeSpend: number;
   transactionCount: number;
   createdAt: string;
 }
@@ -421,14 +415,13 @@ export async function listCustomers(
     ...(query.phone ? { phone: { contains: query.phone } } : {}),
   };
 
-  const [total, periodKey] = await Promise.all([
-    prisma.customer.count({ where }),
-    currentPeriodKeyFor(merchantId),
-  ]);
+  const total = await prisma.customer.count({ where });
 
+  // Lifetime, not period — nothing bounds it now (§10.6). It is history shown beside
+  // a customer's name, never an input to what they are offered at the till (§1.4).
   const spend = await prisma.transaction.groupBy({
     by: ['customerId'],
-    where: { merchantId, customerId: { not: null }, periodKey },
+    where: { merchantId, customerId: { not: null } },
     _sum: { amountGross: true },
     _count: { _all: true },
   });
@@ -445,7 +438,7 @@ export async function listCustomers(
   // Name and registration date are real columns, so the database pages them. Spend
   // is not, so that branch ranks in memory and pages the result.
   let customers;
-  if (query.sort === 'cumulativeAmount') {
+  if (query.sort === 'lifetimeSpend') {
     const all = await prisma.customer.findMany({ where, include: { cards: true } });
     const direction = query.order === 'asc' ? 1 : -1;
     customers = all
@@ -477,7 +470,7 @@ export async function listCustomers(
       category: customer.category,
       cardNumber:
         customer.cards.find((card) => card.status === 'ASSIGNED')?.cardNumber ?? null,
-      cumulativeAmount: spendById.get(customer.id)?.amount ?? 0,
+      lifetimeSpend: spendById.get(customer.id)?.amount ?? 0,
       transactionCount: spendById.get(customer.id)?.count ?? 0,
       createdAt: customer.createdAt.toISOString(),
     })),
@@ -500,8 +493,6 @@ export async function exportCustomersCsv(params: {
   merchantId: string;
   actorUserId: string;
 }): Promise<string> {
-  const periodKey = await currentPeriodKeyFor(params.merchantId);
-
   const [customers, spend] = await Promise.all([
     prisma.customer.findMany({
       where: { merchantId: params.merchantId, isActive: true },
@@ -510,7 +501,7 @@ export async function exportCustomersCsv(params: {
     }),
     prisma.transaction.groupBy({
       by: ['customerId'],
-      where: { merchantId: params.merchantId, customerId: { not: null }, periodKey },
+      where: { merchantId: params.merchantId, customerId: { not: null } },
       _sum: { amountGross: true },
     }),
   ]);

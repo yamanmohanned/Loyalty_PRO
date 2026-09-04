@@ -13,12 +13,11 @@ import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { lookupCard } from './card.service';
 import {
-  computeCumulativeAmount,
+  bracketMessage,
   getActiveRules,
-  getPeriodContext,
-  nextThreshold,
-  periodKeyFor,
-} from './balance.service';
+  getCustomerLifetime,
+  invoiceOutcome,
+} from './lifetime.service';
 import { findPendingInvoice } from './ingestion.service';
 import { publish } from './realtime.service';
 import { getSettlementStrategy } from './settlement';
@@ -148,7 +147,7 @@ export async function identifyCard(
       cardRejection: lookup.rejection,
       scannedCard: lookup.card,
       customer: null,
-      balance: null,
+      lifetime: null,
       pendingInvoice: null,
     };
   }
@@ -163,13 +162,13 @@ export async function identifyCard(
       cardRejection: 'INACTIVE_CUSTOMER',
       scannedCard: null,
       customer: null,
-      balance: null,
+      lifetime: null,
       pendingInvoice: null,
     };
   }
 
-  const [balance, pending] = await Promise.all([
-    buildBalance(context.merchantId, customer.id),
+  const [lifetime, pending] = await Promise.all([
+    getCustomerLifetime(customer.id),
     findPendingInvoice(context.merchantId, branchId),
   ]);
 
@@ -178,7 +177,7 @@ export async function identifyCard(
     cardRejection: null,
     scannedCard: null,
     customer: toScanCustomer(customer),
-    balance,
+    lifetime,
     pendingInvoice: pending
       ? {
           invoiceId: pending.invoiceId,
@@ -224,7 +223,8 @@ export async function scanCard(
       scannedCard: lookup.card,
       customer: null,
       transaction: null,
-      balance: null,
+      lifetime: null,
+      invoiceOutcome: null,
       voucher: null,
       slip: null,
       progressMessage: null,
@@ -245,7 +245,8 @@ export async function scanCard(
       scannedCard: null,
       customer: null,
       transaction: null,
-      balance: null,
+      lifetime: null,
+      invoiceOutcome: null,
       voucher: null,
       slip: null,
       progressMessage: null,
@@ -275,7 +276,11 @@ export async function scanCard(
       : null;
 
     if (alreadyAttributed) {
-      const balance = await buildBalance(context.merchantId, customer.id);
+      const [lifetime, rules] = await Promise.all([
+        getCustomerLifetime(customer.id),
+        getActiveRules(context.merchantId),
+      ]);
+      const outcome = invoiceOutcome(rules, alreadyAttributed.amountGross);
       const voucher = alreadyAttributed.vouchers[0];
       return {
         outcome: alreadyAttributed.discountValue > 0 ? 'QUALIFIED' : 'NOT_QUALIFIED',
@@ -283,7 +288,8 @@ export async function scanCard(
         scannedCard: null,
         customer: toScanCustomer(customer),
         transaction: serializeTransaction(alreadyAttributed, alreadyAttributed.branch.code),
-        balance,
+        lifetime,
+        invoiceOutcome: outcome,
         voucher: voucher ? serializeVoucher(voucher) : null,
         // The slip is rebuilt so a station that lost the first response can still
         // print the paper the customer is waiting for. The words come from the
@@ -322,11 +328,11 @@ export async function scanCard(
               }).cashierInstruction,
             })
           : null,
-        progressMessage: alreadyAttributed.discountValue > 0 ? null : progressMessage(balance),
+        progressMessage: alreadyAttributed.discountValue > 0 ? null : bracketMessage(outcome),
       };
     }
 
-    const balance = await buildBalance(context.merchantId, customer.id);
+    const lifetime = await getCustomerLifetime(customer.id);
     return {
       outcome: 'NO_PENDING_INVOICE',
       cardRejection: null,
@@ -338,7 +344,10 @@ export async function scanCard(
         category: customer.category,
       },
       transaction: null,
-      balance,
+      lifetime,
+      // No invoice was named, so there is nothing to place on the ladder. Absent
+      // rather than half-null — that is the whole reason it is its own shape (§10.4).
+      invoiceOutcome: null,
       voucher: null,
       slip: null,
       progressMessage: null,
@@ -352,15 +361,16 @@ export async function scanCard(
   });
   const rules = await getActiveRules(context.merchantId);
 
-  // Cumulative spend INCLUDING this invoice. The customer's standing is what they
-  // have spent by the time they reach the till, this basket included — otherwise
-  // the basket that crosses a threshold would not itself be discounted.
-  const priorTotals = await computeCumulativeAmount(customer.id, pending.periodKey);
-  const cumulativeWithThis = priorTotals.cumulativeAmount + pending.amountGross;
-
+  // ═══ THE v4 CHANGE (§1.1) ═══
+  // The discount comes from this invoice's amount and nothing else. There is no
+  // history lookup here, and there cannot be one: `computeDiscount` no longer has a
+  // parameter to receive it (§12.27's removal corollary).
+  //
+  // The card still decides *whether* a discount is possible — an unattributed capture
+  // never reaches this line — which is what §1.2 means by the card being the entitlement
+  // rather than the calculation.
   const computed = computeDiscount({
     amountGross: pending.amountGross,
-    cumulativeAmount: cumulativeWithThis,
     rules,
     absoluteMaxDiscountValue: settings.absoluteMaxDiscountValue,
     discountTypeSetting: settings.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE',
@@ -461,7 +471,6 @@ export async function scanCard(
             invoiceId: pending.invoiceId,
             amountGross: pending.amountGross,
             amountNet: computation.amountNet,
-            cumulativeAmount: cumulativeWithThis,
             wasCapped: computation.wasCapped,
           },
         },
@@ -497,7 +506,7 @@ export async function scanCard(
   // Another station claimed the invoice first. Report it as nothing pending
   // rather than inventing a second discount on one sale.
   if (!result) {
-    const balance = await buildBalance(context.merchantId, customer.id);
+    const lifetime = await getCustomerLifetime(customer.id);
     return {
       outcome: 'NO_PENDING_INVOICE',
       cardRejection: null,
@@ -509,14 +518,18 @@ export async function scanCard(
         category: customer.category,
       },
       transaction: null,
-      balance,
+      lifetime,
+      // No invoice was named, so there is nothing to place on the ladder. Absent
+      // rather than half-null — that is the whole reason it is its own shape (§10.4).
+      invoiceOutcome: null,
       voucher: null,
       slip: null,
       progressMessage: null,
     };
   }
 
-  const balance = await buildBalance(context.merchantId, customer.id);
+  const lifetime = await getCustomerLifetime(customer.id);
+  const outcome = invoiceOutcome(rules, result.transaction.amountGross);
 
   publish(context.merchantId, {
     type: 'CARD_SCANNED',
@@ -545,7 +558,8 @@ export async function scanCard(
     scannedCard: null,
     customer: toScanCustomer(customer),
     transaction: serializeTransaction(result.transaction, result.transaction.branch.code),
-    balance,
+    lifetime,
+    invoiceOutcome: outcome,
     voucher: result.voucher ? serializeVoucher(result.voucher) : null,
     slip:
       result.voucher && result.narrative
@@ -561,43 +575,7 @@ export async function scanCard(
             cashierInstruction: result.narrative.cashierInstruction,
           })
         : null,
-    progressMessage: computation.discountValue > 0 ? null : progressMessage(balance),
-  };
-}
-
-/**
- * The sentence shown when a customer has not yet qualified.
- *
- * Deliberately forward-looking: it names what is coming, not what was missed.
- * "You are 12,000 away from a 3% discount" invites another basket; "you do not
- * qualify" ends the conversation.
- */
-function progressMessage(balance: {
-  amountToNextThreshold: number | null;
-  nextDiscountLabel: string | null;
-}): string {
-  if (balance.amountToNextThreshold === null || balance.nextDiscountLabel === null) {
-    return 'لقد بلغت أعلى مستوى — شكراً لولائك!';
-  }
-  return `تبقّى ${formatIqd(balance.amountToNextThreshold)} للحصول على خصم ${balance.nextDiscountLabel}`;
-}
-
-async function buildBalance(merchantId: string, customerId: string) {
-  const context = await getPeriodContext(merchantId);
-  const periodKey = periodKeyFor(context, new Date());
-  const [totals, rules] = await Promise.all([
-    computeCumulativeAmount(customerId, periodKey),
-    getActiveRules(merchantId),
-  ]);
-  const gap = nextThreshold(rules, totals.cumulativeAmount);
-
-  return {
-    periodKey,
-    cumulativeAmount: totals.cumulativeAmount,
-    transactionCount: totals.transactionCount,
-    nextThresholdAmount: gap.nextThresholdAmount,
-    amountToNextThreshold: gap.amountToNextThreshold,
-    nextDiscountLabel: gap.nextDiscountLabel,
+    progressMessage: computation.discountValue > 0 ? null : bracketMessage(outcome),
   };
 }
 
@@ -613,7 +591,6 @@ export function serializeTransaction(
     discountValue: number;
     amountNet: number;
     captureMode: string;
-    periodKey: string;
     occurredAt: Date;
     capturedAt: Date;
     linkedAt: Date | null;
@@ -635,7 +612,6 @@ export function serializeTransaction(
     currency: 'IQD' as const,
     captureMode: t.captureMode as
       'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'SERIAL_BRIDGE' | 'NETWORK_PROXY' | 'MANUAL',
-    periodKey: t.periodKey,
     occurredAt: t.occurredAt.toISOString(),
     capturedAt: t.capturedAt.toISOString(),
     linkedAt: t.linkedAt ? t.linkedAt.toISOString() : null,

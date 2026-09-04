@@ -76,7 +76,6 @@ export function DiscountsScreen() {
         minRate: next.minRate,
         maxRate: next.maxRate,
         absoluteMaxDiscountValue: next.absoluteMaxDiscountValue,
-        periodType: next.periodType,
         settlementStrategy: next.settlementStrategy,
       }),
   });
@@ -195,17 +194,6 @@ export function DiscountsScreen() {
                 <option value="PERCENTAGE">{locale.discounts.typePercentage}</option>
                 <option value="FIXED_AMOUNT">{locale.discounts.typeFixed}</option>
                 <option value="NONE">{locale.discounts.typeNone}</option>
-              </Select>
-            </Field>
-
-            <Field label={locale.discounts.periodType}>
-              <Select
-                value={settings.periodType}
-                onChange={(e) => updateSettings({ periodType: e.target.value as DiscountConfigResponse['settings']['periodType'] })}
-              >
-                <option value="WEEKLY">{locale.periodTypes.WEEKLY}</option>
-                <option value="MONTHLY">{locale.periodTypes.MONTHLY}</option>
-                <option value="CUSTOM">{locale.periodTypes.CUSTOM}</option>
               </Select>
             </Field>
 

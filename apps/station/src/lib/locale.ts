@@ -93,7 +93,7 @@ export const locale = {
     cardLabel: 'بطاقة',
     cardTail: (tail: string) => `••••${tail}`,
     changeCustomer: 'تغيير الزبون',
-    periodTotal: 'مشتريات هذه الفترة',
+    lifetimeTotal: 'إجمالي مشترياته معنا',
 
     /**
      * The capture the agent already forwarded, offered by name and amount.
@@ -140,10 +140,19 @@ export const locale = {
     handToCashier: 'سلّم القسيمة إلى الكاشير',
 
     notQualified: 'لم يصل إلى الخصم بعد',
-    /** Progress, never rejection (§6.2 #3). */
-    progress: (remaining: string, reward: string) => `تبقّى ${remaining} للحصول على خصم ${reward}`,
+    /**
+     * A sales prompt, never a rejection (§6.2 #3) — and never an instruction.
+     *
+     * The server composes the sentence (`bracketMessage`), because what it may
+     * promise is a business rule and not a phrasing choice. This is the fallback the
+     * station shows if it ever arrives empty. It names the bracket rather than a
+     * difference: «أضف X لهذه الفاتورة» asked the customer to do something the shop
+     * forbids — the receipt is already printed and the cashier may not change it
+     * (§1.4, corrected 2026-09-04).
+     */
     progressNoRule: 'شكراً لتسوّقك معنا',
-    currentTotal: 'إجمالي مشترياتك هذه الفترة',
+    /** History, not a balance that buys anything (v4 §1.4). */
+    lifetimeTotal: 'إجمالي مشترياتك معنا',
 
     unknownCard: 'بطاقة غير معروفة',
     unknownCardHint: 'هذه البطاقة غير مسجّلة — سجّل الزبون الآن',

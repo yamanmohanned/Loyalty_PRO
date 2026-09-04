@@ -2218,6 +2218,19 @@ Two things worth naming, because neither is obvious:
 hit outside the contract package is a place that has to handle the new one, and the ones
 that compile anyway are exactly the dangerous ones.
 
+**The corollary, for removals rather than additions** *(operator ruling, 2026-09-04,
+during the v4 cumulative removal)*: **when a field changes meaning, DELETE it rather than
+rename it.** A removed parameter is a compile error at every call site; a renamed one is
+silent drift, and every failure catalogued in this section is a shape that stayed
+plausible while it stopped being true. The instance: v4 changes the discount from
+cumulative spend to the current invoice amount, so
+`DiscountComputationInput.cumulativeAmount` is deleted outright rather than renamed to
+`invoiceAmount`. Both spellings are a `number` the caller passes positionally into an
+object literal, so a rename type-checks against a call site still passing a *cumulative*
+figure — and the engine would go on computing discounts from the wrong number, correctly,
+forever. The delete makes every one of those call sites fail to compile in the same
+commit, which is the only mechanism this project has ever found that works.
+
 #### Per-customer discount overrides are DISCARDED BY DESIGN
 
 *(operator ruling, 2026-08-31 — recorded so no future session rebuilds them as a

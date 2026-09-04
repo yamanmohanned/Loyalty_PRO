@@ -9,7 +9,7 @@
 //
 //   2. Money is a whole-dinar Int. Never Float, never Decimal (§5.4).
 //
-//   3. **Cumulative balance is NEVER stored as a number** (§5.3). It is always
+//   3. **Aggregates are NEVER stored as a number** (§5.3). They are always
 //      computed by summing `transaction` rows in the active period. The v1
 //      `balance_snapshot` cache is deliberately gone: a stored aggregate drifts
 //      from the log that produced it, and then silently lies. There is no
@@ -168,7 +168,10 @@ model Customer {
 model DiscountRule {
   id String @id @default(uuid())
   merchantId String @map("merchant_id")
-  /// Cumulative spend in the active period that earns this tier. Whole IQD.
+  /// The invoice amount at which this bracket starts — «قيمة الفاتورة». Whole IQD,
+  /// inclusive: an invoice of exactly this much qualifies. v3 read it as cumulative
+  /// spend across a period; v4 reads it as one invoice's total (§1.4). The column
+  /// keeps its name deliberately — the §12.12 precedent.
   thresholdAmount Int @map("threshold_amount")
   /// PERCENTAGE | FIXED_AMOUNT
   discountType String @map("discount_type")
@@ -206,10 +209,8 @@ model DiscountSettings {
   /// 500,000 IQD basket at 10% gifts away 50,000 IQD on a ~2–4% net margin.
   /// A percentage discount must never ship without it.
   absoluteMaxDiscountValue Int @default(5000) @map("absolute_max_discount_value")
-  /// WEEKLY | MONTHLY | CUSTOM — the window cumulative spend accumulates over.
-  periodType String @default("MONTHLY") @map("period_type")
-  periodStart DateTime? @map("period_start")
-  periodEnd DateTime? @map("period_end")
+  /// v4 removed `period_type` / `period_start` / `period_end`: nothing accumulates,
+  /// so there is no window to configure (CLAUDE_UPDATE_4.md §1.3, §10.6).
   /// MERCHANT_DEFINED | VOUCHER_AS_PAYMENT | DAILY_PROMOTIONAL_EXPENSE (§9, closed).
   /// Chooses the wording of the cashier instruction printed on the slip, nothing else.
   /// Defaults to the strategy that states the figures and presumes no procedure; a
@@ -263,11 +264,9 @@ model Transaction {
 
   /// SPOOL_WATCH | VIRTUAL_PRINTER | SERIAL_BRIDGE | NETWORK_PROXY | MANUAL
   captureMode String @map("capture_mode")
-  /// The period this spend counts toward, computed in the merchant's timezone at
-  /// write time. Not in §5.2's field list; added so the balance derivation in §5.3
-  /// is an indexed equality lookup rather than a date-range scan. It is derived
-  /// data, never authoritative — recomputable from occurredAt at any time.
-  periodKey String @map("period_key")
+  /// v4 removed `period_key`. It existed to make "cumulative spend for one customer
+  /// in the active period" an indexed equality lookup, and that question no longer
+  /// exists: the discount comes from `amountGross` alone (§1.1, §10.6).
 
   /// When the POS printed it.
   occurredAt DateTime @map("occurred_at")
@@ -296,8 +295,6 @@ model Transaction {
   @@unique([merchantId, branchId, invoiceId])
   @@index([branchId, invoiceId])
   @@index([customerId])
-  /// Hot path: cumulative spend for one customer in the active period (§5.3).
-  @@index([customerId, periodKey])
   @@index([merchantId, occurredAt])
   /// Unattributed invoices awaiting a card scan.
   @@index([merchantId, customerId, capturedAt])

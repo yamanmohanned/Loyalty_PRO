@@ -1,6 +1,7 @@
 import type { OverviewReport, ProgrammeReport, ReportRange } from '@walaa/shared-types';
 import { prisma } from '../lib/prisma';
-import { getActiveRules, getPeriodContext, periodKeyFor } from './balance.service';
+import { describeReward, getActiveRules } from './lifetime.service';
+import { prisma as db } from '../lib/prisma';
 import { reconcileDay } from './voucher.service';
 
 /**
@@ -22,24 +23,6 @@ import { reconcileDay } from './voucher.service';
 // carry its own copy of each, and a copy agrees with the server right up until it
 // does not (§12.27). Re-exported so existing importers of this module keep working.
 export type { OverviewReport, ProgrammeReport, ReportRange };
-
-/**
- * The active period's key for this merchant.
- *
- * Computed through `getPeriodContext` rather than from a UTC clock: a purchase at
- * 01:00 in Baghdad belongs to the local day, and bucketing it in UTC files it under
- * the previous period (§13.1, and the reconciliation bug §12.23 found).
- */
-async function currentPeriodKey(merchantId: string): Promise<string> {
-  return periodKeyFor(await getPeriodContext(merchantId), new Date());
-}
-
-/** How a tier's reward reads on a chart axis: `3٪` or `7,500 د.ع`. */
-function describeTier(rule: { discountType: string; discountRate: number }): string {
-  return rule.discountType === 'PERCENTAGE'
-    ? `${rule.discountRate}٪`
-    : `${rule.discountRate.toLocaleString('en-US')} د.ع`;
-}
 
 const RANGE_DAYS: Record<ReportRange, number> = { '7d': 7, '30d': 30, '90d': 90, '365d': 365 };
 
@@ -66,8 +49,10 @@ export async function getOverview(
   range: ReportRange = '30d',
 ): Promise<OverviewReport> {
   const from = since(range);
-  const context = await getPeriodContext(merchantId);
-  const currentPeriodKey = periodKeyFor(context, new Date());
+  const merchant = await prisma.merchant.findUniqueOrThrow({
+    where: { id: merchantId },
+    select: { timezone: true },
+  });
 
   const [totalCustomers, newCustomers, inRange, recent] = await Promise.all([
     prisma.customer.count({ where: { merchantId } }),
@@ -98,7 +83,7 @@ export async function getOverview(
   // zone as the single source of truth rather than the database server's.
   const buckets = new Map<string, { amount: number; count: number; attributed: number }>();
   for (const t of inRange) {
-    const day = localDay(t.occurredAt, context.timezone);
+    const day = localDay(t.occurredAt, merchant.timezone);
     const bucket = buckets.get(day) ?? { amount: 0, count: 0, attributed: 0 };
     bucket.amount += t.amountGross;
     bucket.count += 1;
@@ -110,30 +95,35 @@ export async function getOverview(
     .map(([date, v]) => ({ date, ...v }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Top spenders in the current period, computed from the log — there is no
-  // snapshot cache to read (§5.3).
-  const periodRows = await prisma.transaction.groupBy({
-    by: ['customerId'],
-    where: { merchantId, periodKey: currentPeriodKey, customerId: { not: null } },
-    _sum: { amountGross: true },
-    _count: true,
-  });
+  // Top spenders **over the selected range**. v3 ranked within the active period;
+  // there is no period now, and the range control the manager already has is the
+  // honest window to rank inside (§10.6).
+  //
+  // Tallied from `inRange`, which is already loaded — one query rather than two, and
+  // it cannot disagree with the totals above it because it is the same rows.
+  const spendByCustomer = new Map<string, { amount: number; count: number }>();
+  for (const t of inRange) {
+    if (!t.customerId) continue;
+    const entry = spendByCustomer.get(t.customerId) ?? { amount: 0, count: 0 };
+    entry.amount += t.amountGross;
+    entry.count += 1;
+    spendByCustomer.set(t.customerId, entry);
+  }
 
-  const ranked = periodRows
-    .filter((r) => r.customerId !== null)
-    .sort((a, b) => (b._sum.amountGross ?? 0) - (a._sum.amountGross ?? 0))
+  const ranked = [...spendByCustomer.entries()]
+    .sort((a, b) => b[1].amount - a[1].amount)
     .slice(0, 5);
 
   const topCustomerRows = ranked.length
     ? await prisma.customer.findMany({
-        where: { id: { in: ranked.map((r) => r.customerId as string) } },
+        where: { id: { in: ranked.map(([id]) => id) } },
         select: { id: true, name: true, phone: true, category: true },
       })
     : [];
 
   const byId = new Map(topCustomerRows.map((c) => [c.id, c]));
-  const topCustomers = ranked.flatMap((r) => {
-    const customer = byId.get(r.customerId as string);
+  const topCustomers = ranked.flatMap(([id, totals]) => {
+    const customer = byId.get(id);
     if (!customer) return [];
     return [
       {
@@ -141,8 +131,8 @@ export async function getOverview(
         name: customer.name,
         phone: customer.phone,
         category: customer.category,
-        cumulativeAmount: r._sum.amountGross ?? 0,
-        transactionCount: r._count,
+        spendInRange: totals.amount,
+        transactionCount: totals.count,
       },
     ];
   });
@@ -156,7 +146,6 @@ export async function getOverview(
     capturedSales,
     discountsGranted,
     averageBasket: inRange.length > 0 ? Math.round(capturedSales / inRange.length) : 0,
-    currentPeriodKey,
     timeseries,
     topCustomers,
     recentTransactions: recent.map((t) => ({
@@ -178,7 +167,7 @@ export async function getProgrammeReport(
 ): Promise<ProgrammeReport> {
   const from = since(range);
 
-  const [transactions, vouchers, reconciliation, categoryGroups, rules, periodSpend] =
+  const [transactions, vouchers, reconciliation, categoryGroups, rules] =
     await Promise.all([
       prisma.transaction.findMany({
         where: { merchantId, occurredAt: { gte: from } },
@@ -198,13 +187,6 @@ export async function getProgrammeReport(
         _count: { _all: true },
       }),
       getActiveRules(merchantId),
-      // Cumulative spend per customer in the ACTIVE period — the same derivation the
-      // till uses (§5.3), grouped rather than looped so a year of rows is one query.
-      prisma.transaction.groupBy({
-        by: ['customerId'],
-        where: { merchantId, customerId: { not: null }, periodKey: await currentPeriodKey(merchantId) },
-        _sum: { amountGross: true },
-      }),
     ]);
 
   const redeemed = vouchers.filter((v) => v.status === 'REDEEMED');
@@ -247,12 +229,120 @@ export async function getProgrammeReport(
       category: row.category,
       count: row._count._all,
     })),
-    tierPerformance: rules.map((rule) => ({
-      thresholdAmount: rule.thresholdAmount,
-      discountLabel: describeTier(rule),
-      reached: periodSpend.filter((row) => (row._sum.amountGross ?? 0) >= rule.thresholdAmount)
-        .length,
-    })),
+    bracketPerformance: bracketPerformance(rules, transactions),
+    discountByCustomer: await discountByCustomer(merchantId, from),
     todayReconciliation: reconciliation,
   };
+}
+
+/**
+ * How many attributed invoices landed in each bracket over the range (v4 §10.6).
+ *
+ * **Each invoice counts in exactly ONE bracket — the highest it reached.** v3 counted
+ * a customer toward every threshold at or below their cumulative spend, which was
+ * right when a tier was a level a person climbed to. It is wrong here: counting one
+ * invoice in every bracket it clears makes the columns sum to more than the number of
+ * sales and inflates the lower brackets, which are the ones a manager is deciding
+ * about.
+ *
+ * **Attributed invoices only.** An unattributed capture earned nothing — no card, no
+ * entitlement (§1.2) — so counting it here would describe discounts that were never
+ * given. The gap between this and `capturedInvoices` is the enrolment story, and it is
+ * already told by `attributionRatePct`.
+ *
+ * A bracket with no invoices returns zero rather than being omitted: the gap has to be
+ * visible as a gap, which is §12.33's rule and the reason the row keeps its label.
+ */
+function bracketPerformance(
+  rules: Array<{
+    thresholdAmount: number;
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+    discountRate: number;
+  }>,
+  transactions: Array<{ amountGross: number; customerId: string | null }>,
+): Array<{ thresholdAmount: number; discountLabel: string; invoiceCount: number }> {
+  const ascending = [...rules].sort((a, b) => a.thresholdAmount - b.thresholdAmount);
+  const counts = new Map<number, number>(ascending.map((r) => [r.thresholdAmount, 0]));
+
+  for (const t of transactions) {
+    if (t.customerId === null) continue;
+    // Inclusive and highest-wins, matching `computeDiscount` exactly. If these two
+    // ever disagreed the chart would report a bracket the till did not pay.
+    const reached = ascending.filter((r) => t.amountGross >= r.thresholdAmount).pop();
+    if (reached) counts.set(reached.thresholdAmount, (counts.get(reached.thresholdAmount) ?? 0) + 1);
+  }
+
+  return ascending.map((rule) => ({
+    thresholdAmount: rule.thresholdAmount,
+    discountLabel: describeReward(rule),
+    invoiceCount: counts.get(rule.thresholdAmount) ?? 0,
+  }));
+}
+
+/**
+ * Discount value taken per customer over the range (v4 §10.5).
+ *
+ * **This exists because removing accumulation removed a bound nobody had designed.**
+ * Under v3 a customer climbed the ladder once per period; under v4 every invoice is
+ * judged alone, so a wholesale buyer at 480,000 a day takes the ceiling every day.
+ * Every guardrail in §2.3 bounds a single invoice and none of them bounds a customer.
+ *
+ * The mitigation is visibility, not a rule. A frequency cap would be a discount-model
+ * decision with its own guardrails, and building one here — where the reporting lives
+ * — is exactly how a second ladder would arrive by accident (§12.27).
+ *
+ * Ten rows: this answers "is anyone taking an unusual share", which the top of the
+ * list settles. `discountValue` is summed in JavaScript for the §13.5 reason — the
+ * per-row Int32 bound does not cover an aggregate, and this stays exact to 2^53.
+ */
+async function discountByCustomer(
+  merchantId: string,
+  from: Date,
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    phone: string;
+    discountValue: number;
+    discountedInvoiceCount: number;
+  }>
+> {
+  const grouped = await db.transaction.groupBy({
+    by: ['customerId'],
+    where: {
+      merchantId,
+      occurredAt: { gte: from },
+      customerId: { not: null },
+      discountValue: { gt: 0 },
+    },
+    _sum: { discountValue: true },
+    _count: { _all: true },
+  });
+
+  const ranked = grouped
+    .filter((row) => row.customerId !== null)
+    .sort((a, b) => (b._sum.discountValue ?? 0) - (a._sum.discountValue ?? 0))
+    .slice(0, 10);
+
+  if (ranked.length === 0) return [];
+
+  const customers = await db.customer.findMany({
+    where: { id: { in: ranked.map((row) => row.customerId as string) } },
+    select: { id: true, name: true, phone: true },
+  });
+  const byId = new Map(customers.map((c) => [c.id, c]));
+
+  return ranked.flatMap((row) => {
+    const customer = byId.get(row.customerId as string);
+    if (!customer) return [];
+    return [
+      {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        discountValue: row._sum.discountValue ?? 0,
+        discountedInvoiceCount: row._count._all,
+      },
+    ];
+  });
 }

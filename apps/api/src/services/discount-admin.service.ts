@@ -52,9 +52,6 @@ function serializeSettings(row: {
   minRate: number;
   maxRate: number;
   absoluteMaxDiscountValue: number;
-  periodType: string;
-  periodStart: Date | null;
-  periodEnd: Date | null;
   settlementStrategy: string;
 }): DiscountSettings {
   return {
@@ -62,9 +59,6 @@ function serializeSettings(row: {
     minRate: row.minRate,
     maxRate: row.maxRate,
     absoluteMaxDiscountValue: row.absoluteMaxDiscountValue,
-    periodType: row.periodType as DiscountSettings['periodType'],
-    periodStart: row.periodStart ? row.periodStart.toISOString() : null,
-    periodEnd: row.periodEnd ? row.periodEnd.toISOString() : null,
     settlementStrategy: row.settlementStrategy as DiscountSettings['settlementStrategy'],
   };
 }
@@ -129,9 +123,6 @@ export async function updateDiscountSettings(
         minRate: request.minRate,
         maxRate: request.maxRate,
         absoluteMaxDiscountValue: request.absoluteMaxDiscountValue,
-        periodType: request.periodType,
-        periodStart: request.periodStart ? new Date(request.periodStart) : null,
-        periodEnd: request.periodEnd ? new Date(request.periodEnd) : null,
         settlementStrategy: request.settlementStrategy,
       },
     });

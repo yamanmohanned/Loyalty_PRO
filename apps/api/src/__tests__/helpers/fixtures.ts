@@ -1,6 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
 import {
-  computePeriodKey,
   validateRulesAgainstSettings,
   type DiscountRuleInput,
 } from '@walaa/shared-types';
@@ -54,7 +53,7 @@ export const ABSOLUTE_MAX_DISCOUNT = 5_000;
 
 export async function createWorld(
   prisma: PrismaClient,
-  options?: { periodType?: 'WEEKLY' | 'MONTHLY' | 'CUSTOM'; timezone?: string },
+  options?: { timezone?: string },
 ): Promise<World> {
   const merchant = await prisma.merchant.create({
     data: {
@@ -123,7 +122,6 @@ export async function createWorld(
       minRate: 1,
       maxRate: 3,
       absoluteMaxDiscountValue: ABSOLUTE_MAX_DISCOUNT,
-      periodType: options?.periodType ?? 'MONTHLY',
       settlementStrategy: 'VOUCHER_AS_PAYMENT',
     },
   });
@@ -213,13 +211,8 @@ export async function createTransaction(
     branchId?: string;
     timezone?: string;
   },
-): Promise<{ id: string; periodKey: string }> {
+): Promise<{ id: string }> {
   const occurredAt = params.occurredAt ?? new Date();
-  const periodKey = computePeriodKey({
-    periodType: 'MONTHLY',
-    occurredAt,
-    timeZone: params.timezone ?? 'Asia/Baghdad',
-  });
 
   const customerId = params.customerId === undefined ? world.customerId : params.customerId;
 
@@ -236,7 +229,6 @@ export async function createTransaction(
       amountNet: params.amountGross,
       currency: 'IQD',
       captureMode: params.captureMode ?? 'SPOOL_WATCH',
-      periodKey,
       occurredAt,
       capturedAt: occurredAt,
       linkedAt: customerId ? occurredAt : null,
@@ -244,7 +236,7 @@ export async function createTransaction(
     },
   });
 
-  return { id: created.id, periodKey };
+  return { id: created.id };
 }
 
 /** A captured-invoice payload as the Print Capture Agent would send it. */

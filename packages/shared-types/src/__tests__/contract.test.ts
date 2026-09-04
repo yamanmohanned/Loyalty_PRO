@@ -3,7 +3,8 @@ import {
   CapturedInvoiceSchema,
   IqdAmountSchema,
   UpdateDiscountRulesRequestSchema,
-  computePeriodKey,
+  localDateKey,
+  localDayBounds,
   formatIqd,
   formatPhoneLocal,
   isInPathCaptureMode,
@@ -59,28 +60,43 @@ describe('phone normalization', () => {
   });
 });
 
-describe('period keys', () => {
+describe('local day boundaries (§12.23)', () => {
   const timeZone = 'Asia/Baghdad';
 
-  it('buckets by calendar month in the merchant timezone', () => {
-    expect(
-      computePeriodKey({ periodType: 'MONTHLY', occurredAt: new Date('2026-08-24T10:42:00Z'), timeZone }),
-    ).toBe('2026-08');
+  /**
+   * The period-key tests that used to live here are gone with the model (v4 §10.6).
+   * What they were really protecting was the timezone property, and that property
+   * still governs end-of-day voucher reconciliation — so it is still under test,
+   * pointed at the function that still uses it.
+   */
+
+  it('starts a day at LOCAL midnight, not UTC midnight', () => {
+    // Baghdad is UTC+3, so 1 September begins at 21:00 UTC on 31 August.
+    const { start } = localDayBounds('2026-09-01', timeZone);
+    expect(start.toISOString()).toBe('2026-08-31T21:00:00.000Z');
   });
 
-  it('files a late-night sale under the LOCAL month, not the UTC one', () => {
+  it('files a late-night sale under the LOCAL day, not the UTC one', () => {
     // 22:00 UTC on 31 August is already 01:00 on 1 September in Baghdad. Bucketing
-    // in UTC would credit the spend to the wrong period and break the reset.
-    expect(
-      computePeriodKey({ periodType: 'MONTHLY', occurredAt: new Date('2026-08-31T22:00:00Z'), timeZone }),
-    ).toBe('2026-09');
+    // it in UTC files a voucher under the previous day, and a reconciliation report
+    // that disagrees with the drawer by a day of vouchers sends somebody looking
+    // for a theft that did not happen.
+    expect(localDateKey(new Date('2026-08-31T22:00:00Z'), timeZone)).toBe('2026-09-01');
+  });
+
+  it('spans exactly 24 hours in a zone with no DST', () => {
+    const { start, end } = localDayBounds('2026-09-01', timeZone);
+    expect(end.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000);
+  });
+
+  it('rolls over a month end', () => {
+    const { end } = localDayBounds('2026-01-31', timeZone);
+    expect(localDateKey(end, timeZone)).toBe('2026-02-01');
   });
 
   it('is deterministic — station and server must agree', () => {
     const at = new Date('2026-08-24T10:42:00Z');
-    expect(computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone })).toBe(
-      computePeriodKey({ periodType: 'MONTHLY', occurredAt: at, timeZone }),
-    );
+    expect(localDateKey(at, timeZone)).toBe(localDateKey(at, timeZone));
   });
 });
 

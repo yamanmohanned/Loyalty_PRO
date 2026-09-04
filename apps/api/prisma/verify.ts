@@ -12,7 +12,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { computeDiscount, computePeriodKey, formatIqd, formatPhoneLocal } from '@walaa/shared-types';
+import { computeDiscount, formatIqd, formatPhoneLocal } from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
 import { applySqlitePragmas } from '../src/lib/prisma';
 
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `\n  قواعد الخصم (${settings.periodType})  ` +
+    `\n  قواعد الخصم  ` +
       rules
         .map((r) =>
           r.discountType === 'PERCENTAGE'
@@ -67,14 +67,7 @@ async function main(): Promise<void> {
   console.log(`  الحد الأقصى المطلق للخصم  ${formatIqd(settings.absoluteMaxDiscountValue)}`);
   console.log(`  استراتيجية التسوية        ${settings.settlementStrategy}`);
 
-  const currentPeriod = computePeriodKey({
-    periodType: settings.periodType as 'WEEKLY' | 'MONTHLY' | 'CUSTOM',
-    occurredAt: new Date(),
-    timeZone: merchant.timezone,
-    customStart: settings.periodStart,
-    customEnd: settings.periodEnd,
-  });
-  console.log(`  الفترة الحالية            ${currentPeriod}\n`);
+  console.log('');
 
   /* ── Derived balances ─────────────────────────────────────────────────────── */
 
@@ -89,15 +82,15 @@ async function main(): Promise<void> {
   for (const c of customers) {
     // §5.3: computed on demand from the log. There is no stored total to read.
     const totals = await prisma.transaction.aggregate({
-      where: { customerId: c.id, periodKey: currentPeriod },
+      where: { customerId: c.id },
       _sum: { amountGross: true },
       _count: true,
     });
-    const cumulative = totals._sum.amountGross ?? 0;
+    const lifetime = totals._sum.amountGross ?? 0;
 
     console.log(
       `  ${c.name.padEnd(20)}  ${formatPhoneLocal(c.phone).padEnd(15)}  ` +
-        `${c.category.padEnd(10)}  ${(cumulative ? formatIqd(cumulative) : '—').padStart(15)}   ${String(totals._count).padStart(3)}`,
+        `${c.category.padEnd(10)}  ${(lifetime ? formatIqd(lifetime) : '—').padStart(15)}   ${String(totals._count).padStart(3)}`,
     );
   }
 
@@ -125,20 +118,20 @@ async function main(): Promise<void> {
     check(`جدول ${expected} موجود`, tableNames.includes(expected));
   }
 
-  // 4. The derived balance must equal a hand-summed total.
+  // 4. The derived lifetime total must equal a hand-summed total.
   const sample = customers.find((c) => c.name === 'زينب عبد الرزاق');
   if (sample) {
     const rows = await prisma.transaction.findMany({
-      where: { customerId: sample.id, periodKey: currentPeriod },
+      where: { customerId: sample.id },
       select: { amountGross: true },
     });
     const byHand = rows.reduce((sum, r) => sum + r.amountGross, 0);
     const aggregated = await prisma.transaction.aggregate({
-      where: { customerId: sample.id, periodKey: currentPeriod },
+      where: { customerId: sample.id },
       _sum: { amountGross: true },
     });
     check(
-      'الرصيد المحسوب يطابق الجمع اليدوي للعمليات',
+      'الإجمالي المحسوب يطابق الجمع اليدوي للعمليات',
       byHand === (aggregated._sum.amountGross ?? 0),
       `[${formatIqd(byHand)}]`,
     );
@@ -174,7 +167,6 @@ async function main(): Promise<void> {
         amountNet: 1_000,
         currency: 'IQD',
         captureMode: 'SPOOL_WATCH',
-        periodKey: existing.periodKey,
         occurredAt: new Date(),
         capturedAt: new Date(),
       },
@@ -231,7 +223,6 @@ async function main(): Promise<void> {
   }));
   const huge = computeDiscount({
     amountGross: 5_000_000,
-    cumulativeAmount: 5_000_000,
     rules: activeRules,
     absoluteMaxDiscountValue: settings.absoluteMaxDiscountValue,
     discountTypeSetting: settings.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE',

@@ -181,7 +181,7 @@ export function OverviewScreen() {
                         {c.transactionCount} {locale.overview.kpiCaptured}
                       </p>
                     </div>
-                    <Money value={c.cumulativeAmount} />
+                    <Money value={c.spendInRange} />
                   </Link>
                 </li>
               ))}

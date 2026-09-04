@@ -22,7 +22,7 @@ import {
 import {
   looksLikeCardNumber,
   parseReceipt,
-  type CustomerBalance,
+  type CustomerLifetime,
   type IdentifyCardResponse,
   type PendingInvoice,
   type ScanCardResponse,
@@ -74,7 +74,7 @@ interface Identity {
   /** The exact digits scanned, replayed to `/scan/card` in step 2. */
   cardToken: string;
   customer: ScanCustomer;
-  balance: CustomerBalance | null;
+  lifetime: CustomerLifetime | null;
   pendingInvoice: PendingInvoice | null;
 }
 
@@ -159,7 +159,7 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
           identity: {
             cardToken: scanned,
             customer: response.customer,
-            balance: response.balance,
+            lifetime: response.lifetime,
             pendingInvoice: response.pendingInvoice,
           },
           hint: null,
@@ -438,10 +438,13 @@ function IdentityBanner({
         ) : null}
       </div>
 
-      {identity.balance ? (
+      {identity.lifetime ? (
         <div className="text-start">
-          <p className="text-sm text-steel">{locale.flow.periodTotal}</p>
-          <p className="amount text-lg text-ink">{money(identity.balance.cumulativeAmount)}</p>
+          {/* History, shown so the operator can see they have the right person — not
+              progress toward anything. At this step no invoice has been named, so
+              there is nothing to measure a gap against (§10.4). */}
+          <p className="text-sm text-steel">{locale.flow.lifetimeTotal}</p>
+          <p className="amount text-lg text-ink">{money(identity.lifetime.totalSpend)}</p>
         </div>
       ) : null}
 
@@ -829,10 +832,10 @@ function ResultView({
         <p className="text-2xl font-bold">{locale.outcome.progressNoRule}</p>
       )}
 
-      {response.balance ? (
+      {response.lifetime ? (
         <div className="rounded-md bg-canvas p-4">
-          <p className="text-base text-steel">{locale.outcome.currentTotal}</p>
-          <Money value={money(response.balance.cumulativeAmount)} />
+          <p className="text-base text-steel">{locale.outcome.lifetimeTotal}</p>
+          <Money value={money(response.lifetime.totalSpend)} />
         </div>
       ) : null}
 

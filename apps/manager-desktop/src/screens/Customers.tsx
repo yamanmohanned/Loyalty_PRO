@@ -5,7 +5,7 @@ import { ArrowRight, Download, Search, Users } from 'lucide-react';
 import {
   formatCardNumber,
   type Customer,
-  type CustomerBalance,
+  type CustomerLifetime,
   type CustomerListResponse,
   type DiscountConfigResponse,
 } from '@walaa/shared-types';
@@ -22,7 +22,6 @@ import {
   Money,
   Notice,
   Select,
-  cn,
   PageHeader,
   SkeletonTable,
 } from '../components/ui';
@@ -46,7 +45,7 @@ import {
 export function CustomersScreen() {
   const [phone, setPhone] = useState('');
   const [category, setCategory] = useState<'' | 'REGULAR' | 'WHOLESALE' | 'VIP'>('');
-  const [sort, setSort] = useState<'createdAt' | 'cumulativeAmount' | 'name'>('createdAt');
+  const [sort, setSort] = useState<'createdAt' | 'lifetimeSpend' | 'name'>('createdAt');
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -149,7 +148,7 @@ export function CustomersScreen() {
           <Field label={locale.customers.sortLabel} className="w-48">
             <Select value={sort} onChange={(e) => reset(setSort)(e.target.value as typeof sort)}>
               <option value="createdAt">{locale.customers.sortNewest}</option>
-              <option value="cumulativeAmount">{locale.customers.sortSpend}</option>
+              <option value="lifetimeSpend">{locale.customers.sortSpend}</option>
               <option value="name">{locale.customers.sortName}</option>
             </Select>
           </Field>
@@ -203,7 +202,7 @@ export function CustomersScreen() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <Money value={customer.cumulativeAmount} />
+                        <Money value={customer.lifetimeSpend} />
                         <span className="block text-sm text-steel">
                           {customer.transactionCount} {locale.customer.invoices}
                         </span>
@@ -279,7 +278,7 @@ export function CustomerDetailScreen() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<{ customer: Customer; balance: CustomerBalance }>(`/customers/${id}`),
+    queryFn: () => api.get<{ customer: Customer; balance: CustomerLifetime }>(`/customers/${id}`),
     enabled: Boolean(id),
   });
 
@@ -321,20 +320,14 @@ export function CustomerDetailScreen() {
       <div className="mb-6 grid grid-cols-[1.6fr_1fr] gap-6">
         <Card className="p-6">
           <p className="text-sm text-steel">{locale.customer.balanceThisPeriod}</p>
-          <Money value={balance.cumulativeAmount} className="mt-2 text-3xl" />
-          <p className="mt-1 text-xs text-steel">
-            {locale.customer.derivedNote} · {balance.periodKey}
-          </p>
+          <Money value={balance.totalSpend} className="mt-2 text-3xl" />
+          <p className="mt-1 text-xs text-steel">{locale.customer.derivedNote}</p>
 
+          {/* v3 showed the gap to this customer's next tier here. There is no such
+              gap now: a bracket belongs to an invoice, not to a person, so the only
+              honest thing to say is that the ladder applies per invoice (§10.4). */}
           <div className="mt-4">
-            {balance.amountToNextThreshold !== null && balance.nextDiscountLabel ? (
-              <Notice tone="accent">
-                تبقّى <Money value={balance.amountToNextThreshold} className="text-accent" />{' '}
-                {locale.customer.toNextTier} {balance.nextDiscountLabel}
-              </Notice>
-            ) : (
-              <Notice tone="accent">{locale.customer.allTiersReached}</Notice>
-            )}
+            <Notice tone="accent">{locale.customer.perInvoiceNote}</Notice>
           </div>
         </Card>
 
@@ -400,49 +393,27 @@ export function CustomerDetailScreen() {
             <>
               {[...rules.data.rules]
                 .sort((a, b) => a.thresholdAmount - b.thresholdAmount)
-                .map((rule) => {
-                  // The tier they are actually on: the highest threshold their
-                  // period spend has cleared. Derived here from the same balance the
-                  // till uses, never a stored tier (§5.3).
-                  const cleared = balance.cumulativeAmount >= rule.thresholdAmount;
-                  const highest =
-                    cleared &&
-                    !rules.data.rules.some(
-                      (other) =>
-                        other.thresholdAmount > rule.thresholdAmount &&
-                        balance.cumulativeAmount >= other.thresholdAmount,
-                    );
-                  return (
-                    <div
-                      key={rule.thresholdAmount}
-                      className={cn(
-                        'flex items-center justify-between gap-4 rounded-md px-4 py-3',
-                        highest ? 'bg-accent-tint' : 'bg-canvas',
-                      )}
-                    >
-                      <span className="flex items-center gap-3 text-base">
-                        <Money value={rule.thresholdAmount} className="text-base" />
-                        <span className="text-accent">
-                          {rule.discountType === 'PERCENTAGE'
-                            ? `${rule.discountRate}٪`
-                            : `${rule.discountRate.toLocaleString('en-US')} د.ع`}
-                        </span>
+                .map((rule) => (
+                  // No row is highlighted, and that is the v4 change rather than an
+                  // omission. Under v3 a customer sat on a tier, because the tier was
+                  // reached by their accumulated spend. A bracket is now a property of
+                  // an invoice, so there is no tier this person is "on" — every one of
+                  // these applies to them, on whichever invoice reaches it (§1.1).
+                  <div
+                    key={rule.thresholdAmount}
+                    className="flex items-center justify-between gap-4 rounded-md bg-canvas px-4 py-3"
+                  >
+                    <span className="flex items-center gap-3 text-base">
+                      <Money value={rule.thresholdAmount} className="text-base" />
+                      <span className="text-accent">
+                        {rule.discountType === 'PERCENTAGE'
+                          ? `${rule.discountRate}٪`
+                          : `${rule.discountRate.toLocaleString('en-US')} د.ع`}
                       </span>
-                      {highest ? (
-                        <Chip tone="accent">{locale.appliedRules.current}</Chip>
-                      ) : cleared ? null : (
-                        <span className="text-sm text-steel">
-                          {locale.customer.toNextTier}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-
-              {balance.cumulativeAmount <
-              Math.min(...rules.data.rules.map((rule) => rule.thresholdAmount)) ? (
-                <p className="pt-2 text-base text-steel">{locale.appliedRules.none}</p>
-              ) : null}
+                    </span>
+                    <span className="text-sm text-steel">{locale.appliedRules.perInvoice}</span>
+                  </div>
+                ))}
 
               {/* The last line of defence gets said on the screen too (§2.3). */}
               {rules.data.settings ? (

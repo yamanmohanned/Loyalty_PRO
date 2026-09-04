@@ -125,20 +125,31 @@ describe('scan attribution and threshold evaluation', () => {
     expect(stored.linkedAt).not.toBeNull();
   });
 
-  it('shows progress rather than rejection when below the threshold', async () => {
+  it('names the bracket rather than rejecting, and instructs nothing', async () => {
     await capture('INV-1', 10_000);
     const result = await scan();
 
     expect(result.outcome).toBe('NOT_QUALIFIED');
     expect(result.voucher).toBeNull();
-    // Framed as a sales prompt: what the next basket earns, not what was missed.
-    expect(result.progressMessage).toContain('تبقّى');
-    expect(result.progressMessage).toContain('15,000');
+
+    // A sales prompt: what an invoice needs to be, not what this one missed. It
+    // states the bracket itself (25,000), not the difference — the v3 message said
+    // «تبقّى 15,000» and the v4 draft said «أضف 15,000 لهذه الفاتورة», which asked
+    // the customer to do something the shop forbids: the receipt is already printed
+    // and cashiers may not modify an invoice (§1.4, corrected 2026-09-04).
+    expect(result.progressMessage).toContain('25,000');
+    expect(result.progressMessage).toContain('2٪');
+    expect(result.progressMessage).not.toContain('أضف');
+    expect(result.progressMessage).not.toContain('تبقّى');
+
+    expect(result.invoiceOutcome?.bracketAmount).toBeNull();
+    expect(result.invoiceOutcome?.nextBracketAmount).toBe(25_000);
+    expect(result.invoiceOutcome?.amountToNextBracket).toBe(15_000);
   });
 
-  it('grants a discount on the basket that crosses the threshold', async () => {
-    // 25,000 is the first threshold at 2%. The crossing basket is itself discounted
-    // — the customer's standing includes what they are buying right now.
+  it('grants at exactly the bracket amount — the boundary is inclusive', async () => {
+    // 25,000 is the first bracket at 2%. A customer told "spend 25,000 for 2%" who
+    // hands over exactly 25,000 must not be refused on an off-by-one.
     await capture('INV-1', 25_000);
     const result = await scan();
 
@@ -148,19 +159,39 @@ describe('scan attribution and threshold evaluation', () => {
     expect(result.voucher?.value).toBe(500);
   });
 
-  it('counts prior spend in the period toward the threshold', async () => {
+  it('IGNORES prior spend — history buys nothing (v4 §1.1)', async () => {
+    // The inversion of the v3 test this replaces, and the single most important
+    // assertion in this file. There, 10,000 on top of 20,000 already spent qualified;
+    // here the small invoice earns nothing no matter what came before it, because the
+    // engine never sees what came before it.
     await capture('INV-1', 20_000);
     await scan('INV-1');
 
-    // Alone this basket earns nothing; on top of 20,000 already spent it qualifies.
     await capture('INV-2', 10_000);
     const result = await scan('INV-2');
 
-    expect(result.outcome).toBe('QUALIFIED');
-    expect(result.transaction?.discountValue).toBe(200); // 2% of the 10,000 basket
+    expect(result.outcome).toBe('NOT_QUALIFIED');
+    expect(result.transaction?.discountValue).toBe(0);
+    expect(result.voucher).toBeNull();
+
+    // The spend is still recorded — it is history, and history is still kept (§1.4).
+    expect(result.lifetime?.totalSpend).toBe(30_000);
+    expect(result.lifetime?.transactionCount).toBe(2);
   });
 
-  it('applies the higher tier once it is reached', async () => {
+  it('grants on a large invoice even for a first-time customer', async () => {
+    // The mirror of the test above. v3 required a customer to accumulate before any
+    // discount was possible; v4 rewards the basket in front of the till on its own.
+    await capture('INV-ONLY', 90_000);
+    const result = await scan('INV-ONLY');
+
+    expect(result.outcome).toBe('QUALIFIED');
+    expect(result.transaction?.discountRate).toBe(3);
+    expect(result.transaction?.discountValue).toBe(2_700);
+    expect(result.lifetime?.transactionCount).toBe(1);
+  });
+
+  it('applies the higher bracket once the invoice reaches it', async () => {
     await capture('INV-BIG', 80_000);
     const result = await scan();
 
@@ -211,7 +242,6 @@ describe('scan attribution and threshold evaluation', () => {
         amountNet: 90_000,
         currency: 'IQD',
         captureMode: 'SPOOL_WATCH',
-        periodKey: '2026-08',
         occurredAt: new Date(),
         capturedAt: new Date(),
       },

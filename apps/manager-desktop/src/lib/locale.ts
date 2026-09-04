@@ -227,7 +227,7 @@ export const locale = {
     searchPlaceholder: 'ابحث برقم الهاتف',
     searchHint: 'البحث برقم الهاتف فقط — الاسم ليس معرّفاً فريداً',
     colCustomer: 'الزبون',
-    colBalance: 'الرصيد التراكمي',
+    colBalance: 'إجمالي المشتريات',
     colProgress: 'التقدّم نحو العتبة',
     colCategory: 'الفئة',
     colJoined: 'تاريخ التسجيل',
@@ -242,7 +242,7 @@ export const locale = {
     categoryVip: 'كبار المشترين',
     sortLabel: 'الترتيب',
     sortNewest: 'الأحدث تسجيلاً',
-    sortSpend: 'الأعلى إنفاقاً',
+    sortSpend: 'الأعلى إنفاقاً (الإجمالي)',
     sortName: 'الاسم',
     /** Shown as `عرض 1–25 من 1,847`, so nobody mistakes a page for the whole list. */
     pageRange: (from: number, to: number, total: number) =>
@@ -260,6 +260,7 @@ export const locale = {
 
   /** The rules a specific customer is measured against (customer detail). */
   appliedRules: {
+    perInvoice: 'على كل فاتورة تبلغ هذا المبلغ',
     title: 'الخصم المطبَّق على هذا الزبون',
     /**
      * v3 has ONE ladder for everybody (§2.3). Said plainly on the screen because the
@@ -274,11 +275,12 @@ export const locale = {
   },
 
   customer: {
-    balanceThisPeriod: 'الرصيد التراكمي (هذه الفترة)',
-    derivedNote: 'محسوب من الفواتير — غير مخزّن',
+    balanceThisPeriod: 'إجمالي المشتريات (منذ التسجيل)',
+    derivedNote: 'محسوب من الفواتير — للتقارير فقط، ولا يؤثر على الخصم',
     invoices: 'فاتورة',
     details: 'التفاصيل',
     toNextTier: 'للوصول إلى خصم',
+    perInvoiceNote: 'الخصم يُحتسب على قيمة كل فاتورة على حدة — وليس على إجمالي المشتريات.',
     allTiersReached: 'تم بلوغ جميع المستويات',
     vouchers: 'القسائم',
     transactions: 'سجل الفواتير',
@@ -306,12 +308,11 @@ export const locale = {
     absoluteCap: 'الحد الأقصى المطلق للخصم',
     absoluteCapHint:
       'خط الدفاع الأخير: يُطبَّق بعد حساب النسبة مهما بلغت قيمة الفاتورة. بدونه، فاتورة كبيرة بنسبة عالية تكلّف المتجر مبلغاً ضخماً.',
-    periodType: 'دورة احتساب الرصيد',
     settlement: 'آلية تسوية الخصم',
     settlementHint:
       'تحدّد نص التوجيه المطبوع على قسيمة الخصم. الخيار الافتراضي يذكر المبالغ دون افتراض طريقة قيد الخصم في الدفاتر.',
     rulesTitle: 'مستويات الخصم',
-    rulesSubtitle: 'كلما ارتفع إنفاق الزبون في الفترة، ارتفع الخصم.',
+    rulesSubtitle: 'كلما ارتفعت قيمة الفاتورة الواحدة، ارتفع الخصم عليها.',
     colThreshold: 'عتبة الإنفاق',
     colRate: 'قيمة الخصم',
     addRule: 'إضافة مستوى',
@@ -506,10 +507,12 @@ export const locale = {
 
     categoryTitle: 'توزيع الزبائن حسب الفئة',
     categoryEmpty: 'لا يوجد زبائن مسجّلون بعد',
-    tierTitle: 'أداء مستويات الخصم',
-    tierSubtitle: 'عدد الزبائن الذين بلغوا كل مستوى في الفترة الحالية',
-    tierEmpty: 'لم تُحدَّد مستويات خصم بعد',
+    tierTitle: 'توزيع الفواتير على شرائح الخصم',
+    tierSubtitle: 'عدد الفواتير التي بلغت كل شريحة خلال الفترة المختارة',
+    tierEmpty: 'لم تُحدَّد شرائح خصم بعد',
+    /** Customers-per-tier in v3; invoices-per-bracket in v4 (§10.6). */
     tierReached: (count: number) => `${group(count)} زبون`,
+    bracketInvoices: (count: number) => `${group(count)} فاتورة`,
     ofThreshold: 'عتبة',
 
     /* ── Charts (2026-09-02) ──────────────────────────────────────────────── */
@@ -630,5 +633,4 @@ export const locale = {
     NETWORK_PROXY: 'وسيط شبكة',
     MANUAL: 'إدخال يدوي',
   },
-  periodTypes: { WEEKLY: 'أسبوعية', MONTHLY: 'شهرية', CUSTOM: 'مخصّصة' },
 } as const;

@@ -197,7 +197,7 @@ describe('RBAC', () => {
     expect(response.json().error.code).toBe('FORBIDDEN');
   });
 
-  it('lets a manager read customer detail with a derived balance', async () => {
+  it('lets a manager read customer detail with a derived lifetime total', async () => {
     await createTransaction(prisma, world, { invoiceId: 'INV-1', amountGross: 30_000 });
 
     const token = await tokenFor('manager');
@@ -211,13 +211,19 @@ describe('RBAC', () => {
     const body = response.json();
     expect(body.customer.name).toBe('حسين علي');
     // Computed from transaction rows, not read from a stored total (§5.3).
-    expect(body.balance.cumulativeAmount).toBe(30_000);
-    expect(body.balance.transactionCount).toBe(1);
+    expect(body.lifetime.totalSpend).toBe(30_000);
+    expect(body.lifetime.transactionCount).toBe(1);
   });
 });
 
-describe('balance derivation over HTTP (§5.3)', () => {
-  it('reports the gap to the next threshold', async () => {
+describe('lifetime derivation over HTTP (§5.3, §10.4)', () => {
+  it('returns a lifetime total and NOTHING about a next threshold', async () => {
+    // The v3 version of this test asserted `nextThresholdAmount` and
+    // `amountToNextThreshold` on the resolve response. Both are gone from this shape
+    // deliberately: at identification time there is no invoice, so there is nothing to
+    // measure a gap against, and a field that is meaningful at one moment and null at
+    // another is the drift §12.27 describes. The gap now belongs to `invoiceOutcome`,
+    // which only exists where an invoice does.
     await createTransaction(prisma, world, { invoiceId: 'INV-1', amountGross: 30_000 });
 
     const token = await tokenFor('station');
@@ -227,31 +233,34 @@ describe('balance derivation over HTTP (§5.3)', () => {
       headers: bearer(token),
     });
 
-    const balance = response.json().balance;
-    expect(balance.cumulativeAmount).toBe(30_000);
-    expect(balance.nextThresholdAmount).toBe(75_000);
-    expect(balance.amountToNextThreshold).toBe(45_000);
-    expect(balance.nextDiscountLabel).toBe('3٪');
+    const body = response.json();
+    expect(body.lifetime.totalSpend).toBe(30_000);
+    expect(body.lifetime.transactionCount).toBe(1);
+    expect(body.balance).toBeUndefined();
+    expect(body.lifetime.nextThresholdAmount).toBeUndefined();
   });
 
-  it('reports no next threshold once every tier is cleared', async () => {
-    await createTransaction(prisma, world, { invoiceId: 'INV-BIG', amountGross: 200_000 });
+  it('accumulates across invoices for REPORTING, while none of it buys a discount', async () => {
+    // The distinction v4 turns on. The total grows exactly as it always did — it is
+    // the customer's history — but three 30,000 baskets never become a 90,000 one, so
+    // the 75,000 bracket is not reachable by shopping repeatedly.
+    await createTransaction(prisma, world, { invoiceId: 'INV-A', amountGross: 30_000 });
+    await createTransaction(prisma, world, { invoiceId: 'INV-B', amountGross: 30_000 });
+    await createTransaction(prisma, world, { invoiceId: 'INV-C', amountGross: 30_000 });
 
-    const token = await tokenFor('station');
+    const token = await tokenFor('manager');
     const response = await app.inject({
       method: 'GET',
-      url: url(`/customers/resolve?identifier=${encodeURIComponent(world.customerBarcode)}`),
+      url: url(`/customers/${world.customerId}`),
       headers: bearer(token),
     });
 
-    const balance = response.json().balance;
-    expect(balance.nextThresholdAmount).toBeNull();
-    expect(balance.amountToNextThreshold).toBeNull();
+    expect(response.json().lifetime.totalSpend).toBe(90_000);
   });
 
-  it('excludes unattributed invoices from any customer balance', async () => {
-    // A capture with no card scanned belongs to nobody. Counting it toward a
-    // balance would hand a customer someone else's spending.
+  it('excludes unattributed invoices from any customer total', async () => {
+    // A capture with no card scanned belongs to nobody. Counting it would hand a
+    // customer someone else's spending.
     await createTransaction(prisma, world, { invoiceId: 'INV-MINE', amountGross: 30_000 });
     await createTransaction(prisma, world, {
       invoiceId: 'INV-NOBODY',
@@ -266,7 +275,7 @@ describe('balance derivation over HTTP (§5.3)', () => {
       headers: bearer(token),
     });
 
-    expect(response.json().balance.cumulativeAmount).toBe(30_000);
+    expect(response.json().lifetime.totalSpend).toBe(30_000);
   });
 });
 

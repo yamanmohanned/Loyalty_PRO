@@ -1,5 +1,4 @@
 import { PrismaClient } from '@prisma/client';
-import { computePeriodKey } from '@walaa/shared-types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { API_PREFIX, buildApp, redactUrlToken } from '../app';
@@ -126,11 +125,6 @@ describe('the reconciliation day is the merchant local day (§13.1)', () => {
         discountValue: 2_000,
         amountNet: 98_000,
         captureMode: 'MANUAL',
-        periodKey: computePeriodKey({
-          occurredAt: issuedAt,
-          timeZone: 'Asia/Baghdad',
-          periodType: 'MONTHLY',
-        }),
         occurredAt: issuedAt,
         capturedAt: issuedAt,
       },
@@ -194,11 +188,6 @@ describe('report aggregates above the 32-bit line (§13.5)', () => {
           discountValue: 0,
           amountNet: each,
           captureMode: 'MANUAL',
-          periodKey: computePeriodKey({
-            occurredAt: at,
-            timeZone: 'Asia/Baghdad',
-            periodType: 'MONTHLY',
-          }),
           occurredAt: at,
           capturedAt: at,
         },
@@ -210,6 +199,6 @@ describe('report aggregates above the 32-bit line (§13.5)', () => {
     expect(overview.capturedSales).toBe(expected);
     // The top-customers figure comes from a SQL `groupBy` rather than a JavaScript
     // reduce, which is the path §13.5 was actually warning about.
-    expect(overview.topCustomers[0]?.cumulativeAmount).toBe(expected);
+    expect(overview.topCustomers[0]?.spendInRange).toBe(expected);
   });
 });

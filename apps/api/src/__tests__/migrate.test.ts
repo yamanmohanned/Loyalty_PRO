@@ -298,3 +298,160 @@ describe('path resolution', () => {
     expect(sqlitePathFromUrl('postgresql://localhost/walaa')).toBeNull();
   });
 });
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  A MIGRATION MUST NOT DESTROY DATA IT DOES NOT MENTION — §10.1
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * **The gap this closes.** Every other test in this file migrates a *fresh* database,
+ * where there is nothing to destroy. That is the interesting case for provisioning and
+ * it is blind to the failure that prompted these tests: a migration that silently
+ * deletes rows in a table it never names.
+ *
+ * The specific hazard, which is real and was reproduced before this test was written:
+ * `prisma migrate dev` emits a `RedefineTables` block for a dropped SQLite column —
+ * CREATE new_ / INSERT SELECT / DROP TABLE / RENAME. On this schema that cascades
+ * `voucher` out of existence, because `voucher.transaction_id` is ON DELETE CASCADE,
+ * `migrate.ts` runs the whole migration inside one transaction, and `PRAGMA
+ * foreign_keys` is a no-op inside a transaction — so Prisma's own `foreign_keys=OFF`
+ * never takes effect and `DROP TABLE`'s implicit DELETE fires the cascade. It commits
+ * successfully while doing it, so fail-closed never trips and nothing else in this
+ * suite would notice.
+ *
+ * What is asserted is deliberately not "the v4 migration is correct". It is the
+ * invariant that outlives it: **a customer's vouchers, transactions and recorded
+ * discounts survive whatever migrations are pending.** A future migration that
+ * reintroduces the pattern fails here regardless of which column it was dropping.
+ */
+describe('migrations preserve existing merchant data (§10.1)', () => {
+  it('leaves vouchers, transactions and discount figures intact', async () => {
+    const dir = scratch();
+    const databaseFile = join(dir, 'walaa.db');
+    const client = clientFor(databaseFile);
+
+    const migrations = readMigrationDirectory(resolveMigrationsDir() as string);
+    // Everything except the newest. That leaves a database shaped like a merchant's
+    // before an upgrade — which is the only state in which this class of bug exists.
+    const previous = migrations.slice(0, -1);
+    const pending = migrations[migrations.length - 1];
+    expect(pending).toBeDefined();
+
+    const previousDir = join(dir, 'previous');
+    mkdirSync(previousDir, { recursive: true });
+    for (const migration of previous) {
+      const target = join(previousDir, migration.name);
+      mkdirSync(target, { recursive: true });
+      writeFileSync(join(target, 'migration.sql'), migration.sql, 'utf8');
+    }
+
+    await applyPendingMigrations({ client, directory: previousDir });
+
+    // A shop's data, written through raw SQL because the Prisma client is generated
+    // against the NEW schema and would refuse to write the old one's columns. That is
+    // the point: this row has to be shaped like a real pre-upgrade row.
+    const merchantId = '00000000-0000-4000-8000-0000000000aa';
+    const branchId = '00000000-0000-4000-8000-0000000000bb';
+    const customerId = '00000000-0000-4000-8000-0000000000cc';
+    const transactionId = '00000000-0000-4000-8000-0000000000dd';
+    const voucherId = '00000000-0000-4000-8000-0000000000ee';
+    const now = new Date().toISOString();
+
+    await client.$executeRawUnsafe(
+      `INSERT INTO "merchant" ("id","name","timezone","currency","created_at","updated_at")
+       VALUES (?,?,?,?,?,?)`,
+      merchantId, 'سوبرماركت الاختبار', 'Asia/Baghdad', 'IQD', now, now,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "branch" ("id","merchant_id","name","code","is_active","created_at","updated_at")
+       VALUES (?,?,?,?,?,?,?)`,
+      branchId, merchantId, 'فرع الاختبار', 'BAG-01', 1, now, now,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "customer" ("id","merchant_id","name","phone","category","is_active","created_at","updated_at")
+       VALUES (?,?,?,?,?,?,?,?)`,
+      customerId, merchantId, 'زينب عبد الرزاق', '+9647811239876', 'VIP', 1, now, now,
+    );
+    // `period_key` is written because the OLD schema requires it — this is a
+    // pre-upgrade row, and the migration under test is the thing that removes it.
+    await client.$executeRawUnsafe(
+      `INSERT INTO "transaction"
+         ("id","merchant_id","branch_id","customer_id","invoice_id","amount_gross",
+          "discount_type","discount_rate","discount_value","discount_uncapped_value",
+          "amount_net","currency","capture_mode","period_key","occurred_at","captured_at",
+          "linked_at","created_at")
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      transactionId, merchantId, branchId, customerId, 'INV-LEGACY', 185_000,
+      'PERCENTAGE', 3, 5_000, 5_550,
+      180_000, 'IQD', 'SPOOL_WATCH', '2026-08', now, now,
+      now, now,
+    );
+    await client.$executeRawUnsafe(
+      `INSERT INTO "voucher"
+         ("id","merchant_id","transaction_id","customer_id","code","value",
+          "settlement_strategy","status","issued_at","created_at","updated_at")
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      voucherId, merchantId, transactionId, customerId, 'WLA-LEGACY-1', 5_000,
+      'MERCHANT_DEFINED', 'ISSUED', now, now, now,
+    );
+
+    const countRow = async (table: string): Promise<number> => {
+      const rows = await client.$queryRawUnsafe<Array<{ n: bigint | number }>>(
+        `SELECT COUNT(*) AS n FROM "${table}"`,
+      );
+      return Number(rows[0]?.n ?? 0);
+    };
+
+    expect(await countRow('voucher')).toBe(1);
+    expect(await countRow('transaction')).toBe(1);
+
+    // ── The upgrade ────────────────────────────────────────────────────────────
+    const outcome = await applyPendingMigrations({ client });
+    expect(outcome.applied).toContain(pending?.name);
+
+    // ── What must have survived ────────────────────────────────────────────────
+    //
+    // The voucher is the assertion that matters. It is the record that explains a
+    // discount a customer already received (§0 rule 3), and the destructive migration
+    // pattern removes it without a word.
+    expect(await countRow('voucher'), 'the voucher explaining an already-given discount').toBe(1);
+    expect(await countRow('transaction')).toBe(1);
+    expect(await countRow('customer')).toBe(1);
+
+    const vouchers = await client.$queryRawUnsafe<Array<{ code: string; value: number; status: string }>>(
+      `SELECT "code","value","status" FROM "voucher"`,
+    );
+    expect(vouchers[0]?.code).toBe('WLA-LEGACY-1');
+    expect(vouchers[0]?.value).toBe(5_000);
+    expect(vouchers[0]?.status).toBe('ISSUED');
+
+    // A discount already given and printed is never recomputed (§1.6 step 4). These
+    // four figures are what a merchant's books were reconciled against.
+    const transactions = await client.$queryRawUnsafe<
+      Array<{
+        invoice_id: string;
+        amount_gross: number;
+        discount_type: string;
+        discount_rate: number;
+        discount_value: number;
+        discount_uncapped_value: number;
+        amount_net: number;
+      }>
+    >(`SELECT * FROM "transaction"`);
+    const row = transactions[0];
+    expect(row?.invoice_id).toBe('INV-LEGACY');
+    expect(row?.amount_gross).toBe(185_000);
+    expect(row?.discount_type).toBe('PERCENTAGE');
+    expect(row?.discount_rate).toBe(3);
+    expect(row?.discount_value).toBe(5_000);
+    expect(row?.discount_uncapped_value).toBe(5_550);
+    expect(row?.amount_net).toBe(180_000);
+
+    // And the column really is gone, so this test cannot pass by the migration
+    // silently doing nothing at all.
+    const columns = await client.$queryRawUnsafe<Array<{ name: string }>>(
+      `PRAGMA table_info("transaction")`,
+    );
+    expect(columns.map((c) => c.name)).not.toContain('period_key');
+  });
+});

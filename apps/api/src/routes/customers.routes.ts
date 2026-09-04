@@ -13,7 +13,7 @@ import {
   type UpdateCustomerRequest,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
-import { getCustomerBalance } from '../services/balance.service';
+import { getCustomerLifetime } from '../services/lifetime.service';
 import {
   createCustomer,
   exportCustomersCsv,
@@ -43,8 +43,8 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       const auth = requireAuth(request);
       const { identifier } = request.query as { identifier: string };
       const customer = await resolveCustomer(auth.merchantId, identifier);
-      const balance = await getCustomerBalance(auth.merchantId, customer.id);
-      return { customer, balance };
+      const lifetime = await getCustomerLifetime(customer.id);
+      return { customer, lifetime };
     },
   );
 
@@ -148,11 +148,11 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const auth = requireDashboardRole(request);
       const { id } = request.params as { id: string };
-      const [customer, balance] = await Promise.all([
+      const [customer, lifetime] = await Promise.all([
         getCustomer(auth.merchantId, id),
-        getCustomerBalance(auth.merchantId, id),
+        getCustomerLifetime(id),
       ]);
-      return { customer, balance };
+      return { customer, lifetime };
     },
   );
 

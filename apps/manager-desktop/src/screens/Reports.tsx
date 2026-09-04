@@ -163,7 +163,7 @@ export function ReportsScreen() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <CategoryBreakdown report={r} loading={firstLoad} stale={stale} />
-          <TierLadder report={r} loading={firstLoad} stale={stale} />
+          <BracketLadder report={r} loading={firstLoad} stale={stale} />
         </div>
 
         {/* ── Today ─────────────────────────────────────────────────────── */}
@@ -435,16 +435,18 @@ function CategoryBreakdown({ report, loading, stale }: PanelProps) {
   );
 }
 
-function TierLadder({ report, loading, stale }: PanelProps) {
+function BracketLadder({ report, loading, stale }: PanelProps) {
   const data: BarDatum[] = useMemo(() => {
     if (!report) return [];
-    return report.tierPerformance.map((tier, index) => ({
-      key: String(tier.thresholdAmount),
-      label: `${locale.reports.ofThreshold} ${new Intl.NumberFormat('en-US').format(tier.thresholdAmount)} ${locale.common.currency} · ${tier.discountLabel}`,
-      value: tier.reached,
+    // Invoices per bracket, not customers per tier (v4 §10.6). Each invoice is
+    // counted once, in the highest bracket it reached — the one that actually paid.
+    return report.bracketPerformance.map((bracket, index) => ({
+      key: String(bracket.thresholdAmount),
+      label: `${locale.reports.ofThreshold} ${new Intl.NumberFormat('en-US').format(bracket.thresholdAmount)} ${locale.common.currency} · ${bracket.discountLabel}`,
+      value: bracket.invoiceCount,
       // Ordinal: the ladder has an order, and the ramp shows it.
       color: colorForTier(index),
-      display: locale.reports.tierReached(tier.reached),
+      display: locale.reports.bracketInvoices(bracket.invoiceCount),
     }));
   }, [report]);
 

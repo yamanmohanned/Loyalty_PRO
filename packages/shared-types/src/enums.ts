@@ -118,10 +118,20 @@ export type DiscountType = z.infer<typeof DiscountTypeSchema>;
 export const RuleDiscountTypeSchema = z.enum(['PERCENTAGE', 'FIXED_AMOUNT']);
 export type RuleDiscountType = z.infer<typeof RuleDiscountTypeSchema>;
 
-/* ── Periods ───────────────────────────────────────────────────────────────── */
+/* ── Periods — REMOVED in v4 ───────────────────────────────────────────────── */
 
-export const PeriodTypeSchema = z.enum(['WEEKLY', 'MONTHLY', 'CUSTOM']);
-export type PeriodType = z.infer<typeof PeriodTypeSchema>;
+// `PeriodTypeSchema` / `PeriodType` are deliberately gone (CLAUDE_UPDATE_4.md §1.3,
+// §10.6). The discount is decided by the invoice amount alone, so there is no window
+// for spend to accumulate over and nothing left for a period type to configure.
+//
+// It was NOT kept as a fixed MONTHLY reporting bucket: a setting the API can never
+// change is a dead setting, and a dead setting goes on looking like a control long
+// after it controls nothing — §0 rule 9's failure, pre-installed. Reporting windows
+// come from `ReportRange` in reports.ts instead.
+//
+// The merchant's timezone survives and still matters: `localDayBounds` in period.ts
+// buckets end-of-day voucher reconciliation in local time, which is what fixed
+// §12.23's UTC-day bug.
 
 /* ── Print capture (CLAUDE_v3.md §4.2) ─────────────────────────────────────── */
 

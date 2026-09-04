@@ -1,23 +1,37 @@
 import { z } from 'zod';
 import {
   DiscountTypeSchema,
-  PeriodTypeSchema,
   RuleDiscountTypeSchema,
   SettlementStrategySchema,
   type DiscountType,
-  type PeriodType,
   type SettlementStrategy,
 } from './enums';
 import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  THE INSTANT-DISCOUNT CONTRACT — CLAUDE_v3.md §2
+ *  THE INSTANT-DISCOUNT CONTRACT — CLAUDE_v3.md §2, as amended by v4 §1
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * The discount now applies to the basket the customer is standing there with, not
- * a future visit. That single change is what makes the financial guardrails in
- * §2.3 mandatory rather than advisory.
+ * The discount applies to the basket the customer is standing there with, not a
+ * future visit. That single change is what makes the financial guardrails in §2.3
+ * mandatory rather than advisory.
+ *
+ * **v4: the discount is decided by THIS INVOICE'S AMOUNT and nothing else.** There is
+ * no accumulation across visits, no period, and no running balance feeding the
+ * decision (CLAUDE_UPDATE_4.md §1.1). A tier is an *invoice-amount bracket*: spend
+ * 25,000 on one basket and that basket earns 2%; spend 25,000 across five baskets and
+ * none of them does.
+ *
+ * The card did not become pointless when that changed — it decides **who is entitled
+ * to a discount at all** (§1.2). An unattributed capture never earns one.
+ *
+ * **The exposure this creates, stated where the calculation lives** (§10.5): every
+ * guardrail below bounds a *single invoice*, and none of them bounds a *customer*. A
+ * wholesale buyer at 480,000 a day takes the ceiling every day. That is accepted by
+ * design; the mitigation is the per-customer discount report, not a rule here. Do not
+ * add a frequency cap to this function — it is a discount-model decision with its own
+ * guardrails, not a tweak to the arithmetic.
  *
  * The arithmetic that matters: supermarket net margin runs 2–4%. On a 25,000 IQD
  * basket that is roughly 750 IQD of profit. A 10% instant discount hands back
@@ -53,7 +67,18 @@ export const ASSUMED_NET_MARGIN_PCT = 3;
 
 export const DiscountRuleSchema = z.object({
   id: z.string().uuid(),
-  /** Cumulative spend in the active period that earns this tier. */
+  /**
+   * The invoice amount at which this bracket starts — «قيمة الفاتورة» (v4 §1.4).
+   *
+   * Read as "an invoice of at least this much earns this discount". It is inclusive:
+   * an invoice of exactly `thresholdAmount` qualifies.
+   *
+   * **The field keeps its v3 name deliberately.** It was cumulative spend across a
+   * period and is now a single invoice's amount, but renaming it would touch thirteen
+   * files mid-phase for no behavioural gain — the §12.12 precedent, where
+   * `barcodeToken` kept its name and grew a comment saying what the value is. Every
+   * Arabic label the manager reads does say «قيمة الفاتورة».
+   */
   thresholdAmount: PositiveIqdAmountSchema,
   discountType: RuleDiscountTypeSchema,
   /** Whole percent when PERCENTAGE; whole IQD when FIXED_AMOUNT. */
@@ -85,9 +110,8 @@ export const DiscountSettingsSchema = z.object({
   maxRate: z.number().int().min(0),
   /** The absolute IQD ceiling applied after any percentage calculation (§2.3). */
   absoluteMaxDiscountValue: PositiveIqdAmountSchema,
-  periodType: PeriodTypeSchema,
-  periodStart: z.string().datetime({ offset: true }).nullable(),
-  periodEnd: z.string().datetime({ offset: true }).nullable(),
+  // `periodType` / `periodStart` / `periodEnd` are gone (v4 §1.3, §10.6). Nothing
+  // accumulates, so there is no window to configure.
   settlementStrategy: SettlementStrategySchema,
 });
 
@@ -99,9 +123,6 @@ export const UpdateDiscountSettingsRequestSchema = z
     minRate: z.number().int().min(0).max(100),
     maxRate: z.number().int().min(0).max(100),
     absoluteMaxDiscountValue: PositiveIqdAmountSchema,
-    periodType: PeriodTypeSchema,
-    periodStart: z.string().datetime({ offset: true }).nullable().optional(),
-    periodEnd: z.string().datetime({ offset: true }).nullable().optional(),
     settlementStrategy: SettlementStrategySchema,
   })
   .strict()
@@ -111,13 +132,6 @@ export const UpdateDiscountSettingsRequestSchema = z
         code: z.ZodIssueCode.custom,
         path: ['minRate'],
         message: 'الحد الأدنى للنسبة يجب ألا يتجاوز الحد الأعلى',
-      });
-    }
-    if (value.periodType === 'CUSTOM' && (!value.periodStart || !value.periodEnd)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['periodStart'],
-        message: 'الفترة المخصصة تتطلب تاريخ بداية ونهاية',
       });
     }
   });
@@ -137,8 +151,8 @@ export const UpdateDiscountRulesRequestSchema = z
       });
     }
 
-    // Higher spend must never earn a smaller discount — that ladder makes no sense
-    // to a customer and no sense on a receipt.
+    // A bigger invoice must never earn a smaller discount — that ladder makes no
+    // sense to a customer and no sense on a receipt.
     const ordered = [...value.rules].sort((a, b) => a.thresholdAmount - b.thresholdAmount);
     for (let i = 1; i < ordered.length; i += 1) {
       const previous = ordered[i - 1];
@@ -237,10 +251,19 @@ export function validateRulesAgainstSettings(
 /* ── The calculation ───────────────────────────────────────────────────────── */
 
 export interface DiscountComputationInput {
-  /** The invoice total as the POS recorded it. */
+  /**
+   * The invoice total as the POS recorded it — and, since v4, **the only thing that
+   * decides which bracket applies**.
+   *
+   * v3 carried a second field here, `cumulativeAmount`: spend across the period,
+   * including this invoice. It is **deleted rather than renamed** (§12.27's removal
+   * corollary, §10.7). Both were a `number` passed positionally into an object
+   * literal, so renaming it to `invoiceAmount` would have type-checked against every
+   * call site still handing over a cumulative figure — and the engine would have gone
+   * on computing discounts from the wrong number, correctly, forever. Deleting it
+   * makes each of those call sites fail to compile in the same commit.
+   */
   amountGross: number;
-  /** Cumulative spend this period INCLUDING this invoice. */
-  cumulativeAmount: number;
   /** Active rules, any order — sorted internally. */
   rules: Array<Pick<DiscountRule, 'thresholdAmount' | 'discountType' | 'discountRate' | 'maxDiscountValue' | 'isActive'>>;
   /** The settings-level absolute ceiling. */
@@ -272,7 +295,7 @@ export interface DiscountComputation {
  *
  * Order of operations, and each step matters:
  *   1. If discounting is off, stop. Zero discount is a valid outcome, not a failure.
- *   2. Find the highest threshold the cumulative spend has reached.
+ *   2. Find the highest bracket THIS INVOICE'S AMOUNT reaches.
  *   3. Compute the raw value by type.
  *   4. Apply the per-rule cap, if the rule sets one.
  *   5. Apply the absolute settings cap. **Never skipped.**
@@ -296,11 +319,13 @@ export function computeDiscount(input: DiscountComputationInput): DiscountComput
     .filter((r) => r.isActive)
     .sort((a, b) => a.thresholdAmount - b.thresholdAmount);
 
-  // The highest tier reached. Cumulative spend only grows within a period, so
-  // clearing 250,000 necessarily cleared 100,000 — only the best one applies.
+  // The highest bracket this invoice reaches. An invoice of 250,000 necessarily
+  // clears 100,000 as well, so only the best one applies. Inclusive: an invoice of
+  // exactly `thresholdAmount` qualifies, which is what a customer told "spend 25,000
+  // and get 2%" expects when the till reads exactly 25,000.
   let applicable: (typeof active)[number] | null = null;
   for (const rule of active) {
-    if (input.cumulativeAmount >= rule.thresholdAmount) applicable = rule;
+    if (input.amountGross >= rule.thresholdAmount) applicable = rule;
     else break;
   }
   if (!applicable) return none;
@@ -428,7 +453,6 @@ export interface DiscountConfigResponse {
     minRate: number;
     maxRate: number;
     absoluteMaxDiscountValue: number;
-    periodType: PeriodType;
     /** Widened by adding a strategy, so the literal union may never be spelled here. */
     settlementStrategy: SettlementStrategy;
   };

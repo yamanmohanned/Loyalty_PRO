@@ -82,7 +82,7 @@ export const CustomerListQuerySchema = z
     /** Matches a phone number prefix, never a name. */
     phone: z.string().trim().max(32).optional(),
     category: CustomerCategorySchema.optional(),
-    sort: z.enum(['createdAt', 'cumulativeAmount', 'name']).default('createdAt'),
+    sort: z.enum(['createdAt', 'lifetimeSpend', 'name']).default('createdAt'),
     order: z.enum(['asc', 'desc']).default('desc'),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
@@ -170,8 +170,14 @@ export type CustomerCard = z.infer<typeof CustomerCardSchema>;
 /**
  * One row of the customer list.
  *
- * `cumulativeAmount` is derived from transactions in the active period and never
- * stored (§5.3) — which is also why sorting by it cannot be an ORDER BY.
+ * `lifetimeSpend` is Σ `amountGross` across every attributed invoice, all time. It is
+ * derived from transactions and never stored (§5.3) — which is also why sorting by it
+ * cannot be an ORDER BY.
+ *
+ * **It is history, not eligibility.** Under v4 nothing about this number affects what
+ * a customer is offered at the till; the discount comes from the invoice in front of
+ * them (§1.4). The name says `lifetime` precisely so no future reader mistakes it for
+ * a balance that buys something.
  */
 export interface CustomerListRow {
   id: string;
@@ -179,7 +185,7 @@ export interface CustomerListRow {
   phone: string;
   category: string;
   cardNumber: string | null;
-  cumulativeAmount: number;
+  lifetimeSpend: number;
   transactionCount: number;
   createdAt: string;
 }

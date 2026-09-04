@@ -31,15 +31,15 @@ export interface OverviewReport {
   capturedSales: number;
   discountsGranted: number;
   averageBasket: number;
-  currentPeriodKey: string;
   /** Bucketed by the merchant's LOCAL day, never UTC (§13.1). */
   timeseries: Array<{ date: string; amount: number; count: number; attributed: number }>;
+  /** Ranked over the selected range — there is no period to rank within (§10.6). */
   topCustomers: Array<{
     id: string;
     name: string;
     phone: string;
     category: CustomerCategory | string;
-    cumulativeAmount: number;
+    spendInRange: number;
     transactionCount: number;
   }>;
   recentTransactions: Array<{
@@ -110,16 +110,44 @@ export interface ProgrammeReport {
    */
   customersByCategory: Array<{ category: CustomerCategory | string; count: number }>;
   /**
-   * How many customers reached each discount tier in the CURRENT period.
+   * How many INVOICES landed in each bracket over the range (v4 §10.6).
    *
-   * Cumulative in the way the ladder is: someone at 200,000 counts toward every
-   * threshold below them, because that is what "reached this tier" means to the
-   * person reading the chart.
+   * v3 counted *customers* who had reached each tier inside the active period, which
+   * was the right question while a tier was something a person climbed to. Under v4 a
+   * bracket is a property of an invoice, not of a customer — the same shopper can land
+   * in three different brackets in one week — so the honest count is of invoices.
+   *
+   * Each invoice is counted in exactly ONE bracket: the highest it reached, which is
+   * the one that actually paid. That differs from v3 deliberately, where a customer at
+   * 200,000 counted toward every threshold below them. Counting an invoice in every
+   * bracket it clears would make the columns sum to more than the number of sales and
+   * overstate the lower brackets, which are the ones a manager is deciding about.
    */
-  tierPerformance: Array<{
+  bracketPerformance: Array<{
     thresholdAmount: number;
     discountLabel: string;
-    reached: number;
+    invoiceCount: number;
+  }>;
+  /**
+   * Discount value taken per customer over the range (v4 §10.5).
+   *
+   * **The mitigation for an exposure v4 creates rather than a general-interest
+   * statistic.** Removing cumulative spend removed an accidental bound: under v3 a
+   * customer climbed the ladder once per period, and under v4 every invoice is judged
+   * on its own, so a wholesale buyer at 480,000 a day takes the ceiling every day.
+   * Nothing in §2.3 bounds a customer — all three guardrails bound a single invoice.
+   *
+   * This makes that visible without restricting it. It is a report, not a second
+   * ladder, so it does not reopen the per-customer path §12.27 closed and that §2.3's
+   * guardrails depend on staying closed. A frequency cap, if it is ever wanted, is a
+   * discount-model decision with its own guardrails — not a thing to grow from here.
+   */
+  discountByCustomer: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    discountValue: number;
+    discountedInvoiceCount: number;
   }>;
   todayReconciliation: DayReconciliation;
 }

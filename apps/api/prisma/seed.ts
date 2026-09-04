@@ -17,7 +17,6 @@
 import { PrismaClient, type PrismaClient as PrismaClientType } from '@prisma/client';
 import { hash as argon2Hash } from '@node-rs/argon2';
 import {
-  computePeriodKey,
   DEFAULT_FEATURE_FLAGS,
   normalizePhone,
   validateRulesAgainstSettings,
@@ -25,6 +24,16 @@ import {
   type FeatureFlagKey,
 } from '@walaa/shared-types';
 import { loadEnv } from '../src/config/env';
+import { createCustomer } from '../src/services/customer.service';
+import { ingestInvoice } from '../src/services/ingestion.service';
+import { scanCard } from '../src/services/scan.service';
+import { redeemVoucher } from '../src/services/voucher.service';
+import {
+  generateCardBatch,
+  replaceCard,
+  reportCardLost,
+  voidCard,
+} from '../src/services/card.service';
 import { applySqlitePragmas } from '../src/lib/prisma';
 import { generateBarcodeToken, verifyBarcodeToken } from '../src/lib/barcode-token';
 
@@ -79,7 +88,6 @@ const DISCOUNT_SETTINGS = {
   maxRate: 3,
   /** The last line of defence (§2.3). Never ship a percentage without it. */
   absoluteMaxDiscountValue: 5_000,
-  periodType: 'MONTHLY' as const,
   settlementStrategy: 'MERCHANT_DEFINED' as const,
 };
 
@@ -87,28 +95,65 @@ interface SeedTransaction {
   invoiceId: string;
   amountGross: number;
   daysAgo: number;
-  captureMode: 'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'MANUAL';
+  captureMode: 'SPOOL_WATCH' | 'VIRTUAL_PRINTER' | 'SERIAL_BRIDGE' | 'NETWORK_PROXY' | 'MANUAL';
   /** false leaves the invoice unattributed — a real and common outcome (§4). */
   attributed: boolean;
+  /** Redeem the voucher this invoice earns, so the funnel is not all-outstanding. */
+  redeem?: boolean;
 }
+
+/**
+ * How this customer's card came to exist.
+ *
+ *  - `THERMAL` — printed at the counter, no physical stock behind it, no serial.
+ *  - `PRE_PRINTED` — assigned from a batch the manager generated (§12.25).
+ *  - `LOST_NO_REPLACEMENT` — pre-printed, then reported lost and never replaced, so
+ *    the customer holds **no card at all**. `cardNumber: null` is a normal state, not
+ *    an error (§12.25), and nothing else in the fixture set renders it.
+ *  - `REPLACED` — pre-printed, reported lost, replaced. Two card rows, one live.
+ */
+type SeedCardOrigin = 'THERMAL' | 'PRE_PRINTED' | 'LOST_NO_REPLACEMENT' | 'REPLACED';
 
 interface SeedCustomer {
   name: string;
   phone: string;
   category: 'REGULAR' | 'WHOLESALE' | 'VIP';
+  card: SeedCardOrigin;
   /** Which UI state this fixture exercises. */
   covers: string;
   transactions: SeedTransaction[];
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  THE FIXTURE MATRIX — every amount here is chosen to render a state
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Under v4 a bracket is a property of an invoice, so a fixture's *amounts* are what
+ * decide which screen states appear — not the customer's history, which now renders
+ * nothing but a lifetime total. Every `covers` note below names a state, and the
+ * whole set is checked against the screens rather than assumed.
+ *
+ * With the ladder at 25,000→2% · 75,000→3% · 200,000→5,000 fixed and a 5,000 cap:
+ *
+ *  - **The cap only bites between 166,667 and 199,999.** Below that 3% is under
+ *    5,000; at 200,000 and above the FIXED rule pays exactly 5,000 and nothing is
+ *    trimmed. That narrow window is why the capped fixture is 185,000 and not 480,000
+ *    — an obvious-looking "very large basket" would NOT have exercised §12.37 at all.
+ *  - **The 200,000 bracket is deliberately empty in the default 30-day range**, so
+ *    `bracketPerformance` renders a zero row with its label intact (§12.33) — and
+ *    fills in when the range is switched to 90d, which exercises the range control at
+ *    the same time.
+ */
 const CUSTOMERS: SeedCustomer[] = [
   {
     name: 'حسين علي',
     phone: '07701234567',
     category: 'REGULAR',
-    covers: 'cleared tier 1, climbing toward tier 2',
+    card: 'THERMAL',
+    covers: 'one invoice qualifies, one does not — the two outcomes on one customer',
     transactions: [
-      { invoiceId: 'INV-9801', amountGross: 28_500, daysAgo: 12, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9801', amountGross: 28_500, daysAgo: 12, captureMode: 'SPOOL_WATCH', attributed: true, redeem: true },
       { invoiceId: 'INV-9807', amountGross: 19_250, daysAgo: 6, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
@@ -116,10 +161,11 @@ const CUSTOMERS: SeedCustomer[] = [
     name: 'زينب عبد الرزاق',
     phone: '07811239876',
     category: 'VIP',
-    covers: 'cleared every tier',
+    card: 'PRE_PRINTED',
+    covers: 'the 3% bracket, twice, plus a smaller basket in the 2% bracket',
     transactions: [
-      { invoiceId: 'INV-9802', amountGross: 120_000, daysAgo: 15, captureMode: 'SPOOL_WATCH', attributed: true },
-      { invoiceId: 'INV-9809', amountGross: 95_500, daysAgo: 8, captureMode: 'VIRTUAL_PRINTER', attributed: true },
+      { invoiceId: 'INV-9802', amountGross: 120_000, daysAgo: 15, captureMode: 'SPOOL_WATCH', attributed: true, redeem: true },
+      { invoiceId: 'INV-9809', amountGross: 95_500, daysAgo: 8, captureMode: 'VIRTUAL_PRINTER', attributed: true, redeem: true },
       { invoiceId: 'INV-9818', amountGross: 61_000, daysAgo: 2, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
@@ -127,28 +173,36 @@ const CUSTOMERS: SeedCustomer[] = [
     name: 'مصطفى الكاظمي',
     phone: '07901112233',
     category: 'WHOLESALE',
-    covers: 'wholesale volume — large baskets where the absolute cap binds',
+    card: 'PRE_PRINTED',
+    covers:
+      'THE CAP BITING (185,000 → 3% = 5,550 → 5,000), and the top bracket outside the default range',
     transactions: [
-      { invoiceId: 'INV-9803', amountGross: 480_000, daysAgo: 14, captureMode: 'MANUAL', attributed: true },
-      { invoiceId: 'INV-9811', amountGross: 315_500, daysAgo: 7, captureMode: 'SPOOL_WATCH', attributed: true },
+      // 3% of 185,000 is 5,550 against a 5,000 ceiling. This is the ONE fixture that
+      // makes §12.37's panel show a non-zero «ما وفّره الحد الأقصى».
+      { invoiceId: 'INV-9803', amountGross: 185_000, daysAgo: 5, captureMode: 'MANUAL', attributed: true },
+      // Both top-bracket invoices sit outside 30d on purpose — see the header note.
+      { invoiceId: 'INV-9811', amountGross: 480_000, daysAgo: 45, captureMode: 'SPOOL_WATCH', attributed: true, redeem: true },
+      { invoiceId: 'INV-9824', amountGross: 315_500, daysAgo: 52, captureMode: 'SERIAL_BRIDGE', attributed: true },
     ],
   },
   {
     name: 'نور الهدى حسن',
     phone: '07512345678',
     category: 'REGULAR',
-    covers: 'below the first threshold — the progress-message state',
+    card: 'REPLACED',
+    covers: 'short of the first bracket by 700 — the sharpest case for the bracket message',
     transactions: [
-      { invoiceId: 'INV-9804', amountGross: 12_500, daysAgo: 9, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9804', amountGross: 24_300, daysAgo: 9, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
   {
     name: 'علي فاضل الربيعي',
     phone: '07709876543',
     category: 'REGULAR',
-    covers: 'a few dinars short of tier 2',
+    card: 'THERMAL',
+    covers: 'an invoice EXACTLY at a bracket — proves the boundary is inclusive',
     transactions: [
-      { invoiceId: 'INV-9805', amountGross: 40_000, daysAgo: 11, captureMode: 'SPOOL_WATCH', attributed: true },
+      { invoiceId: 'INV-9805', amountGross: 25_000, daysAgo: 11, captureMode: 'SPOOL_WATCH', attributed: true, redeem: true },
       { invoiceId: 'INV-9812', amountGross: 33_750, daysAgo: 4, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
@@ -156,17 +210,29 @@ const CUSTOMERS: SeedCustomer[] = [
     name: 'رقية جاسم',
     phone: '07803334455',
     category: 'REGULAR',
-    covers: 'registered but never scanned — the empty state',
+    card: 'THERMAL',
+    covers: 'registered but never scanned — the empty state on customer detail',
     transactions: [],
   },
   {
     name: 'أحمد عبد الأمير',
     phone: '07705556677',
     category: 'VIP',
-    covers: 'spend split across two periods, proving the reset',
+    card: 'THERMAL',
+    covers: 'one invoice inside the default range and one outside it — the range boundary',
     transactions: [
       { invoiceId: 'INV-9806', amountGross: 88_000, daysAgo: 45, captureMode: 'SPOOL_WATCH', attributed: true },
       { invoiceId: 'INV-9816', amountGross: 26_300, daysAgo: 3, captureMode: 'SPOOL_WATCH', attributed: true },
+    ],
+  },
+  {
+    name: 'سجاد الطائي',
+    phone: '07701239988',
+    category: 'REGULAR',
+    card: 'LOST_NO_REPLACEMENT',
+    covers: 'holds NO card — cardNumber null, which no other fixture produces',
+    transactions: [
+      { invoiceId: 'INV-9825', amountGross: 31_000, daysAgo: 10, captureMode: 'SPOOL_WATCH', attributed: true },
     ],
   },
 ];
@@ -175,10 +241,13 @@ const CUSTOMERS: SeedCustomer[] = [
  * Invoices captured with no card scanned. These are the majority of real traffic —
  * most shoppers are not enrolled — and the gap between captured and attributed is
  * the enrolment rate, a headline metric rather than an error.
+ *
+ * The capture modes here and above deliberately span four of the five, so the capture
+ * chart has enough series to exercise §12.33's validated palette rather than one bar.
  */
 const UNATTRIBUTED: SeedTransaction[] = [
   { invoiceId: 'INV-9820', amountGross: 15_750, daysAgo: 1, captureMode: 'SPOOL_WATCH', attributed: false },
-  { invoiceId: 'INV-9821', amountGross: 42_000, daysAgo: 1, captureMode: 'SPOOL_WATCH', attributed: false },
+  { invoiceId: 'INV-9821', amountGross: 42_000, daysAgo: 1, captureMode: 'NETWORK_PROXY', attributed: false },
   { invoiceId: 'INV-9822', amountGross: 8_250, daysAgo: 0, captureMode: 'SPOOL_WATCH', attributed: false },
   { invoiceId: 'INV-9823', amountGross: 63_400, daysAgo: 0, captureMode: 'VIRTUAL_PRINTER', attributed: false },
 ];
@@ -268,6 +337,12 @@ async function seed(db: PrismaClientType): Promise<void> {
   const stationUser = await db.user.findUniqueOrThrow({
     where: { merchantId_username: { merchantId: merchant.id, username: 'station' } },
   });
+  const ownerUser = await db.user.findUniqueOrThrow({
+    where: { merchantId_username: { merchantId: merchant.id, username: 'owner' } },
+  });
+  const agentUser = await db.user.findUniqueOrThrow({
+    where: { merchantId_username: { merchantId: merchant.id, username: 'agent' } },
+  });
 
   // ── Discount configuration ─────────────────────────────────────────────────
   await db.discountSettings.upsert({
@@ -319,99 +394,218 @@ async function seed(db: PrismaClientType): Promise<void> {
     });
   }
 
-  // ── Customers and captured invoices ────────────────────────────────────────
-  let attributedCount = 0;
+  // ── Customers, cards and the real core loop ────────────────────────────────
+  let remintedCards = 0;
 
-  const writeTransaction = async (
-    tx: SeedTransaction,
-    customerId: string | null,
-  ): Promise<void> => {
-    const occurredAt = daysBefore(tx.daysAgo);
-    const periodKey = computePeriodKey({
-      periodType: 'MONTHLY',
-      occurredAt,
-      timeZone: MERCHANT_TIMEZONE,
-    });
+  /* ── Pre-printed card stock (§12.25) ─────────────────────────────────────── */
 
-    await db.transaction.upsert({
-      where: {
-        merchantId_branchId_invoiceId: {
-          merchantId: merchant.id,
-          branchId: branch.id,
-          invoiceId: tx.invoiceId,
-        },
-      },
-      update: {},
-      create: {
-        merchantId: merchant.id,
-        branchId: branch.id,
-        customerId,
-        invoiceId: tx.invoiceId,
-        amountGross: tx.amountGross,
-        // Seeded rows carry no discount: a discount is the engine's output at a
-        // real scan, and inventing one here would let an engine bug hide.
-        discountType: 'NONE',
-        discountRate: 0,
-        discountValue: 0,
-        amountNet: tx.amountGross,
-        currency: 'IQD',
-        captureMode: tx.captureMode,
-        periodKey,
-        occurredAt,
-        capturedAt: occurredAt,
-        linkedAt: customerId ? occurredAt : null,
-        linkedByUserId: customerId ? stationUser.id : null,
-        stationId: customerId ? 'station-01' : null,
-      },
+  // Generated through the SERVICE, never by writing card rows — the serials, the
+  // check digits and the batch arithmetic are then the real ones (§12.38).
+  //
+  // Two batches, because §12.32 requires every tally to be drawn *even at zero*: the
+  // first ends up with all five statuses non-zero, the second stays entirely PRINTED
+  // so four of its tallies render as a plain nought. One batch could not show both.
+  const existingBatches = await db.cardBatch.count({ where: { merchantId: merchant.id } });
+  if (existingBatches === 0) {
+    await generateCardBatch(
+      { merchantId: merchant.id, actorUserId: ownerUser.id },
+      { quantity: 10, note: 'الدفعة الأولى — بطاقات PVC' },
+    );
+    await generateCardBatch(
+      { merchantId: merchant.id, actorUserId: ownerUser.id },
+      { quantity: 5, note: 'دفعة احتياطية — لم تُطبع بعد' },
+    );
+  }
+
+  /** Blank pre-printed cards, oldest serial first — the drawer the operator reaches into. */
+  const takeBlankCard = async (): Promise<string> => {
+    const blank = await db.card.findFirst({
+      where: { merchantId: merchant.id, status: 'PRINTED' },
+      orderBy: { serial: 'asc' },
     });
+    if (!blank) throw new Error('نفدت البطاقات الجاهزة في بيانات البذرة');
+    return blank.cardNumber;
   };
 
-  let remintedCards = 0;
+  /* ── Customers, their cards, and their invoices ──────────────────────────── */
+
+  let attributedCount = 0;
+  let vouchersIssued = 0;
+  let vouchersRedeemed = 0;
+  let cappedInvoices = 0;
+
+  const ingestionContext = {
+    merchantId: merchant.id,
+    userId: agentUser.id,
+    userBranchId: branch.id,
+  };
+  const scanContext = {
+    merchantId: merchant.id,
+    userId: stationUser.id,
+    branchId: branch.id,
+    stationId: 'station-01',
+  };
+
+  /**
+   * Replays the REAL core loop for one seeded invoice: the agent's capture, then the
+   * station's scan (§10.3).
+   *
+   * **The seed used to write `discountType: NONE, discountValue: 0` on every row and
+   * create no vouchers**, on the reasoning that inventing a calculation would let an
+   * engine bug hide behind fixtures that looked correct. The instinct was right; the
+   * zeros did not achieve it. They produced a database where the engine was never
+   * exercised at all — so nothing could hide behind the fixtures and nothing could be
+   * verified against them either, and every screen that reports on discounting
+   * rendered empty.
+   *
+   * Running the engine achieves what the zeros were reaching for: a bug in
+   * `computeDiscount`, in the settlement strategy or in the voucher write changes what
+   * this seed produces, loudly, instead of being papered over by a hardcoded number.
+   *
+   * The voucher is not optional. A discount without one is a customer paying less than
+   * the POS recorded with nothing in the books to explain it (§0 rule 3), so they are
+   * written together by `scanCard` or neither is.
+   */
+  const replayInvoice = async (tx: SeedTransaction, cardNumber: string | null): Promise<void> => {
+    const occurredAt = daysBefore(tx.daysAgo);
+
+    await ingestInvoice(ingestionContext, {
+      invoice_id: tx.invoiceId,
+      amount_gross: tx.amountGross,
+      currency: 'IQD',
+      branch_id: 'BAG-01',
+      occurred_at: occurredAt.toISOString(),
+      captured_at: occurredAt.toISOString(),
+      capture_mode: tx.captureMode,
+    });
+
+    if (!tx.attributed || !cardNumber) return;
+
+    const outcome = await scanCard(scanContext, {
+      barcodeToken: cardNumber,
+      invoiceId: tx.invoiceId,
+      stationId: 'station-01',
+    });
+
+    attributedCount += 1;
+
+    // **Timestamps only.** `scanCard` stamps the clock, which would file every seeded
+    // voucher as issued today and make end-of-day reconciliation report the whole
+    // history as a single day's trading. Correcting the two timestamps is a fixture
+    // concern; every *business* value on these rows — the bracket, the discount, the
+    // cap, the voucher code, the settlement wording — came from the services above and
+    // is never touched here.
+    await db.transaction.updateMany({
+      where: { merchantId: merchant.id, branchId: branch.id, invoiceId: tx.invoiceId },
+      data: { linkedAt: occurredAt },
+    });
+
+    if (outcome.voucher) {
+      vouchersIssued += 1;
+      await db.voucher.update({
+        where: { id: outcome.voucher.id },
+        data: { issuedAt: occurredAt },
+      });
+
+      if (tx.redeem) {
+        await redeemVoucher({
+          merchantId: merchant.id,
+          voucherId: outcome.voucher.id,
+          actorUserId: stationUser.id,
+        });
+        await db.voucher.update({
+          where: { id: outcome.voucher.id },
+          data: { redeemedAt: occurredAt },
+        });
+        vouchersRedeemed += 1;
+      }
+    }
+
+    if (outcome.transaction && outcome.transaction.discountValue > 0) {
+      const row = await db.transaction.findFirst({
+        where: { merchantId: merchant.id, branchId: branch.id, invoiceId: tx.invoiceId },
+        select: { discountValue: true, discountUncappedValue: true },
+      });
+      if (row && row.discountUncappedValue > row.discountValue) cappedInvoices += 1;
+    }
+  };
 
   for (const fixture of CUSTOMERS) {
     const phone = toE164(fixture.phone);
 
-    const existing = await db.customer.findUnique({
+    let customer = await db.customer.findUnique({
       where: { merchantId_phone: { merchantId: merchant.id, phone } },
     });
 
-    const customer =
-      existing ??
-      (await db.customer.create({
-        data: {
-          merchantId: merchant.id,
+    if (!customer) {
+      // Through the service, so the card assignment, the check digit and the audit row
+      // are the real ones. A pre-printed fixture is handed a blank exactly as an
+      // operator would hand one over at the counter; a THERMAL fixture is given none
+      // and `createCustomer` mints one, which is the §6.3 fallback path.
+      const blank = fixture.card === 'THERMAL' ? undefined : await takeBlankCard();
+      const created = await createCustomer(
+        { merchantId: merchant.id, actorUserId: stationUser.id },
+        {
           name: fixture.name,
-          phone,
+          phone: fixture.phone,
           category: fixture.category,
+          ...(blank ? { cardNumber: blank } : {}),
         },
-      }));
+      );
+      customer = await db.customer.findUniqueOrThrow({ where: { id: created.id } });
 
-    // The card lives in its own table now (§12.25). Seeded customers get a THERMAL
-    // card, because that is what a card minted here is: printed on demand, with no
-    // physical stock behind it and therefore no serial. Pre-printed stock comes from
-    // a batch the manager generates, which is a deliberate act and not something a
-    // seed should fake.
+      // The two lifecycle fixtures. Both go through the card service so the state
+      // guards, the partial unique index and the audit trail are exercised rather
+      // than sidestepped — and so a card in a state the station must refuse actually
+      // exists for §12.30's refusal messages to be seen.
+      if (fixture.card === 'LOST_NO_REPLACEMENT' || fixture.card === 'REPLACED') {
+        const live = await db.card.findFirstOrThrow({
+          where: { merchantId: merchant.id, customerId: customer.id, status: 'ASSIGNED' },
+        });
+        await reportCardLost(
+          { merchantId: merchant.id, actorUserId: stationUser.id },
+          live.id,
+          'بيانات تطوير — بلاغ فقدان',
+        );
+        if (fixture.card === 'REPLACED') {
+          await replaceCard(
+            { merchantId: merchant.id, actorUserId: stationUser.id },
+            live.id,
+            await takeBlankCard(),
+            'بيانات تطوير — بطاقة بديلة',
+          );
+        }
+      }
+    }
+
     const activeCard = await db.card.findFirst({
       where: { merchantId: merchant.id, customerId: customer.id, status: 'ASSIGNED' },
     });
 
-    // Re-mint a card number this server can no longer verify. A developer's database
-    // outlives a change to the signing scheme, and a seeded card that cannot be
-    // scanned is worse than useless — it looks like a bug in the station.
-    if (!activeCard) {
-      await db.card.create({
-        data: {
-          merchantId: merchant.id,
-          cardNumber: generateBarcodeToken(env.QR_TOKEN_SECRET),
-          scheme: 'card.v1',
-          origin: 'THERMAL',
-          status: 'ASSIGNED',
-          customerId: customer.id,
-          assignedAt: new Date(),
-        },
-      });
-      remintedCards += 1;
-    } else if (!verifyBarcodeToken(activeCard.cardNumber, env.QR_TOKEN_SECRET)) {
+    // A developer's database outlives a change to the signing scheme, and a seeded
+    // card the station cannot verify looks like a bug in the station rather than a
+    // stale fixture.
+    //
+    // **THERMAL only, and the restriction is load-bearing.** `verifyBarcodeToken`
+    // understands the `card.v1` shape alone — 10-digit payload, 6-digit signature. A
+    // pre-printed `card.v2` number is 6 digits of serial and 10 of check code, so it
+    // fails this check every time even when it is perfectly valid; the station
+    // verifies it through `lookupCard`, which tries both schemes (§12.25).
+    //
+    // Without this guard the seed re-minted every pre-printed card with a v1 number
+    // while leaving `scheme: 'card.v2'` and `serial` untouched — so the serial printed
+    // on the physical card no longer matched its own barcode, which is the exact
+    // support path the v2 scheme exists to provide. Found by asking why the seed
+    // reported three re-minted cards on a database it had just created.
+    //
+    // A pre-printed card that genuinely fails verification is not a fixture problem
+    // and must not be papered over here: it means `QR_TOKEN_SECRET` changed, which
+    // §12.25 says also invalidates blank stock sitting in the merchant's drawer.
+    if (
+      activeCard &&
+      activeCard.origin === 'THERMAL' &&
+      !verifyBarcodeToken(activeCard.cardNumber, env.QR_TOKEN_SECRET)
+    ) {
       await db.card.update({
         where: { id: activeCard.id },
         data: { cardNumber: generateBarcodeToken(env.QR_TOKEN_SECRET) },
@@ -419,21 +613,37 @@ async function seed(db: PrismaClientType): Promise<void> {
       remintedCards += 1;
     }
 
+    const scanNumber = activeCard
+      ? ((await db.card.findUniqueOrThrow({ where: { id: activeCard.id } })).cardNumber)
+      : null;
+
     for (const tx of fixture.transactions) {
-      await writeTransaction(tx, customer.id);
-      attributedCount += 1;
+      await replayInvoice(tx, scanNumber);
     }
   }
 
+  // One misprint, so batch A carries a VOID tally alongside the other four.
+  const voidable = await db.card.findFirst({
+    where: { merchantId: merchant.id, status: 'PRINTED' },
+    orderBy: { serial: 'desc' },
+  });
+  if (voidable) {
+    await voidCard(
+      { merchantId: merchant.id, actorUserId: ownerUser.id },
+      voidable.id,
+      'بيانات تطوير — بطاقة تالفة عند الطباعة',
+    );
+  }
+
   for (const tx of UNATTRIBUTED) {
-    await writeTransaction(tx, null);
+    await replayInvoice(tx, null);
   }
 
   // eslint-disable-next-line no-console -- a seed script reports to the operator by design
   console.log(
     [
       '',
-      '  ✔ اكتمل إدخال بيانات التطوير (v3)',
+      '  ✔ اكتمل إدخال بيانات التطوير (v4 — خصم حسب قيمة الفاتورة)',
       '',
       `    التاجر          ${merchant.name}`,
       `    الفروع          BAG-01 (فرع الكرادة) · BAG-02 (فرع المنصور)`,
@@ -445,7 +655,9 @@ async function seed(db: PrismaClientType): Promise<void> {
         : []),
       `    فواتير مرتبطة   ${attributedCount}`,
       `    فواتير غير مرتبطة ${UNATTRIBUTED.length}   ← طبيعي: أغلب المتسوقين غير مسجّلين`,
-      `    قواعد الخصم     ${DISCOUNT_RULES.map((r) => r.discountType === 'PERCENTAGE' ? `${r.thresholdAmount / 1000}k→${r.discountRate}٪` : `${r.thresholdAmount / 1000}k→${r.discountRate} د.ع`).join(' · ')}`,
+      `    قسائم صادرة     ${vouchersIssued}  (مستردة ${vouchersRedeemed})  ← من المحرّك الحقيقي (§10.3)`,
+      `    فواتير طُبّق عليها الحد الأقصى ${cappedInvoices}   ← يجب أن يكون 1 (§12.37)`,
+      `    شرائح الفاتورة  ${DISCOUNT_RULES.map((r) => r.discountType === 'PERCENTAGE' ? `${r.thresholdAmount / 1000}k→${r.discountRate}٪` : `${r.thresholdAmount / 1000}k→${r.discountRate} د.ع`).join(' · ')}`,
       `    الحد الأقصى للخصم 5,000 د.ع  ← خط الدفاع الأخير (§2.3)`,
       '',
     ].join('\n'),
