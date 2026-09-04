@@ -12,6 +12,8 @@ import {
 } from '../config/paths';
 import {
   applyPendingMigrations,
+  ensureDatabaseReady,
+  listPendingMigrations,
   migrationChecksum,
   readMigrationDirectory,
   splitSqlStatements,
@@ -453,5 +455,85 @@ describe('migrations preserve existing merchant data (§10.1)', () => {
       `PRAGMA table_info("transaction")`,
     );
     expect(columns.map((c) => c.name)).not.toContain('period_key');
+  });
+});
+
+/**
+ * The pre-migration snapshot (§10.2).
+ *
+ * Only the REFUSAL path is exercised here, and that is deliberate rather than lazy:
+ * the success path would take a `VACUUM INTO` copy of the shared test database into
+ * the real data directory on every run, which is a side effect a test suite has no
+ * business having. The refusal path writes nothing anywhere by definition.
+ *
+ * The success path is verified by running it — a database one migration behind, a
+ * writable data directory, and a `pre-migration-*.db` appearing before the migration
+ * is applied and not appearing again on the next boot.
+ */
+describe('a pending migration is refused without a snapshot (§10.2)', () => {
+  it('lists exactly what is pending, and nothing once applied', async () => {
+    const dir = scratch();
+    const client = clientFor(join(dir, 'walaa.db'));
+
+    const all = readMigrationDirectory(resolveMigrationsDir() as string);
+    const previousDir = join(dir, 'previous');
+    mkdirSync(previousDir, { recursive: true });
+    for (const migration of all.slice(0, -1)) {
+      const target = join(previousDir, migration.name);
+      mkdirSync(target, { recursive: true });
+      writeFileSync(join(target, 'migration.sql'), migration.sql, 'utf8');
+    }
+    await applyPendingMigrations({ client, directory: previousDir });
+
+    expect(await listPendingMigrations({ client })).toEqual([
+      all[all.length - 1]?.name,
+    ]);
+
+    await applyPendingMigrations({ client });
+    expect(await listPendingMigrations({ client })).toEqual([]);
+  });
+
+  it('fails closed when the snapshot cannot be written, and changes nothing', async () => {
+    const dir = scratch();
+    const client = clientFor(join(dir, 'walaa.db'));
+
+    // A FILE where the data directory should be: the snapshot cannot be created, and
+    // no other part of the boot touches this path.
+    const blocked = join(dir, 'blocked');
+    writeFileSync(blocked, 'not a directory', 'utf8');
+
+    const previousDataDir = process.env.WALAA_DATA_DIR;
+    process.env.WALAA_DATA_DIR = blocked;
+    try {
+      // The test database is already fully migrated, so nothing is pending against it
+      // and `ensureDatabaseReady` must NOT attempt a snapshot at all.
+      await expect(ensureDatabaseReady()).resolves.toBeDefined();
+
+      // Now a database that IS behind. `ensureDatabaseReady` snapshots the database
+      // named by DATABASE_URL — the test one — so the assertion is only about the
+      // refusal, which happens before any migration is applied to anything.
+      const all = readMigrationDirectory(resolveMigrationsDir() as string);
+      const previousDir = join(dir, 'previous');
+      mkdirSync(previousDir, { recursive: true });
+      for (const migration of all.slice(0, -1)) {
+        const target = join(previousDir, migration.name);
+        mkdirSync(target, { recursive: true });
+        writeFileSync(join(target, 'migration.sql'), migration.sql, 'utf8');
+      }
+      await applyPendingMigrations({ client, directory: previousDir });
+
+      await expect(ensureDatabaseReady({ client })).rejects.toThrow(
+        /تعذّر أخذ نسخة احتياطية قبل ترحيل قاعدة البيانات/,
+      );
+
+      // The refusal left the schema exactly where it was.
+      const columns = await client.$queryRawUnsafe<Array<{ name: string }>>(
+        `PRAGMA table_info("transaction")`,
+      );
+      expect(columns.map((c) => c.name)).toContain('period_key');
+    } finally {
+      if (previousDataDir === undefined) delete process.env.WALAA_DATA_DIR;
+      else process.env.WALAA_DATA_DIR = previousDataDir;
+    }
   });
 });

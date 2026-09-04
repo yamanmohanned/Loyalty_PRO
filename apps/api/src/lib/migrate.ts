@@ -3,8 +3,14 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../config/env';
-import { ensureSqliteDirectory, resolveMigrationsDir } from '../config/paths';
+import {
+  ensureSqliteDirectory,
+  liveDatabasePath,
+  resolveDataDir,
+  resolveMigrationsDir,
+} from '../config/paths';
 import { applySqlitePragmas, prisma as defaultClient } from './prisma';
+import { takeSnapshot } from '../services/backup/snapshot';
 
 /**
  * Runtime migrator — applies committed Prisma migrations without the Prisma CLI.
@@ -238,15 +244,103 @@ export async function applyPendingMigrations(
 }
 
 /**
+ * Names of migrations on disk that this database has not recorded as applied.
+ *
+ * Read-only and cheap: one `CREATE TABLE IF NOT EXISTS` and one `SELECT`, the same
+ * two statements `applyPendingMigrations` opens with.
+ */
+export async function listPendingMigrations(options: MigrateOptions = {}): Promise<string[]> {
+  const client = options.client ?? defaultClient;
+  const directory = options.directory ?? resolveMigrationsDir();
+  if (!directory) return [];
+
+  await client.$executeRawUnsafe(MIGRATIONS_TABLE_DDL);
+  const rows = await client.$queryRawUnsafe<AppliedRow[]>(
+    'SELECT migration_name, checksum, finished_at, rolled_back_at FROM "_prisma_migrations"',
+  );
+  const applied = new Set(rows.map((row) => row.migration_name));
+
+  return readMigrationDirectory(directory)
+    .map((migration) => migration.name)
+    .filter((name) => !applied.has(name));
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  A SNAPSHOT BEFORE ANY MIGRATION, AND FAIL CLOSED IF IT CANNOT BE TAKEN
+ * ═══════════════════════════════════════════════════════════════════════════
+ * (CLAUDE_UPDATE_4.md §10.2)
+ *
+ * **The gap this closes.** Migrations run at boot with nothing behind them: the backup
+ * scheduler starts *after* this, so the recovery position for a bad migration was the
+ * last scheduled backup — up to 24 hours old.
+ *
+ * **And frequently no backup at all.** §12.19 blocks backups until the key ceremony is
+ * confirmed, so a shop that upgrades before completing it has never taken one. The
+ * moment of greatest schema risk coincides exactly with the window in which this
+ * product guarantees no backup exists.
+ *
+ * **Why refusing to boot is right here, when refusing a write is wrong.** §12.16
+ * forbids the latter absolutely: the discount is already given, so refusing frees
+ * nothing and manufactures the cash-versus-POS discrepancy it claims to prevent. A
+ * migration inverts cleanly, the same way a backup does (§12.18) — declining loses
+ * nothing, because the data is still there and the old binary still runs. A blocked
+ * boot during a supervised upgrade produces a phone call; a silent destructive
+ * migration produces a shop that finds out weeks later at reconciliation.
+ *
+ * It runs only when something is actually pending, so an ordinary boot pays nothing.
+ */
+async function snapshotBeforeMigrating(
+  pending: string[],
+  log: (message: string) => void,
+): Promise<void> {
+  const databaseUrl = loadEnv().DATABASE_URL;
+
+  // Nothing to snapshot for a non-file datasource. `takeSnapshot` would refuse anyway;
+  // refusing to boot over it would be a wall in front of a database this cannot help.
+  if (!liveDatabasePath(databaseUrl)) return;
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const destination = join(resolveDataDir(), `pre-migration-${stamp}.db`);
+
+  try {
+    const result = await takeSnapshot(databaseUrl, destination);
+    log(
+      `pre-migration snapshot written: ${result.path} (${result.bytes} bytes) ` +
+        `before ${pending.length} migration(s)`,
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `تعذّر أخذ نسخة احتياطية قبل ترحيل قاعدة البيانات، والترحيل موقوف. ` +
+        `الترحيلات المعلّقة: ${pending.join('، ')}. السبب: ${reason}. ` +
+        'قاعدة البيانات لم تتغيّر — أفرغ مساحة على القرص أو خذ نسخة يدوية ثم أعد التشغيل.',
+    );
+  }
+}
+
+/**
  * Full first-boot database bootstrap: create the directory, open the connection with
- * the right pragmas, apply anything pending.
+ * the right pragmas, snapshot if anything is pending, then apply it.
  *
  * This is what makes the installer a single step — there is no "now run the migration
  * tool" instruction for a shop owner to get wrong.
+ *
+ * The snapshot lives here rather than inside `applyPendingMigrations` on purpose: this
+ * is the one caller that is always operating on the real database named by
+ * `DATABASE_URL`. The test suite drives `applyPendingMigrations` directly against its
+ * own temporary clients, and a snapshot there would either copy the wrong database or
+ * have to be remembered-to-disable in every test — the kind of default that is wrong
+ * exactly once and expensively.
  */
 export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise<MigrationOutcome> {
   ensureSqliteDirectory(loadEnv().DATABASE_URL);
   const client = options.client ?? defaultClient;
   await applySqlitePragmas(client);
+
+  const log = options.log ?? ((): void => {});
+  const pending = await listPendingMigrations({ ...options, client });
+  if (pending.length > 0) await snapshotBeforeMigrating(pending, log);
+
   return applyPendingMigrations({ ...options, client });
 }
