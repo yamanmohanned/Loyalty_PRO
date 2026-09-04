@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
 /**
  * UI primitives, built to the design system in CLAUDE.md §6.4.
@@ -171,17 +172,27 @@ type ChipTone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 /** Pill, tinted background, text in the darker stop. Never black on a colour (§6.4). */
 export function Chip({
   tone = 'neutral',
+  dot = false,
   children,
   className,
 }: {
   tone?: ChipTone;
+  /**
+   * A small filled dot before the label — the reference's status-chip treatment.
+   *
+   * **Reinforcement, never the signal.** The word is still there and still carries
+   * the meaning; the dot only makes a column of chips scannable without reading each
+   * one. §2.3: never meaning by colour alone. `aria-hidden`, because a screen reader
+   * that announced it would be announcing a decoration.
+   */
+  dot?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-pill px-3 py-1 text-sm font-medium',
+        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-sm font-medium',
         tone === 'neutral' && 'bg-canvas text-steel',
         tone === 'accent' && 'bg-accent-tint text-accent',
         tone === 'success' && 'bg-success-tint text-success',
@@ -196,10 +207,193 @@ export function Chip({
         className,
       )}
     >
+      {dot ? (
+        <span
+          className={cn(
+            'size-1.5 shrink-0 rounded-pill',
+            tone === 'neutral' && 'bg-steel',
+            tone === 'accent' && 'bg-accent',
+            tone === 'success' && 'bg-success',
+            tone === 'warning' && 'bg-amber',
+            tone === 'danger' && 'bg-danger',
+          )}
+          aria-hidden
+        />
+      ) : null}
       {children}
     </span>
   );
 }
+
+/* ── Stat tile ─────────────────────────────────────────────────────────────── */
+
+/**
+ * One headline figure, in the shape `dashboard.png` and `customers.png` both use.
+ *
+ * **Shared rather than copied.** Overview and Reports each had their own tile with
+ * its own padding and its own type scale, which is how two screens in one product end
+ * up not looking like one product — and it is the §12.27 duplication argument applied
+ * to styling instead of to data.
+ *
+ * **Taken from the reference:** the tinted rounded icon square, the hard jump from a
+ * small quiet label to a dominant figure, and a supporting line beneath.
+ *
+ * **Refused: the sparkline and the "+18٪ عن الفترة السابقة" delta** that sit in every
+ * one of the reference's tiles. There is no per-KPI series and no prior-period
+ * comparison anywhere in our reports, and a delta is exactly the figure that would
+ * have to be invented to fill a shape. A fabricated percentage is indistinguishable
+ * from a real one — that is what makes it worse than an empty space, not merely
+ * dishonest.
+ *
+ * **The figure has its own full-width row, which is a fix rather than a preference.**
+ * With the icon and the label sharing its line there were about 161 px for it in a
+ * four-across grid, and `1,062,000 د.ع` needs about 181; it overflowed the card in
+ * the seed data. Given the row it has 217 px, which also holds the largest value
+ * these screens can produce (§6.5: no horizontal overflow).
+ *
+ * The icon is `aria-hidden` — the label carries the meaning, so nothing is signalled
+ * by the glyph alone.
+ */
+export function StatTile({
+  icon: Icon,
+  label,
+  value,
+  money,
+  hint,
+  loading = false,
+  stale = false,
+  tone = 'neutral',
+}: {
+  icon?: LucideIcon;
+  label: string;
+  value?: string | number | null;
+  money?: number;
+  hint?: string;
+  loading?: boolean;
+  /** Dimmed while a refetch is in flight, so a figure is never silently out of date. */
+  stale?: boolean;
+  tone?: 'neutral' | 'accent' | 'warning';
+}) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 text-[13px] leading-tight text-steel">{label}</p>
+        {Icon ? (
+          <span
+            className={cn(
+              'flex size-11 shrink-0 items-center justify-center rounded-xl',
+              tone === 'warning' ? 'bg-amber-tint text-amber' : 'bg-accent-tint text-accent',
+            )}
+          >
+            <Icon size={22} aria-hidden />
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className={cn('mt-2 transition-opacity duration-base', stale && 'opacity-45')}
+      >
+        {loading ? (
+          <Skeleton className="h-8 w-28" />
+        ) : money !== undefined ? (
+          <Money value={money} className="text-[1.75rem] leading-none" />
+        ) : (
+          <p
+            className={cn(
+              'amount text-[1.75rem] leading-none',
+              tone === 'warning' ? 'text-amber' : tone === 'accent' ? 'text-accent' : 'text-ink',
+            )}
+          >
+            {value ?? '—'}
+          </p>
+        )}
+      </div>
+
+      {hint ? <p className="mt-2 text-[13px] leading-relaxed text-steel">{hint}</p> : null}
+    </Card>
+  );
+}
+
+/* ── Monogram ──────────────────────────────────────────────────────────────── */
+
+/**
+ * The reference's avatar circle, with the photo taken out of it.
+ *
+ * `dashboard.png` and `customers.png` both put a round avatar beside every person —
+ * a ranked list row, a table row, the user card in the rail. The **treatment** is
+ * worth having: it gives a list of names a left-edge rhythm and makes a row findable
+ * by shape before it is readable by text. The **photograph** is refused, and not on
+ * taste: we hold no customer images, §0.4 keeps stored data minimal, and adding an
+ * upload to satisfy a circle would be building a feature to fill a shape.
+ *
+ * So the circle is drawn from the first character of a name we already have.
+ *
+ * White on `accent` measures **6.20:1**, computed from the painted colours
+ * (#FFFFFF on #0F6E56) rather than assumed.
+ */
+export function Monogram({
+  name,
+  size = 'md',
+  className,
+}: {
+  name: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const initial = name.trim().charAt(0) || '؟';
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-pill bg-accent font-display font-bold text-white',
+        size === 'sm' ? 'size-8 text-sm' : 'size-10 text-base',
+        className,
+      )}
+      aria-hidden
+    >
+      {initial}
+    </span>
+  );
+}
+
+/* ── Table recipes ─────────────────────────────────────────────────────────── */
+
+/*
+ * Class recipes rather than <Table> components.
+ *
+ * Six screens already own their own `<table>`, each with its own column set, its own
+ * cell contents and its own comments about why a particular cell is the way it is.
+ * Wrapping those in generic components would either flatten that detail or need a
+ * prop per exception. Recipes lift every table to the same styling in one edit and
+ * leave the markup where its reasons live.
+ *
+ * What they take from the reference: a header row on the canvas tint rather than on
+ * white, so the head reads as a boundary instead of as a first row; header labels a
+ * step smaller and quieter than the body; and taller rows — the reference's tables
+ * breathe, and ours were tight enough that a name and its phone number ran together.
+ */
+
+/**
+ * `<thead>`'s row: tinted ground, quiet labels.
+ *
+ * **Measured on the surface it renders on, not assumed (§12.34):** `steel` #6B7280 on
+ * `canvas` #F7F8FA is **4.55:1** at 13px — a pass, read out of the running app rather
+ * than inferred. It is a pass by 0.05, which is the margin §12.34 exists to flag: if
+ * this row's ground ever moves off `canvas`, the number has to be taken again before
+ * the class is reused.
+ */
+export const tableHeadRow =
+  'border-b border-border bg-canvas text-[13px] font-medium text-steel';
+
+/** A `<th>`. Start-aligned, since RTL start is the right edge. */
+export const th = 'px-6 py-3 text-start font-medium';
+
+/** A `<td>`. */
+export const td = 'px-6 py-4 align-middle';
+
+/** A `<tr>` in the body: separated, and lit on hover so the row under the cursor is
+ *  unambiguous when a table is this wide. */
+export const tableRow =
+  'border-b border-border last:border-0 transition-colors duration-fast hover:bg-canvas';
 
 /* ── Loading and empty states ──────────────────────────────────────────────── */
 
@@ -307,12 +501,52 @@ export function Notice({
 
 /* ── Page scaffolding ──────────────────────────────────────────────────────── */
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+/**
+ * The page title block.
+ *
+ * The tinted rounded square beside the title is the reference's treatment on every
+ * screen, and it is worth taking: it gives each page a fixed visual anchor at the
+ * start edge, so the eye lands in the same place after a nav change. It is
+ * decorative — `aria-hidden`, with the title carrying the meaning — and it stays on
+ * the one accent rather than the reference's per-page hue, because §6.2 gives this
+ * product one accent and colour-as-decoration is exactly what it rules out.
+ */
+export function PageHeader({
+  title,
+  subtitle,
+  icon,
+  lead,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  /** A lucide glyph. Wrapped in the tinted square. */
+  icon?: ReactNode;
+  /**
+   * An element that brings its own ground — a `Monogram` on a person's page. Rendered
+   * bare, since wrapping a filled circle in a tinted square gives two rings.
+   */
+  lead?: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <header className="mb-6 flex items-start justify-between gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-ink">{title}</h1>
-        {subtitle ? <p className="mt-1 text-base leading-relaxed text-steel">{subtitle}</p> : null}
+      <div className="flex items-start gap-4">
+        {lead}
+        {icon ? (
+          <span
+            className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent"
+            aria-hidden
+          >
+            {icon}
+          </span>
+        ) : null}
+        <div>
+          <h1 className="text-2xl font-bold leading-tight text-ink">{title}</h1>
+          {subtitle ? (
+            <p className="mt-1.5 text-base leading-relaxed text-steel">{subtitle}</p>
+          ) : null}
+        </div>
       </div>
       {action}
     </header>

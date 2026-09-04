@@ -231,6 +231,14 @@ export const locale = {
     recent: 'أحدث الفواتير',
     unattributed: 'غير مرتبطة',
     attributionHint: 'الفواتير غير المرتبطة طبيعية — أغلب المتسوقين غير مسجّلين في البرنامج.',
+
+    /* ── V4-4: the attribution split, drawn ──────────────────────────────── */
+    splitTitle: 'توزيع الفواتير الملتقطة',
+    splitCentreLabel: 'نسبة الارتباط',
+    splitAttributed: 'مرتبطة بزبون',
+    splitUnattributed: 'غير مرتبطة',
+    splitInvoices: (n: number) => `${group(n)} فاتورة`,
+    rankLabel: (n: number) => `المرتبة ${group(n)}`,
   },
 
   customers: {

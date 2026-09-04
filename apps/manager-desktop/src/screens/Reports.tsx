@@ -21,7 +21,17 @@ import {
   SERIES,
   TIER_RAMP,
 } from '../lib/viz';
-import { Card, CardHeader, EmptyState, Money, Notice, PageHeader, Skeleton } from '../components/ui';
+import { BadgePercent, BarChart3, Percent, Ticket, TicketCheck } from 'lucide-react';
+import {
+  Card,
+  CardHeader,
+  EmptyState,
+  Money,
+  Notice,
+  PageHeader,
+  Skeleton,
+  StatTile,
+} from '../components/ui';
 
 /**
  * Programme reporting (charts added 2026-09-02).
@@ -72,6 +82,7 @@ export function ReportsScreen() {
 
   const header = (
     <PageHeader
+      icon={<BarChart3 size={24} aria-hidden />}
       title={locale.reports.title}
       subtitle={locale.reports.subtitle}
       action={<RangePicker value={range} onChange={setRange} />}
@@ -98,25 +109,29 @@ export function ReportsScreen() {
         {/* ── Headline figures ──────────────────────────────────────────── */}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat
+          <StatTile
+            icon={BadgePercent}
             label={locale.reports.discountsGranted}
             money={r?.discountsGranted}
             loading={firstLoad}
             stale={stale}
           />
-          <Stat
+          <StatTile
+            icon={Ticket}
             label={locale.reports.vouchersIssued}
             value={r ? new Intl.NumberFormat('en-US').format(r.vouchersIssued) : undefined}
             loading={firstLoad}
             stale={stale}
           />
-          <Stat
+          <StatTile
+            icon={TicketCheck}
             label={locale.reports.vouchersRedeemed}
             value={r ? new Intl.NumberFormat('en-US').format(r.vouchersRedeemed) : undefined}
             loading={firstLoad}
             stale={stale}
           />
-          <Stat
+          <StatTile
+            icon={Percent}
             label={locale.reports.redemptionRate}
             value={r ? `${r.redemptionRatePct}٪` : undefined}
             loading={firstLoad}
@@ -609,31 +624,3 @@ function TodaySettlement({ report, loading, stale }: PanelProps) {
 const money = (value: number): string =>
   `${new Intl.NumberFormat('en-US').format(value)} ${locale.common.currency}`;
 
-function Stat({
-  label,
-  value,
-  money: amount,
-  loading,
-  stale,
-}: {
-  label: string;
-  value?: string | number;
-  money?: number;
-  loading: boolean;
-  stale: boolean;
-}) {
-  return (
-    <Card className="p-5">
-      <p className="text-sm text-steel">{label}</p>
-      <div className={`mt-2 transition-opacity duration-normal ${stale ? 'opacity-45' : ''}`}>
-        {loading ? (
-          <Skeleton className="h-8 w-24" />
-        ) : amount !== undefined ? (
-          <Money value={amount} className="text-2xl" />
-        ) : (
-          <p className="amount text-2xl text-ink">{value ?? '—'}</p>
-        )}
-      </div>
-    </Card>
-  );
-}

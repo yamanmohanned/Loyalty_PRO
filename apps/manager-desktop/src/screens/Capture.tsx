@@ -78,7 +78,11 @@ export function CaptureScreen() {
 
   return (
     <>
-      <PageHeader title={locale.capture.title} subtitle={locale.capture.subtitle} />
+      <PageHeader
+        icon={<Printer size={24} aria-hidden />}
+        title={locale.capture.title}
+        subtitle={locale.capture.subtitle}
+      />
 
       <div className="mb-6">
         <Notice tone="warning" title={locale.capture.agentStatus}>

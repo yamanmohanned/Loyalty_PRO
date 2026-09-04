@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, BadgePercent, Plus, Trash2 } from 'lucide-react';
 import type { DiscountConfigResponse, DiscountRuleRow } from '@walaa/shared-types';
 import { assessMargin, SAFE_PERCENTAGE_MAX, SAFE_PERCENTAGE_MIN } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
@@ -123,7 +123,11 @@ export function DiscountsScreen() {
   if (isLoading || !settings || !rules) {
     return (
       <>
-        <PageHeader title={locale.discounts.title} subtitle={locale.discounts.subtitle} />
+        <PageHeader
+          icon={<BadgePercent size={24} aria-hidden />}
+          title={locale.discounts.title}
+          subtitle={locale.discounts.subtitle}
+        />
         <Card>
           <SkeletonTable rows={6} columns={3} />
         </Card>
@@ -146,6 +150,7 @@ export function DiscountsScreen() {
   return (
     <>
       <PageHeader
+        icon={<BadgePercent size={24} aria-hidden />}
         title={locale.discounts.title}
         subtitle={locale.discounts.subtitle}
         action={

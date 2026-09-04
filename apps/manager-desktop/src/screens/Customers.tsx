@@ -20,10 +20,16 @@ import {
   Field,
   Input,
   Money,
+  Monogram,
   Notice,
   Select,
   PageHeader,
   SkeletonTable,
+  cn,
+  tableHeadRow,
+  tableRow,
+  td,
+  th,
 } from '../components/ui';
 
 
@@ -106,6 +112,7 @@ export function CustomersScreen() {
   return (
     <>
       <PageHeader
+        icon={<Users size={24} aria-hidden />}
         title={locale.customers.title}
         subtitle={locale.customers.subtitle}
         action={
@@ -190,40 +197,46 @@ export function CustomersScreen() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-border text-sm text-steel">
-                    <th className="px-6 py-3 text-start font-medium">
+                  <tr className={tableHeadRow}>
+                    <th className={th}>
                       {locale.customers.colCustomer}
                     </th>
-                    <th className="px-6 py-3 text-start font-medium">
+                    <th className={th}>
                       {locale.customers.colBalance}
                     </th>
-                    <th className="px-6 py-3 text-start font-medium">
+                    <th className={th}>
                       {locale.customers.colCard}
                     </th>
-                    <th className="px-6 py-3 text-start font-medium">
+                    <th className={th}>
                       {locale.customers.colCategory}
                     </th>
-                    <th className="px-6 py-3 text-start font-medium">
+                    <th className={th}>
                       {locale.customers.colJoined}
                     </th>
-                    <th className="px-6 py-3" />
+                    <th className={th} />
                   </tr>
                 </thead>
                 <tbody>
                   {data.customers.map((customer) => (
-                    <tr
-                      key={customer.id}
-                      className="border-b border-border last:border-0 transition-colors duration-fast hover:bg-canvas"
-                    >
-                      <td className="px-6 py-4">
-                        <span className="block text-base font-semibold text-ink">
-                          {customer.name}
-                        </span>
-                        <span className="block font-mono text-sm text-steel" dir="ltr">
-                          {customer.phone}
+                    <tr key={customer.id} className={tableRow}>
+                      {/* The monogram is `customers.png`'s avatar treatment with the
+                          photograph refused — see `Monogram` for why. It also gives a
+                          list of Arabic names a start-edge rhythm, which is what makes
+                          a row findable by shape before it is readable by text. */}
+                      <td className={td}>
+                        <span className="flex items-center gap-3">
+                          <Monogram name={customer.name} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-base font-semibold text-ink">
+                              {customer.name}
+                            </span>
+                            <bdi dir="ltr" className="block font-mono text-sm text-steel">
+                              {customer.phone}
+                            </bdi>
+                          </span>
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className={td}>
                         <Money value={customer.lifetimeSpend} />
                         <span className="block text-sm text-steel">
                           {customer.transactionCount} {locale.customer.invoices}
@@ -243,7 +256,7 @@ export function CustomersScreen() {
                         sees the number backwards — §12.25's defect, which no test could
                         see because the string and the DOM were both correct.
                       */}
-                      <td className="px-6 py-4">
+                      <td className={td}>
                         {customer.cardNumber ? (
                           <bdi dir="ltr" className="font-mono text-sm text-ink">
                             {formatCardNumber(customer.cardNumber)}
@@ -252,15 +265,15 @@ export function CustomersScreen() {
                           <span className="text-sm text-steel">{locale.customers.noCard}</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
-                        <Chip tone="accent">
+                      <td className={td}>
+                        <Chip tone="accent" dot>
                           {locale.categories[customer.category as 'REGULAR']}
                         </Chip>
                       </td>
-                      <td className="px-6 py-4 text-sm text-steel">
+                      <td className={cn(td, 'text-sm text-steel')}>
                         {new Date(customer.createdAt).toLocaleDateString('ar-IQ')}
                       </td>
-                      <td className="px-6 py-4 text-end">
+                      <td className={cn(td, 'text-end')}>
                         <Link
                           to={`/customers/${customer.id}`}
                           className="inline-flex min-h-control items-center gap-2 rounded-md border border-border px-4 text-base text-ink transition-colors duration-fast hover:bg-canvas"
@@ -278,7 +291,7 @@ export function CustomersScreen() {
 
             {/* A page that does not say it is a page gets mistaken for the whole
                 list, and a manager concludes they have 25 customers. */}
-            <div className="flex items-center justify-between gap-4 border-t border-border px-6 py-4">
+            <div className="flex items-center justify-between gap-4 border-t border-border bg-canvas px-6 py-4">
               <span className="text-sm text-steel">
                 {locale.customers.pageRange(from, to, total)}
               </span>
@@ -355,10 +368,19 @@ export function CustomerDetailScreen() {
         {locale.customers.title}
       </Link>
 
+      {/* A person's page leads with the person: `customers.png` puts an avatar at
+          the head of every customer row, and the same treatment at page scale gives
+          the detail screen an identity a title alone does not. `lead` rather than
+          `icon` because the monogram brings its own ground. */}
       <PageHeader
+        lead={<Monogram name={customer.name} className="size-12 text-lg" />}
         title={customer.name}
         subtitle={customer.phone}
-        action={<Chip tone="accent">{locale.categories[customer.category]}</Chip>}
+        action={
+          <Chip tone="accent" dot>
+            {locale.categories[customer.category]}
+          </Chip>
+        }
       />
 
       {/* Asymmetric, not three equal columns (§6.5). */}

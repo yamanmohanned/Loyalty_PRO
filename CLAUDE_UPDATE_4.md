@@ -568,3 +568,57 @@ and they are what replaced the reference's points tiles. This has now happened t
 §10.5's per-customer discount report was built and never displayed — so it is a
 **standing check per screen**, not a coincidence: for every screen redesigned, list what
 its endpoint returns and confirm each field either renders or is deliberately unused.
+
+### 10.10 Refusing CONTENT was never a licence to refuse STYLE
+*(operator correction, 2026-09-04. The counterweight to §10.9, and it has to sit
+directly beside it.)*
+
+§10.9 is right and stands whole: no invented points programme, no retention rate, no
+city distribution, no fabricated delta, no metric this system does not measure. That
+ruling was never in question.
+
+**What went wrong is that the refusal was applied to the reference's *visual
+language* as well as to its content, and then the screen was called finished.** The
+operator put the built Overview beside `dashboard.png` and reported the honest
+result: Login had changed slightly; Overview, Customers, Discount rules, Cards,
+Backup and Reports were visually indistinguishable from before the overhaul. The
+audit of what to take and what to refuse had been done carefully — and then almost
+nothing was taken.
+
+The distinction the two rulings draw between them:
+
+| Refuse (§10.9) | Take (this section) |
+|---|---|
+| A number the system does not measure | Panel treatment — elevation, radius, border, internal padding |
+| A panel implying a feature we lack | Spacing rhythm and density |
+| A sparkline with no series behind it | Typographic hierarchy — the size and weight jumps between label, figure and support line |
+| A prior-period delta we never computed | Chart styling — gradients, gridline weight, dot markers, legends |
+| An avatar photograph we do not hold | Colour *application* — tinted icon squares, tinted grounds, where the accent lands |
+| A city breakdown we never asked for | Composition — what sits beside what, and at what proportion |
+
+**The test is not "did I audit it" but "does it look related".** Put the built screen
+beside its reference: the family resemblance in styling should be obvious even though
+the content is entirely different.
+
+Worked examples from the pass this section came out of, each showing the seam:
+
+- **The avatar.** The photograph is refused — no images are held and §0.4 keeps stored
+  data minimal. The avatar *treatment* is taken, drawn from the first letter of a name
+  already in the row. Same shape, honest content.
+- **The rank badge.** The number is real, because the list is genuinely ranked. The
+  reference's gold/silver/bronze podium colouring is refused, because amber is a status
+  colour here (§6.2) and spending it on decoration would make it stop meaning anything.
+- **The donut.** The reference's five-slice city breakdown is refused outright. The
+  donut *form* is taken for the one split this screen actually has — attributed against
+  unattributed invoices, which is the headline metric and is genuinely one whole in two
+  parts. The absent half is drawn in grey rather than a second series colour, because
+  it is an absence and not a category.
+- **The KPI tile.** The tinted icon square and the hard label → figure → support-line
+  hierarchy are taken. The sparkline and the delta are refused (§10.9).
+
+**And a defect that only the styling pass found.** Rendering the restyled tile at its
+real width showed `1,062,000 د.ع` overflowing its card in the *seed* data — four tiles
+across a 1088 px column leave about 161 px beside the icon and the label, and that
+figure needs 181. Giving the figure its own full-width row fixes it and holds the
+largest value the screen can produce. §6.5 forbids the overflow; nothing but rendering
+it at width would have shown it. Which is §12.20 again: the screen is the instrument.

@@ -1,3 +1,4 @@
+import { Boxes } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FeatureFlagKey } from '@walaa/shared-types';
 import { api } from '../lib/api';
@@ -45,7 +46,11 @@ export function ModulesScreen() {
 
   return (
     <>
-      <PageHeader title={locale.modules.title} subtitle={locale.modules.subtitle} />
+      <PageHeader
+        icon={<Boxes size={24} aria-hidden />}
+        title={locale.modules.title}
+        subtitle={locale.modules.subtitle}
+      />
 
       <Card>
         <CardHeader title={locale.modules.title} />

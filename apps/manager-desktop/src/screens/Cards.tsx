@@ -106,7 +106,11 @@ export function CardsScreen() {
 
   return (
     <>
-      <PageHeader title={locale.cards.title} subtitle={locale.cards.subtitle} />
+      <PageHeader
+        icon={<CreditCard size={24} aria-hidden />}
+        title={locale.cards.title}
+        subtitle={locale.cards.subtitle}
+      />
 
       <div className="space-y-6">
         {notice ? <Notice tone="accent">{notice}</Notice> : null}
@@ -126,12 +130,22 @@ export function CardsScreen() {
             />
             {/* Centred in whatever height the row settles at, so the figure never
                 sits in a corner of its own card. */}
-            <div className="flex flex-1 items-center gap-3 p-6">
+            <div className="flex flex-1 items-center gap-4 p-6">
               {isLoading || !data ? (
                 <Skeleton className="h-14 w-32" />
               ) : (
                 <>
-                  <span className="amount text-6xl leading-none text-accent">
+                  {/* The reference's tinted icon square, at the scale this figure
+                      asks for — the same treatment `StatTile` carries, so the one
+                      headline number on this screen belongs to the same family as
+                      the ones on Overview and Reports. */}
+                  <span
+                    className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-accent-tint text-accent"
+                    aria-hidden
+                  >
+                    <CreditCard size={28} />
+                  </span>
+                  <span className="amount text-5xl leading-none text-accent">
                     {data.blanksRemaining}
                   </span>
                   <span className="text-base text-steel">{locale.cards.countPrinted}</span>

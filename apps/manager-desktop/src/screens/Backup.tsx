@@ -1,13 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  AlertOctagon,
-  CheckCircle2,
-  CloudOff,
-  HardDrive,
-  MinusCircle,
-  RotateCcw,
-  Usb,
-} from 'lucide-react';
+import { AlertOctagon, CheckCircle2, CloudOff, DatabaseBackup, HardDrive, MinusCircle, RotateCcw, Usb } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
 import { Button, Card, CardHeader, Chip, Notice, PageHeader, Skeleton } from '../components/ui';
@@ -75,7 +67,11 @@ export function BackupScreen() {
 
   return (
     <>
-      <PageHeader title={locale.backup.title} subtitle={locale.backup.subtitle} />
+      <PageHeader
+        icon={<DatabaseBackup size={24} aria-hidden />}
+        title={locale.backup.title}
+        subtitle={locale.backup.subtitle}
+      />
 
       <div className="mb-6">
         <Notice tone="danger" title={locale.backup.riskTitle}>
