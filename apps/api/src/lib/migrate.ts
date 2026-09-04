@@ -244,6 +244,57 @@ export async function applyPendingMigrations(
 }
 
 /**
+ * Turns SQLite's "database disk image is malformed" into a message naming the cause.
+ *
+ * **The cause is usually orphaned sidecars, and the generic error hides it.** SQLite
+ * recovers from `-wal` and `-shm` on open. If the database file is replaced — a restore
+ * copied over it, an upgrade script, `prisma migrate reset` — while those sidecars are
+ * left behind, SQLite replays a log belonging to a file that no longer exists and the
+ * open fails as corruption. The data is usually fine; the pairing is not.
+ *
+ * **How strongly this is claimed.** A `prisma migrate reset` on 2026-09-04 did fail
+ * with a malformed image, and clearing all three files fixed it — but the sidecars
+ * were already gone by the time the directory was inspected, and three later attempts
+ * to stage the failure from mismatched sidecars all opened cleanly. So orphaned
+ * sidecars are a *candidate* cause worth naming to whoever is standing in front of the
+ * error, not a diagnosis. The message says so rather than asserting it.
+ *
+ * **It reports and refuses; it never deletes.** Removing a `-wal` beside a live
+ * database throws away committed transactions that have not been checkpointed — which
+ * is the §12.17 loss, caused by the thing meant to fix it. Whether those sidecars are
+ * orphans or the newest sales in the shop is not knowable from here, so the operator
+ * decides with the backup in front of them.
+ */
+function explainCorruption(error: unknown, databaseUrl: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!/malformed|not a database|file is encrypted/i.test(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  const livePath = liveDatabasePath(databaseUrl);
+  const sidecars = livePath
+    ? (['-wal', '-shm'] as const).map((s) => `${livePath}${s}`).filter((p) => existsSync(p))
+    : [];
+
+  if (sidecars.length === 0) {
+    return new Error(
+      `قاعدة البيانات تالفة أو غير قابلة للقراءة (${message}). ` +
+        'استعد من أحدث نسخة احتياطية — راجع إجراء الاستعادة في دليل التشغيل.',
+    );
+  }
+
+  return new Error(
+    'قاعدة البيانات لا تُفتح. من الأسباب المحتملة وجود ملفات مرافقة لا تطابقها — ' +
+      'وقد لا يكون تلفاً فعلياً في البيانات. ' +
+      `الملفات الموجودة: ${sidecars.join('، ')}. ` +
+      'يحدث هذا عندما يُستبدَل ملف قاعدة البيانات بينما تبقى ملفاته المرافقة بجانبه. ' +
+      '**لا تحذفها قبل التأكد**: إن كانت تخص قاعدة البيانات الحالية فهي تحتوي أحدث ' +
+      'العمليات، وحذفها يفقدها. أوقف الخدمة، خذ نسخة من مجلد البيانات كاملاً، ' +
+      `ثم راجع إجراء الاستعادة في دليل التشغيل. (${message})`,
+  );
+}
+
+/**
  * Names of migrations on disk that this database has not recorded as applied.
  *
  * Read-only and cheap: one `CREATE TABLE IF NOT EXISTS` and one `SELECT`, the same
@@ -334,9 +385,15 @@ async function snapshotBeforeMigrating(
  * exactly once and expensively.
  */
 export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise<MigrationOutcome> {
-  ensureSqliteDirectory(loadEnv().DATABASE_URL);
+  const databaseUrl = loadEnv().DATABASE_URL;
+  ensureSqliteDirectory(databaseUrl);
   const client = options.client ?? defaultClient;
-  await applySqlitePragmas(client);
+
+  try {
+    await applySqlitePragmas(client);
+  } catch (error) {
+    throw explainCorruption(error, databaseUrl);
+  }
 
   const log = options.log ?? ((): void => {});
   const pending = await listPendingMigrations({ ...options, client });

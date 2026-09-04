@@ -366,6 +366,79 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
 
 ---
 
+## Replacing the database file — restore, recovery, or a manual repair
+
+Any procedure that puts a database file into `%PROGRAMDATA%\Walaa\` — restoring a
+backup, recovering from a failed disk, or moving a shop to new hardware — is this
+procedure. It is short, and every step is there because skipping it loses sales.
+
+**`walaa.db` is not one file. It is up to three.** SQLite runs in WAL mode, so the
+database is `walaa.db` plus `walaa.db-wal` and `walaa.db-shm` when they exist. The
+`-wal` holds committed transactions that have not yet been folded into the main file —
+**the most recent sales in the shop**. All three move together or none of them do.
+
+### The procedure
+
+1. **Stop the service.** `sc stop WalaaApi`, and confirm it is stopped. A file copied
+   out from under a running service is a copy of a moving target.
+
+2. **Take a copy of the whole data directory before changing anything.** The whole
+   directory, not `walaa.db` — see above, and see the point below about what a "good"
+   copy can silently be missing. This is the copy you will want if the restore is
+   wrong.
+
+3. **Put the replacement `walaa.db` in place, and remove `walaa.db-wal` and
+   `walaa.db-shm` if they are still there from the old database.** They describe the
+   file you are replacing, not the one you are installing.
+
+   **Do not delete them without step 2 done first.** If they turn out to belong to the
+   database you are keeping, they hold its newest transactions and deleting them loses
+   those sales.
+
+4. **Start the service and read the first log lines.** Migrations run at boot and fail
+   closed, so a schema mismatch stops it rather than serving a schema the code was not
+   built for. `service.log` names what happened.
+
+5. **Confirm on the dashboard, not on the file.** Customer count, recent invoices, and
+   the date of the most recent one. A restored database that opens is not yet a
+   restored database that is *current* — which is the whole point of the next section.
+
+### Never copy a live database with `copy`, `xcopy`, `robocopy` or `cp`
+
+Use the product's own backup, which takes the snapshot with SQLite's `VACUUM INTO` — a
+single statement under a read transaction that produces a complete, self-contained file
+with no sidecar of its own. A plain file copy of `walaa.db` takes the main file and
+leaves whatever is in the WAL behind.
+
+**This is not theoretical, and it is not loud when it happens.** During the v4 upgrade
+work an ordinary `cp` of the development database produced a copy carrying **37 cards
+against 48 in the live database, and 95 audit rows against 103** — a 61 KB WAL that did
+not travel. `PRAGMA integrity_check` reported `ok` on the deficient copy, because that
+check answers *is this file structurally sound* and never *is this file current*.
+
+A backup that is quietly a few hours behind passes every check anyone thinks to run, and
+the shortfall surfaces only when it is restored — which is the one moment the original is
+already gone.
+
+### If the service will not start and the log says "database disk image is malformed"
+
+Take the whole-directory copy first (step 2), then work through it in this order:
+
+1. **Look for `walaa.db-wal` and `walaa.db-shm` beside the database.** If the database
+   file was replaced while its sidecars were left behind, they describe a file that no
+   longer exists. The service names them in its error when it finds them.
+
+   *Honest about the strength of this:* a `prisma migrate reset` during development
+   produced exactly this error and clearing all three files fixed it, but the failure
+   could not be reproduced from mismatched sidecars afterwards — SQLite normally
+   detects a WAL that does not belong and discards it. Treat this as the first thing to
+   check, not as the known cause.
+
+2. **Restore from the most recent verified backup** using the procedure above. This is
+   the answer whenever step 1 does not obviously apply.
+
+3. **Do not run repair tools against the live file** before the copy in step 2 exists.
+
 ## Findings from the packaging spike
 
 **"A single binary" is the wrong target; a single installer is the right one.**

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { copyFile, rm, stat } from 'node:fs/promises';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
@@ -390,6 +390,35 @@ describe('running a backup', () => {
     }
 
     expect(await target.list()).toHaveLength(keep);
+  });
+
+  it('clears stale sidecars at the destination before writing the restore', async () => {
+    // A restore writes a fresh database to a path that may still carry the PREVIOUS
+    // database's `-wal` and `-shm`. Those describe a file that is being replaced, and
+    // SQLite consults them on open.
+    //
+    // The assertion is about OUR behaviour, not SQLite's: whether `restoreArchive`
+    // leaves a foreign sidecar sitting beside the file it just wrote. Asserting that
+    // the restore merely "works" would pass whether or not we cleared anything,
+    // because SQLite discards a WAL whose salt does not match — which is exactly the
+    // kind of test that looks like it covers something and does not.
+    const target = destinations()[0]!;
+    const run = await runBackup(context(), [target]);
+
+    const dir = tempDir('walaa-restore-sidecars-');
+    const fetched = join(dir, 'fetched.walaabk');
+    await target.fetch(run.name, fetched);
+
+    const destination = join(dir, 'restored.db');
+    await writeFile(`${destination}-wal`, Buffer.from('stale wal from another database'));
+    await writeFile(`${destination}-shm`, Buffer.from('stale shm'));
+
+    const restored = await restoreArchive(fetched, destination);
+
+    expect(restored.integrity).toBe('ok');
+    expect(restored.counts.customers).toBe(1);
+    expect(existsSync(`${destination}-wal`)).toBe(false);
+    expect(existsSync(`${destination}-shm`)).toBe(false);
   });
 
   it('restores an archive without touching the live database', async () => {

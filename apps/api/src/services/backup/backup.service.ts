@@ -347,6 +347,30 @@ export interface RestoreResult {
  */
 export async function restoreArchive(archivePath: string, destinationPath: string): Promise<RestoreResult> {
   const key = requireKey();
+
+  // ═══ THE SIDECARS MUST GO FIRST, AND THIS IS NOT HOUSEKEEPING ═══
+  //
+  // SQLite recovers from `-wal` and `-shm` on open. Write a fresh database file to a
+  // path that still has the *previous* database's sidecars beside it, and SQLite tries
+  // to replay a log belonging to a file that no longer exists — the open fails with
+  // **"database disk image is malformed"**, which reads as a corrupt archive and sends
+  // whoever is restoring after the wrong problem entirely.
+  //
+  // Stated at the strength the evidence supports: this is a documented SQLite
+  // behaviour, not something reproduced here. Three attempts to stage it — main file
+  // truncated to zero, truncated mid-page, and replaced by a different database, each
+  // with its original WAL restored — all opened cleanly, because SQLite validates the
+  // WAL header's salt against the main file and discards a log that does not match.
+  // So the guard below is hygiene against a real mechanism whose trigger conditions
+  // are narrower than they look, and it costs two `rm` calls.
+  //
+  // Removing them is safe **here specifically** and nowhere else: `destinationPath` is
+  // a file this function is about to overwrite wholesale, so anything those sidecars
+  // describe is already being discarded. Never do this beside a live database — a WAL
+  // holds committed transactions, and deleting one loses sales.
+  await rm(`${destinationPath}-wal`, { force: true });
+  await rm(`${destinationPath}-shm`, { force: true });
+
   const header = await readArchive(archivePath, destinationPath, key);
 
   // Prisma wants a URL; on Windows the path separators have to be forward slashes for
