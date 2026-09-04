@@ -305,6 +305,18 @@ describe('the route inventory', () => {
         // Public by design, each one reasoned about where it is declared.
         'GET, HEAD /',
         'GET, HEAD /assets/*',
+        // The Station's own logo, at the bundle root rather than under `assets/`.
+        //
+        // It is here because this inventory did its job: `station.ts` used to serve a
+        // hardcoded list of root filenames, `brand-mark.png` was not on it, and the
+        // auth hook answered **401** for the Station's logo on every screen in
+        // production. Serving the root files by enumeration fixed that and grew the
+        // route table — which this test refused to let through silently.
+        //
+        // Adding a file to `apps/station/public/` will fail this test again, and that
+        // is the intended behaviour: a new public route on the service that also holds
+        // every sale in the shop should be looked at once by a person.
+        'GET, HEAD /brand-mark.png',
         'GET, HEAD /health',
         'GET, HEAD /realtime',
         'OPTIONS *',

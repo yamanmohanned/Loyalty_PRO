@@ -110,6 +110,11 @@ export const locale = {
 
     /* The result. */
     invoiceTotal: 'إجمالي الفاتورة',
+    /* ── Clearing the screen (§4) ─────────────────────────────────────── */
+    clearForNext: 'شاشة جديدة — الزبون التالي',
+    clearCountdown: (seconds: number) =>
+      `تُمسح الشاشة تلقائياً بعد ${seconds} ثانية · أو اضغط Esc`,
+    clearAfterPrint: 'تبقى الشاشة حتى تطبع القسيمة · أو اضغط Esc للمسح الآن',
     startOver: 'البدء من جديد',
   },
 

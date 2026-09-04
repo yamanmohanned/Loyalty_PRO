@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +16,7 @@ import {
   CreditCard,
   Printer,
   Receipt,
+  RotateCcw,
   TrendingUp,
   User,
   WifiOff,
@@ -287,7 +289,9 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
   const currentStep = stage.kind === 'card' || stage.kind === 'identifying' || stage.kind === 'cardRefused' ? 1 : 2;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-5 py-6">
+    // `pb-44` reserves the height of the fixed reset bar (§4). Without it the last
+    // line of a long result — the voucher code on a slip preview — sits underneath it.
+    <div className="mx-auto w-full max-w-3xl px-5 pb-44 pt-6">
       <StepIndicator current={currentStep} labels={STEP_LABELS} />
 
       {stage.kind === 'card' || stage.kind === 'cardRefused' || stage.kind === 'invoice' ? (
@@ -462,6 +466,184 @@ function IdentityBanner({
   );
 }
 
+/* ── Clearing the screen (CLAUDE_UPDATE_4.md §4) ───────────────────────────── */
+
+/**
+ * How long a terminal result stays on screen before it clears itself.
+ *
+ * **Ninety seconds, and the number is a judgement about a queue rather than a
+ * default.** A customer reads gross / discount / net and a voucher code in fifteen to
+ * twenty-five seconds; a conversation at the counter — "what is this for", "can I use
+ * it today" — runs to about a minute. Ninety seconds clears comfortably past the
+ * second case without ever cutting off the first.
+ *
+ * The upper bound is the reason it exists at all: an unattended station must not sit
+ * showing a named customer's purchase history to whoever walks up next (§0.4 keeps
+ * stored data minimal; leaving it on a screen beside a till gives that away for free).
+ * A minute and a half is short enough that nobody's details are on display across a
+ * shift change, and long enough that it never rushes the person it belongs to.
+ */
+const AUTO_CLEAR_SECONDS = 90;
+
+/**
+ * Counts down to an automatic clear, and hands back the seconds left so the screen can
+ * say so.
+ *
+ * **Nothing clears silently.** A screen that wipes itself with no warning teaches an
+ * operator that the station is unreliable, and the next thing they do is stop trusting
+ * what it says. The remaining seconds are on the button.
+ *
+ * **Any interaction restarts it.** Someone reading the slip aloud, or a customer
+ * pointing at a figure, must not lose the screen mid-sentence.
+ *
+ * `armed` exists for one case and it is the important one — see `ResetBar`.
+ */
+function useAutoClear(armed: boolean, onClear: () => void): number | null {
+  const [remaining, setRemaining] = useState(AUTO_CLEAR_SECONDS);
+  const clear = useRef(onClear);
+  clear.current = onClear;
+
+  useEffect(() => {
+    if (!armed) {
+      setRemaining(AUTO_CLEAR_SECONDS);
+      return;
+    }
+
+    let left = AUTO_CLEAR_SECONDS;
+    setRemaining(left);
+
+    const restart = (): void => {
+      left = AUTO_CLEAR_SECONDS;
+      setRemaining(left);
+    };
+
+    const tick = window.setInterval(() => {
+      left -= 1;
+      setRemaining(left);
+      if (left <= 0) {
+        window.clearInterval(tick);
+        clear.current();
+      }
+    }, 1000);
+
+    // Touch and keyboard both, because this app is driven by both at once (§3.2).
+    window.addEventListener('pointerdown', restart);
+    window.addEventListener('keydown', restart);
+
+    return () => {
+      window.clearInterval(tick);
+      window.removeEventListener('pointerdown', restart);
+      window.removeEventListener('keydown', restart);
+    };
+  }, [armed]);
+
+  return armed ? remaining : null;
+}
+
+/**
+ * The control that returns the station to ready-to-scan, on every terminal result.
+ *
+ * ── Why it is a bar and not a link ─────────────────────────────────────────
+ *
+ * §4 asks for "large, in the thumb zone, unmistakable". Before this it was a ghost
+ * button sitting at the bottom of whatever card happened to be rendered, at a
+ * different height on each outcome and below the fold on a tablet in portrait — the
+ * same problem §12.30 solved for the print button and for the same reason. It is now
+ * one bar, pinned to the bottom of the viewport, identical on every outcome, so the
+ * operator's hand learns one place.
+ *
+ * ── What clearing does and does not do ─────────────────────────────────────
+ *
+ * **It clears the view, never a record.** By the time any of these states is on
+ * screen the transaction is committed server-side; this resets local component state
+ * and nothing else. There is deliberately no API call here — a "cancel" that reached
+ * the server would be a way to unmake a sale from the till, which is not a thing this
+ * product offers.
+ *
+ * ── The keyboard path, and what was deliberately NOT built ─────────────────
+ *
+ * **Escape.** Chosen because the operator's hands are on a scanner and a keyboard,
+ * not because it is discoverable — the on-screen button is the discoverable path and
+ * this is the fast one. Many keyboard-wedge scanners can be configured to send it as
+ * a suffix, which makes "clear" reachable without reaching for the screen.
+ *
+ * **A dedicated reset barcode is deferred, not rejected** *(operator ruling,
+ * 2026-09-04)*. It would be new physical stock, a new artefact to lose, and it solves
+ * a problem nobody has observed. Revisit only if the field shows operators reaching
+ * for the screen too often mid-queue.
+ *
+ * **The scan field stays dead on the result screen, and that is not an oversight.**
+ * §12.30 made it dead on purpose: a stray scan there wipes the slip the customer is
+ * still reading. Making the field live to give the scanner a "clear" would trade a
+ * known good property for a convenience.
+ */
+function ResetBar({
+  onReset,
+  /**
+   * Whether the countdown may run.
+   *
+   * **On a qualified scan this is false until the slip has printed**, and that single
+   * condition is what makes the timeout safe. The screen holds a preview of paper the
+   * operator has not produced yet; clearing it on a timer would destroy the thing they
+   * are about to press, and the customer would be standing there with no slip and no
+   * way back to it. Every other outcome arms immediately, because there is nothing
+   * pending on them.
+   */
+  armed = true,
+  children,
+}: {
+  onReset: () => void;
+  armed?: boolean;
+  children?: ReactNode;
+}): JSX.Element {
+  const remaining = useAutoClear(armed, onReset);
+
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key === 'Escape') onReset();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onReset]);
+
+  return (
+    // `fixed`, not `sticky`. Sticky only pins once the content is taller than the
+    // viewport, so on a short outcome the bar landed mid-screen — at 689px of a 960px
+    // tablet — and at a different height on every outcome, which is the problem this
+    // bar exists to remove. Fixed puts it in one place on every result, on every
+    // device. The page carries bottom padding so nothing is ever hidden behind it.
+    <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-surface px-5 py-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row-reverse">
+        {/* Exactly one solid button at a time, and it is always the next thing to do
+            (§6.4). While a slip is waiting to be printed, printing is the action and
+            clearing is the escape hatch; once it has printed, clearing becomes the
+            action. Two solid buttons of equal weight side by side is not a hierarchy —
+            it is two primaries, and the operator has to read both to find the one they
+            want. Seen in the rendered screen, not in the markup. */}
+        <Button
+          size="large"
+          variant={armed ? 'primary' : 'ghost'}
+          className="flex-1"
+          onClick={onReset}
+        >
+          <RotateCcw size={22} aria-hidden />
+          {locale.flow.clearForNext}
+        </Button>
+        {children}
+      </div>
+
+      {/* Ink rather than steel: this sits on an opaque surface, but it is the one line
+          that explains a screen about to change on its own, and it is read at arm's
+          length under shop lighting (§3.2). */}
+      <p className="mt-2 text-center text-sm text-ink/70" aria-live="off">
+        {remaining === null
+          ? locale.flow.clearAfterPrint
+          : locale.flow.clearCountdown(remaining)}
+      </p>
+    </div>
+  );
+}
+
 /* ── Everything that is not the field ──────────────────────────────────────── */
 
 function Stageview({
@@ -509,6 +691,7 @@ function Stageview({
 
     case 'queued':
       return (
+        <>
         <Card className="space-y-3 border-amber/30 bg-amber-tint text-center">
           <WifiOff className="mx-auto text-amber" size={40} aria-hidden />
           <p className="text-xl font-bold text-amber">{locale.scan.offline}</p>
@@ -520,14 +703,14 @@ function Stageview({
             سيتم احتساب المشتريات في رصيد الزبون عند عودة الاتصال — لا توجد قسيمة خصم لهذه
             الفاتورة.
           </p>
-          <Button variant="ghost" onClick={onReset}>
-            {locale.scan.again}
-          </Button>
         </Card>
+        <ResetBar onReset={onReset} />
+        </>
       );
 
     case 'notSaved':
       return (
+        <>
         <Card className="space-y-3 border-danger/30 bg-danger-tint text-center">
           <AlertOctagon className="mx-auto text-danger" size={40} aria-hidden />
           <p className="text-xl font-bold text-danger">{locale.notSaved.title}</p>
@@ -540,20 +723,19 @@ function Stageview({
           {stage.storage ? (
             <p className="text-sm text-steel">{locale.notSaved.storageHint}</p>
           ) : null}
-          <Button variant="ghost" onClick={onReset}>
-            {locale.flow.startOver}
-          </Button>
         </Card>
+        <ResetBar onReset={onReset} />
+        </>
       );
 
     case 'error':
       return (
-        <Card className="space-y-3 text-center">
-          <Notice tone="error">{stage.message}</Notice>
-          <Button variant="ghost" onClick={onReset}>
-            {locale.flow.startOver}
-          </Button>
-        </Card>
+        <>
+          <Card className="space-y-3 text-center">
+            <Notice tone="error">{stage.message}</Notice>
+          </Card>
+          <ResetBar onReset={onReset} />
+        </>
       );
 
     case 'result':
@@ -730,15 +912,15 @@ function ResultView({
 
   if (response.outcome === 'NO_PENDING_INVOICE') {
     return (
+      <>
       <Card className="space-y-3 text-center">
         <Receipt className="mx-auto text-steel" size={40} aria-hidden />
         <p className="text-2xl font-bold">{locale.outcome.noInvoice}</p>
         <p className="text-base text-steel">{locale.outcome.noInvoiceHint}</p>
         <p className="text-lg">{name}</p>
-        <Button variant="ghost" onClick={onReset}>
-          {locale.flow.startOver}
-        </Button>
       </Card>
+      <ResetBar onReset={onReset} />
+      </>
     );
   }
 
@@ -746,7 +928,8 @@ function ResultView({
     const { slip } = response;
 
     return (
-      // The one hero animation in the product (§6.6): the moment the discount lands.
+      <>
+      {/* The one hero animation in the product (§6.6): the moment the discount lands. */}
       <Card className="animate-scan-success space-y-6 border-success/30">
         <div className="flex items-center justify-center gap-3 text-success">
           <CheckCircle2 size={36} aria-hidden />
@@ -790,29 +973,33 @@ function ResultView({
             whole receipt tall: on a tablet in portrait the primary action would
             otherwise sit below the fold, and an operator with a queue does not scroll
             to find the button they press on every sale (§6.5). */}
-        <div className="glass-panel sticky bottom-0 -mx-6 -mb-6 flex flex-col gap-3 rounded-b-lg px-6 py-4 sm:flex-row">
-          <Button
-            size="large"
-            className="flex-1"
-            onClick={() => {
-              onPrint(slip);
-              setPrinted(true);
-            }}
-          >
-            <Printer size={20} aria-hidden />
-            {printed ? locale.preview.printAgain : locale.preview.print}
-          </Button>
-          <Button variant="ghost" className="flex-1" onClick={onReset}>
-            {locale.scan.again}
-          </Button>
-        </div>
       </Card>
+
+      {/* The countdown is armed by `printed`, not by arrival. Clearing an unprinted
+          slip would destroy the paper the operator is about to produce, with the
+          customer standing there and no way back to it. */}
+      <ResetBar onReset={onReset} armed={printed}>
+        <Button
+          size="large"
+          variant={printed ? 'ghost' : 'primary'}
+          className="flex-1"
+          onClick={() => {
+            onPrint(slip);
+            setPrinted(true);
+          }}
+        >
+          <Printer size={22} aria-hidden />
+          {printed ? locale.preview.printAgain : locale.preview.print}
+        </Button>
+      </ResetBar>
+      </>
     );
   }
 
   // NOT_QUALIFIED and LINKED_WITHOUT_DISCOUNT both land here: purchase recorded, no
   // slip. Framed as progress, never as rejection — this is a sales prompt (§6.2 #3).
   return (
+    <>
     <Card className="space-y-4 text-center">
       <TrendingUp className="mx-auto text-accent" size={36} aria-hidden />
       <p className="text-xl">{name}</p>
@@ -839,10 +1026,9 @@ function ResultView({
         </div>
       ) : null}
 
-      <Button variant="ghost" onClick={onReset}>
-        {locale.scan.again}
-      </Button>
     </Card>
+    <ResetBar onReset={onReset} />
+    </>
   );
 }
 

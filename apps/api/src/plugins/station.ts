@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance } from 'fastify';
@@ -41,8 +41,31 @@ import { resolveStationDir } from '../config/paths';
  */
 const ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** Small files Vite may place at the root of the bundle. */
-const ROOT_FILES = ['favicon.svg', 'favicon.ico', 'manifest.webmanifest', 'robots.txt'];
+/**
+ * Root-level bundle files are served by **enumerating what is actually there**, not
+ * from a list of names.
+ *
+ * This was a hardcoded allowlist — `favicon.svg`, `favicon.ico`,
+ * `manifest.webmanifest`, `robots.txt` — written when those were the only root files
+ * Vite emitted. §12.35 later added `brand-mark.png` to `public/`, the list did not
+ * move with it, and every request for the Station's own logo was answered **401** by
+ * the auth hook: a broken image on every screen, in production only, because
+ * development serves the bundle from Vite instead.
+ *
+ * That is §0 rule 9 exactly — a control that stayed correct-looking while the thing it
+ * described changed underneath it. A list of filenames is a control that decays every
+ * time somebody adds a file; a directory read cannot.
+ *
+ * Safe because the input is the filesystem rather than the request: names come from
+ * `readdirSync` of the bundle root, are filtered to plain files matching `ASSET_NAME`,
+ * and each becomes its own literal route. No user-supplied path is ever joined.
+ */
+function rootFiles(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((name) => name !== 'index.html' && ASSET_NAME.test(name));
+}
 
 export async function registerStation(app: FastifyInstance): Promise<void> {
   const root = resolveStationDir();
@@ -72,10 +95,11 @@ export async function registerStation(app: FastifyInstance): Promise<void> {
     },
   );
 
-  for (const file of ROOT_FILES) {
-    if (!existsSync(join(root, file))) continue;
+  const served = rootFiles(root);
+  for (const file of served) {
     app.get(`/${file}`, { config: { public: true } }, async (_request, reply) =>
       reply.sendFile(file),
     );
   }
+  app.log.info({ rootFiles: served }, 'station root files served');
 }
