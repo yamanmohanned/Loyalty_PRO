@@ -536,6 +536,7 @@ async function seed(db: PrismaClientType): Promise<void> {
     let customer = await db.customer.findUnique({
       where: { merchantId_phone: { merchantId: merchant.id, phone } },
     });
+    const isNewCustomer = customer === null;
 
     if (!customer) {
       // Through the service, so the card assignment, the check digit and the audit row
@@ -553,29 +554,6 @@ async function seed(db: PrismaClientType): Promise<void> {
         },
       );
       customer = await db.customer.findUniqueOrThrow({ where: { id: created.id } });
-
-      // The two lifecycle fixtures. Both go through the card service so the state
-      // guards, the partial unique index and the audit trail are exercised rather
-      // than sidestepped — and so a card in a state the station must refuse actually
-      // exists for §12.30's refusal messages to be seen.
-      if (fixture.card === 'LOST_NO_REPLACEMENT' || fixture.card === 'REPLACED') {
-        const live = await db.card.findFirstOrThrow({
-          where: { merchantId: merchant.id, customerId: customer.id, status: 'ASSIGNED' },
-        });
-        await reportCardLost(
-          { merchantId: merchant.id, actorUserId: stationUser.id },
-          live.id,
-          'بيانات تطوير — بلاغ فقدان',
-        );
-        if (fixture.card === 'REPLACED') {
-          await replaceCard(
-            { merchantId: merchant.id, actorUserId: stationUser.id },
-            live.id,
-            await takeBlankCard(),
-            'بيانات تطوير — بطاقة بديلة',
-          );
-        }
-      }
     }
 
     const activeCard = await db.card.findFirst({
@@ -619,6 +597,40 @@ async function seed(db: PrismaClientType): Promise<void> {
 
     for (const tx of fixture.transactions) {
       await replayInvoice(tx, scanNumber);
+    }
+
+    // ── Card lifecycle, applied AFTER the invoices ──────────────────────────
+    //
+    // **The order is the fixture.** These two customers shopped and *then* lost the
+    // card, which is the only order that happens in a shop. Running the lifecycle
+    // first — as this loop originally did — left `سجاد الطائي` with no card to scan,
+    // so his invoice was captured and never attributed and he rendered as a customer
+    // with no history at all. That duplicated the empty-state fixture and quietly
+    // deleted the state he exists for: **history, and no card to reprint it onto**.
+    //
+    // Caught by reading his row on the customers screen — 0 د.ع against a fixture
+    // whose note says otherwise. A count that does not match the situation.
+    //
+    // Both paths go through the card service, so the state guards, the partial unique
+    // index and the audit trail are exercised rather than sidestepped — and a card in
+    // a state the station must refuse actually exists for §12.30's messages.
+    if (isNewCustomer && (fixture.card === 'LOST_NO_REPLACEMENT' || fixture.card === 'REPLACED')) {
+      const live = await db.card.findFirstOrThrow({
+        where: { merchantId: merchant.id, customerId: customer.id, status: 'ASSIGNED' },
+      });
+      await reportCardLost(
+        { merchantId: merchant.id, actorUserId: stationUser.id },
+        live.id,
+        'بيانات تطوير — بلاغ فقدان',
+      );
+      if (fixture.card === 'REPLACED') {
+        await replaceCard(
+          { merchantId: merchant.id, actorUserId: stationUser.id },
+          live.id,
+          await takeBlankCard(),
+          'بيانات تطوير — بطاقة بديلة',
+        );
+      }
     }
   }
 

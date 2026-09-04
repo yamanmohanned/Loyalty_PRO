@@ -228,7 +228,6 @@ export const locale = {
     searchHint: 'البحث برقم الهاتف فقط — الاسم ليس معرّفاً فريداً',
     colCustomer: 'الزبون',
     colBalance: 'إجمالي المشتريات',
-    colProgress: 'التقدّم نحو العتبة',
     colCategory: 'الفئة',
     colJoined: 'تاريخ التسجيل',
     empty: 'لا يوجد زبائن',
@@ -313,7 +312,7 @@ export const locale = {
       'تحدّد نص التوجيه المطبوع على قسيمة الخصم. الخيار الافتراضي يذكر المبالغ دون افتراض طريقة قيد الخصم في الدفاتر.',
     rulesTitle: 'مستويات الخصم',
     rulesSubtitle: 'كلما ارتفعت قيمة الفاتورة الواحدة، ارتفع الخصم عليها.',
-    colThreshold: 'عتبة الإنفاق',
+    colThreshold: 'قيمة الفاتورة من',
     colRate: 'قيمة الخصم',
     addRule: 'إضافة مستوى',
     removeRule: 'حذف',
@@ -513,7 +512,16 @@ export const locale = {
     /** Customers-per-tier in v3; invoices-per-bracket in v4 (§10.6). */
     tierReached: (count: number) => `${group(count)} زبون`,
     bracketInvoices: (count: number) => `${group(count)} فاتورة`,
-    ofThreshold: 'عتبة',
+
+    /* ── Who the discounts go to (v4 §10.5) ────────────────────────────── */
+    perCustomerTitle: 'قيمة الخصم لكل زبون',
+    perCustomerSubtitle:
+      'الخصم يُحتسب على كل فاتورة على حدة — تابع هنا من يحصل على أكبر نصيب خلال الفترة',
+    perCustomerEmpty: 'لم يحصل أي زبون على خصم في هذه الفترة',
+    perCustomerColName: 'الزبون',
+    perCustomerColValue: 'قيمة الخصم',
+    discountedInvoices: (count: number) => `${group(count)} فاتورة مخصومة`,
+    ofThreshold: 'فاتورة من',
 
     /* ── Charts (2026-09-02) ──────────────────────────────────────────────── */
 

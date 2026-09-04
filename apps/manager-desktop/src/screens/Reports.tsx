@@ -166,6 +166,10 @@ export function ReportsScreen() {
           <BracketLadder report={r} loading={firstLoad} stale={stale} />
         </div>
 
+        {/* ── Who the discounts are going to (v4 §10.5) ─────────────────── */}
+
+        <DiscountByCustomer report={r} loading={firstLoad} stale={stale} />
+
         {/* ── Today ─────────────────────────────────────────────────────── */}
 
         <TodaySettlement report={r} loading={firstLoad} stale={stale} />
@@ -390,6 +394,59 @@ function CaptureHealth({ report, loading, stale }: PanelProps) {
             <span className="amount text-xl text-accent">{report.attributionRatePct}٪</span>
           </div>
         ) : null
+      }
+    >
+      <BarRows data={data} />
+    </ChartFrame>
+  );
+}
+
+/**
+ * Discount value taken per customer over the range (v4 §10.5).
+ *
+ * **This panel exists because v4 removed a bound nobody had designed.** Under v3 a
+ * customer climbed the ladder once per period, which capped how often any one of them
+ * could be discounted. v4 judges every invoice on its own, so a wholesale buyer at
+ * 480,000 a day takes the ceiling every day — and every guardrail in §2.3 bounds a
+ * single invoice, none of them a customer.
+ *
+ * It reports; it does not restrict. A frequency cap would be a discount-model decision
+ * with its own guardrails, and growing one out of a reporting screen is exactly how a
+ * second ladder arrives by accident (§12.27).
+ *
+ * One hue for every row, because this is a ranking rather than a set of categories:
+ * the bars are the same thing measured, and colouring them differently would imply a
+ * distinction that is not there.
+ */
+function DiscountByCustomer({ report, loading, stale }: PanelProps) {
+  const data: BarDatum[] = useMemo(() => {
+    if (!report) return [];
+    return report.discountByCustomer.map((row) => ({
+      key: row.id,
+      label: row.name,
+      value: row.discountValue,
+      color: SERIES[0],
+      display: money(row.discountValue),
+      // The invoice count is what turns a large number into a diagnosis: 5,000 across
+      // one basket is an ordinary wholesale sale, and 5,000 across twenty is a habit.
+      note: locale.reports.discountedInvoices(row.discountedInvoiceCount),
+    }));
+  }, [report]);
+
+  return (
+    <ChartFrame
+      title={locale.reports.perCustomerTitle}
+      subtitle={locale.reports.perCustomerSubtitle}
+      empty={locale.reports.perCustomerEmpty}
+      isLoading={loading}
+      isEmpty={Boolean(report) && data.length === 0}
+      isStale={stale}
+      table={
+        <BarTable
+          data={data}
+          labelHeader={locale.reports.perCustomerColName}
+          valueHeader={locale.reports.perCustomerColValue}
+        />
       }
     >
       <BarRows data={data} />

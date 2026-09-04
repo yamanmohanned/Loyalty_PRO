@@ -1216,6 +1216,46 @@ only assertion that catches any of them. That is now pinned by a test that stage
 stored archive older than the sentinel and shows it passing decryption, checksum and
 `PRAGMA integrity_check` while failing verification.
 
+#### Re-amended 2026-09-04: the loss is real, and it was reproduced by accident
+
+**The 2026-08-30 amendment above is wrong about the behaviour, and the original hazard
+stands as first written.** It concluded from one probe that `walaa.db-wal` sits at 0
+bytes after a committed Prisma write. That probe was run against an idle database with
+no service attached. It is not what a working database looks like.
+
+While taking a "just in case" copy of the dev database before the v4 migration —
+`cp prisma/walaa.db …`, the naive copy this section forbids — the copy came out
+**silently behind the live database**:
+
+| | naive `cp` of `walaa.db` | live database | `VACUUM INTO` snapshot |
+|---|---|---|---|
+| `card` | **37** | 48 | 48 |
+| `audit_log` | **95** | 103 | 103 |
+| `transaction` | 35 | 36 | 36 |
+| `PRAGMA integrity_check` | **ok** | ok | ok |
+
+`walaa.db-wal` was **61,832 bytes** at the time — not zero. Eleven card rows and eight
+audit rows were sitting in it and did not travel with the copy.
+
+Three things worth keeping:
+
+1. **The 0-byte observation was an artefact of the probe, not a property of the
+   stack.** A database with a live connection holds a WAL of real size, and that is the
+   only state a merchant's machine is ever in.
+2. **`integrity_check` passed on the deficient copy.** It answers "is this file
+   structurally sound", never "is this file current" — which is exactly why §12.17
+   requirement 2 asserts recency instead, and why that requirement is the load-bearing
+   one.
+3. **The failure mode is the one this project keeps meeting: it looks like success.**
+   The copy opened, passed integrity, and reported plausible counts. Only comparing it
+   against the source revealed that it was missing rows — which nobody does, because
+   the whole point of a backup is that the source is gone.
+
+So: `VACUUM INTO` is not merely "correct by construction and costs nothing". It is the
+difference between a complete backup and one quietly missing the most recent hours,
+and no future session may reason its way back to a naive copy from a 0-byte WAL
+reading.
+
 ### 12.18 Backup engine decisions (V3-6 groundwork) — 2026-08-30
 
 Built ahead of the field validations because none of it depends on them (§7.3, §12.17).
@@ -2230,6 +2270,52 @@ object literal, so a rename type-checks against a call site still passing a *cum
 figure — and the engine would go on computing discounts from the wrong number, correctly,
 forever. The delete makes every one of those call sites fail to compile in the same
 commit, which is the only mechanism this project has ever found that works.
+
+**The exception, and it is a real hole in that guarantee: a SPREAD walks past it.**
+*(found while executing the v4 removal, 2026-09-04)*
+
+TypeScript's excess-property check fires on an object **literal** assigned to a typed
+target. It does **not** fire on a property arriving through a spread. So this compiles
+cleanly after the field is deleted:
+
+```ts
+const DISCOUNT_SETTINGS = { minRate: 1, maxRate: 3, periodType: 'MONTHLY' as const };
+await db.discountSettings.create({ data: { merchantId, ...DISCOUNT_SETTINGS } });
+//                                                     ^ periodType survives, silently
+```
+
+It failed at runtime, in the seed, with Prisma's `Unknown argument 'periodType'` — which
+is the lucky version. A spread into something *without* a strict runtime validator would
+simply have carried a dead field forward.
+
+**So the corollary is: deleting a field fails every call site that names it directly, and
+no call site that spreads it.** Grep for the deleted name before believing the compiler,
+and be most suspicious of constants assembled once and spread into several writers —
+which is exactly the shape a seed, a fixture factory or a config object takes.
+
+#### The detection that actually worked was a number that should not have been there
+
+Recorded because it generalises further than either bug it caught.
+
+The seed printed **«أرقام بطاقات جُدّدت 3»** — three cards re-minted — on a database it
+had just created from empty. Nothing failed. Every test passed. The number was simply
+wrong for the situation, and asking why turned up a genuine defect: the seed's re-mint
+guard calls `verifyBarcodeToken`, which understands only the `card.v1` shape, so every
+`card.v2` pre-printed number failed verification and was **overwritten with a v1 number
+while its `scheme` and `serial` columns stayed as they were**. The serial printed on the
+physical card would no longer match its own barcode — silently killing the one support
+path §12.25 introduced the v2 scheme to provide.
+
+That is §12.27's class with a third surface. The first was a *format* that lied
+(§12.25's reversed card number); the second was a *label* that lied (§12.28's settlement
+ternary); this is an **artifact** that lies — a physical card whose printed number and
+encoded number disagree, discoverable only by a customer at a counter.
+
+**The rule: a reported count that does not match the situation is a defect until
+explained.** Not a cosmetic oddity to tidy later. Seeds, migrations and health reports
+all print counts, and a count nobody can account for is the cheapest signal this system
+produces — it costs one question, and the alternative here was a drawer of cards that
+scan as the wrong thing.
 
 #### Per-customer discount overrides are DISCARDED BY DESIGN
 
