@@ -133,6 +133,25 @@ export type RuleDiscountType = z.infer<typeof RuleDiscountTypeSchema>;
 // buckets end-of-day voucher reconciliation in local time, which is what fixed
 // §12.23's UTC-day bug.
 
+/* ── Thermal paper (CLAUDE_UPDATE_4.md §5) ─────────────────────────────────── */
+
+/**
+ * The Loyalty Station's thermal roll width in millimetres.
+ *
+ * Two values, not a free number, because these are the two rolls a shop actually buys
+ * and every layout decision downstream — the barcode's module width, the slip's font
+ * sizes, whether a voucher code fits on one line — is measured against one of them. A
+ * free-form millimetre field would let a merchant type 72 and get a slip nothing has
+ * ever been checked at.
+ *
+ * 80 is the default and the width v3 hardcoded, so an upgrade changes nothing until
+ * somebody selects otherwise.
+ */
+export const PaperWidthSchema = z.union([z.literal(58), z.literal(80)]);
+export type PaperWidth = z.infer<typeof PaperWidthSchema>;
+
+export const PAPER_WIDTHS: readonly PaperWidth[] = [58, 80];
+
 /* ── Print capture (CLAUDE_v3.md §4.2) ─────────────────────────────────────── */
 
 /**

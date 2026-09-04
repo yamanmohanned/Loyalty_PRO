@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Printer, ShieldCheck } from 'lucide-react';
+import { PAPER_WIDTHS, type PaperWidth } from '@walaa/shared-types';
+import { api } from '../lib/api';
 import { locale } from '../lib/locale';
 import {
   Button,
@@ -178,6 +181,65 @@ export function CaptureScreen() {
           </div>
         </Card>
       </div>
+
+      <PaperWidthPanel />
     </>
+  );
+}
+
+/**
+ * The Loyalty Station's thermal roll width (§5, §10.7).
+ *
+ * **It sits on this screen because this is the only printer-facing screen, and it is
+ * labelled for the printer it actually governs.** Everything above concerns the
+ * *cashier's* receipt printer, which the capture agent listens to; this is the
+ * *station's* slip printer, a different device in a different place. Two printers on
+ * one screen is a real chance to change the wrong one, so the copy names the machine
+ * rather than saying "the printer".
+ *
+ * Merchant-level, not per-station: a shop running two roll widths is hypothetical, and
+ * a per-station setting would be a settings surface on an app that has none by design
+ * (§6.4).
+ */
+function PaperWidthPanel(): JSX.Element {
+  const queryClient = useQueryClient();
+  const printing = useQuery({
+    queryKey: ['printing'],
+    queryFn: () => api.get<{ paperWidth: PaperWidth }>('/system/printing'),
+  });
+
+  const save = useMutation({
+    mutationFn: (paperWidth: PaperWidth) =>
+      api.put<{ paperWidth: PaperWidth }>('/system/printing', { paperWidth }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['printing'] }),
+  });
+
+  const current = printing.data?.paperWidth;
+
+  return (
+    <Card className="mt-6">
+      <CardHeader title={locale.capture.paperTitle} />
+      <div className="space-y-4 p-6">
+        <p className="text-sm leading-relaxed text-steel">{locale.capture.paperHint}</p>
+
+        <Field label={locale.capture.paperLabel}>
+          <Select
+            value={current === undefined ? '' : String(current)}
+            disabled={printing.isPending || save.isPending}
+            onChange={(e) => save.mutate(Number(e.target.value) as PaperWidth)}
+          >
+            {PAPER_WIDTHS.map((width) => (
+              <option key={width} value={String(width)}>
+                {locale.capture.paperOption(width)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {/* Said out loud because it is the one thing a manager would otherwise discover
+            by walking to the station and finding nothing changed. */}
+        <p className="text-xs text-steel">{locale.capture.paperPropagation}</p>
+      </div>
+    </Card>
   );
 }

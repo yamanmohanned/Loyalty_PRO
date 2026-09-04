@@ -26,6 +26,15 @@ import { locale } from '../lib/locale';
  * outside that node, so this block cannot print itself and the customer can never
  * end up with two slips.
  */
+/**
+ * Magnification only. True paper size read across a counter is too small to be useful,
+ * and `zoom` reflows — so the magnified block occupies the space it actually takes and
+ * cannot overlap what follows it, which `transform: scale()` would (§12.30).
+ *
+ * Applied to the torn edge as well, or the two stop lining up at 58 mm.
+ */
+const PREVIEW_ZOOM = 1.25;
+
 export function SlipPreview({
   shopName,
   slip,
@@ -46,7 +55,18 @@ export function SlipPreview({
             printed slip does not have. */}
         <div
           className="mx-auto bg-white text-black shadow-[0_1px_3px_rgba(17,24,39,0.14),0_10px_28px_-10px_rgba(17,24,39,0.22)]"
-          style={{ width: '80mm', zoom: 1.25, padding: '4mm 3mm 6mm', colorScheme: 'light' }}
+          style={{
+            // The SAME custom properties the print stylesheet uses. They were literals
+            // here and in `globals.css`, and had already drifted — 6mm of bottom
+            // padding against the print root's 8mm — so the preview was two
+            // millimetres shorter than the paper while both claimed to render the same
+            // component (§5.1). Sharing `PrintableSlip` guarantees the markup matches;
+            // it says nothing about the box around it, which is what this fixes.
+            width: 'var(--paper-width)',
+            padding: 'var(--paper-padding)',
+            zoom: PREVIEW_ZOOM,
+            colorScheme: 'light',
+          }}
         >
           <PrintableSlip shopName={shopName} slip={slip} />
         </div>
@@ -57,8 +77,8 @@ export function SlipPreview({
           aria-hidden
           className="mx-auto bg-white"
           style={{
-            width: '80mm',
-            zoom: 1.25,
+            width: 'var(--paper-width)',
+            zoom: PREVIEW_ZOOM,
             height: '3mm',
             clipPath:
               'polygon(0 0, 100% 0, 100% 30%, 96% 100%, 92% 30%, 88% 100%, 84% 30%, 80% 100%, 76% 30%, 72% 100%, 68% 30%, 64% 100%, 60% 30%, 56% 100%, 52% 30%, 48% 100%, 44% 30%, 40% 100%, 36% 30%, 32% 100%, 28% 30%, 24% 100%, 20% 30%, 16% 100%, 12% 30%, 8% 100%, 4% 30%, 0 100%)',

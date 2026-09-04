@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RoleSchema } from './enums';
+import { PaperWidthSchema, RoleSchema } from './enums';
 
 /** Auth DTOs. Token lifetimes and rotation live in the API config (CLAUDE.md §7.1). */
 
@@ -27,6 +27,21 @@ export const AuthUserSchema = z.object({
    * that never changes within a session.
    */
   merchantName: z.string(),
+  /**
+   * The station's thermal roll width in millimetres (§5).
+   *
+   * Carried on the session for the same reason as the shop name: the Station prints,
+   * and it must lay the slip out at the width of the paper actually loaded. Sending it
+   * here rather than as its own call means the print stylesheet is correct from the
+   * first render instead of after a fetch settles.
+   *
+   * **Consequence worth knowing:** a station already signed in keeps the old width
+   * until its next token refresh (~15 minutes) or re-login. That is acceptable because
+   * changing this setting accompanies physically changing the roll — somebody is
+   * standing at the machine either way — and a stale value never produces a wrong
+   * figure, only a slip laid out for the other roll.
+   */
+  paperWidth: PaperWidthSchema,
   /** Null for OWNER, who is not bound to a single branch. */
   branchId: z.string().uuid().nullable(),
   branchCode: z.string().nullable(),

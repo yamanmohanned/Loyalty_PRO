@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { LogOut, Search } from 'lucide-react';
-import type { AuthUser, SyncState } from '@walaa/shared-types';
+import type { AuthUser, PaperWidth as PaperWidthValue, SyncState } from '@walaa/shared-types';
 import { restoreSession, setTokens, setUnauthenticatedHandler } from './lib/api';
 import { resolveApiUrl } from './lib/config';
 import { locale } from './lib/locale';
@@ -86,6 +86,7 @@ export function App(): JSX.Element {
 
   return (
     <PrintProvider>
+      <PaperWidth width={user.paperWidth} />
       <HashRouter>
         <div className="flex min-h-[100dvh] flex-col bg-canvas">
           <Header
@@ -203,4 +204,34 @@ function BootSkeleton(): JSX.Element {
       </div>
     </div>
   );
+}
+
+/**
+ * Puts the merchant's roll width onto the document root, where both the print
+ * stylesheet and the on-screen preview read it (§5.1).
+ *
+ * **A component rather than an effect in `App`, and that is not style.** The first
+ * version was a `useEffect` beside `const { user } = boot`, which sits *after* App's
+ * early returns for the loading, setup and login states — so the hook rendered
+ * conditionally and React threw #310, "rendered more hooks than during the previous
+ * render", as a blank screen. Typecheck and lint both passed it. Owning the effect in a
+ * component that only mounts once there is a session makes the ordering unconditional
+ * by construction instead of by remembering.
+ *
+ * On `documentElement` rather than a rendered wrapper because the print stylesheet
+ * styles `html`, `body` and `@page` — none of which any component owns. A width applied
+ * further down the tree would leave the printed page 80 mm with a narrower block inside
+ * it: the failure that looks like it worked.
+ */
+function PaperWidth({ width }: { width: PaperWidthValue }): null {
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--paper-width', `${width}mm`);
+    // 58 mm rolls need tighter side margins or the slip loses usable width to padding:
+    // 3 mm a side of 58 leaves 52 mm, against 74 of 80. The vertical padding is about
+    // the tear rather than the width, so it does not change.
+    root.style.setProperty('--paper-padding', width === 58 ? '4mm 2mm 8mm' : '4mm 3mm 8mm');
+  }, [width]);
+
+  return null;
 }

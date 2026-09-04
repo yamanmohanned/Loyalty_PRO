@@ -40,6 +40,11 @@ model Merchant {
   /// here, not in UTC — a 01:00 Baghdad sale must not fall in the previous period.
   timezone String @default("Asia/Baghdad")
   currency String @default("IQD")
+  /// Thermal roll width in millimetres for the Loyalty Station's slip printer: 58 or
+  /// 80. Merchant-level rather than per-station (§10.7): a shop running two roll
+  /// widths is hypothetical, and a per-station setting is a real settings surface on
+  /// an app that has none by design (§6.4).
+  paperWidth Int @default(80) @map("paper_width")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -52,6 +52,8 @@ export const AUDIT_ACTIONS = {
 
   DISCOUNT_RULES_UPDATED: 'discount.rules_updated',
   DISCOUNT_SETTINGS_UPDATED: 'discount.settings_updated',
+  /** The station's thermal roll width changed — it alters what comes out of a printer. */
+  PAPER_WIDTH_UPDATED: 'printing.paper_width_updated',
   FEATURE_FLAG_TOGGLED: 'feature_flag.toggled',
   BACKUP_COMPLETED: 'backup.completed',
   BACKUP_FAILED: 'backup.failed',

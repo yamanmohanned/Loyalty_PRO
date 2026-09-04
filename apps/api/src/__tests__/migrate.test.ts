@@ -333,10 +333,25 @@ describe('migrations preserve existing merchant data (§10.1)', () => {
     const client = clientFor(databaseFile);
 
     const migrations = readMigrationDirectory(resolveMigrationsDir() as string);
-    // Everything except the newest. That leaves a database shaped like a merchant's
-    // before an upgrade — which is the only state in which this class of bug exists.
-    const previous = migrations.slice(0, -1);
-    const pending = migrations[migrations.length - 1];
+
+    // **Split at a NAMED migration, not at "the last one".**
+    //
+    // This test seeds a pre-upgrade row, so it has to know the shape that row must
+    // have — and the first version sliced `(0, -1)`, which meant "whatever happens to
+    // be newest". The very next migration to land broke it: `period_key` was already
+    // gone from the schema by the time the fixture tried to write it, and the failure
+    // read as a data-loss regression rather than as a stale test. A test that decays
+    // the moment the thing it guards is added to is §0 rule 9 in the suite itself.
+    //
+    // Pinning the boundary by name keeps it asking the same question forever: does
+    // THIS migration, the one that drops a column from a table with FK children,
+    // preserve the rows around it.
+    const BOUNDARY = '20260904090000_v4_invoice_bracket_discounts';
+    const boundaryIndex = migrations.findIndex((m) => m.name === BOUNDARY);
+    expect(boundaryIndex, `migration ${BOUNDARY} must exist`).toBeGreaterThan(-1);
+
+    const previous = migrations.slice(0, boundaryIndex);
+    const pending = migrations[boundaryIndex];
     expect(pending).toBeDefined();
 
     const previousDir = join(dir, 'previous');
@@ -408,6 +423,7 @@ describe('migrations preserve existing merchant data (§10.1)', () => {
     expect(await countRow('transaction')).toBe(1);
 
     // ── The upgrade ────────────────────────────────────────────────────────────
+    // Everything from the boundary onward, so later migrations are exercised too.
     const outcome = await applyPendingMigrations({ client });
     expect(outcome.applied).toContain(pending?.name);
 
@@ -526,11 +542,16 @@ describe('a pending migration is refused without a snapshot (§10.2)', () => {
         /تعذّر أخذ نسخة احتياطية قبل ترحيل قاعدة البيانات/,
       );
 
-      // The refusal left the schema exactly where it was.
-      const columns = await client.$queryRawUnsafe<Array<{ name: string }>>(
-        `PRAGMA table_info("transaction")`,
+      // **The refusal left the schema exactly where it was**, asserted against the
+      // migration that is actually pending rather than a column named by hand. The
+      // first version checked for `period_key`, which pinned the assertion to whichever
+      // migration happened to be newest — and broke the moment another one landed,
+      // reading as a data-loss regression instead of a stale test.
+      const pendingName = all[all.length - 1]?.name;
+      const applied = await client.$queryRawUnsafe<Array<{ migration_name: string }>>(
+        'SELECT migration_name FROM "_prisma_migrations"',
       );
-      expect(columns.map((c) => c.name)).toContain('period_key');
+      expect(applied.map((r) => r.migration_name)).not.toContain(pendingName);
     } finally {
       if (previousDataDir === undefined) delete process.env.WALAA_DATA_DIR;
       else process.env.WALAA_DATA_DIR = previousDataDir;

@@ -4,6 +4,11 @@
 
 @layer base {
   :root {
+    /* Thermal paper. Overwritten from the merchant's setting at boot; the default is
+       the width v3 hardcoded, so a render before the session resolves is never
+       wrong-sized — and never zero-width, which would print a blank roll. */
+    --paper-width: 80mm;
+    --paper-padding: 4mm 3mm 8mm;
     color-scheme: light;
   }
 
@@ -58,12 +63,26 @@
 }
 
 /**
- * Thermal printing (CLAUDE_v3.md §6.3).
+ * Thermal printing (CLAUDE_v3.md §6.3, width selectable per CLAUDE_UPDATE_4.md §5).
  *
  * The station has its own small thermal printer, separate from the cashier's. The
- * browser's print pipeline drives it, so what matters here is that the printed page
- * is 80 mm wide, has no margins the printer will silently crop, and carries nothing
- * from the screen.
+ * browser's print pipeline drives it, so what matters here is that the printed page is
+ * exactly as wide as the paper actually loaded, has no margins the printer will
+ * silently crop, and carries nothing from the screen.
+ *
+ * ## `--paper-width` is the single source, and it exists because they had already drifted
+ *
+ * The width used to be the literal `80mm`, written out in four places here and again
+ * in `SlipPreview.tsx`. They were already out of step: the print root padded
+ * `4mm 3mm 8mm` and the preview `4mm 3mm 6mm`, so the on-screen slip was two
+ * millimetres shorter than the paper while both claimed to render the same component.
+ * Nobody had noticed, because §5.1's guarantee — preview and paper share
+ * `PrintableSlip` — is about the *markup*, and the box around it was never covered by
+ * it.
+ *
+ * So the width and the padding are both custom properties now, set once on `:root` from
+ * the merchant's setting, and read by the print root and the preview alike. Neither can
+ * be changed without the other following.
  *
  * `visibility` rather than `display: none` on the rest of the page: hiding by
  * display collapses the layout and some engines then mis-measure the print root's
@@ -76,13 +95,13 @@
 @media print {
   @page {
     /* `auto` height: a receipt is a continuous roll, not a sheet. */
-    size: 80mm auto;
+    size: var(--paper-width) auto;
     margin: 0;
   }
 
   html,
   body {
-    width: 80mm;
+    width: var(--paper-width);
     background: #fff;
     margin: 0;
     padding: 0;
@@ -104,8 +123,8 @@
     position: absolute;
     top: 0;
     inset-inline-start: 0;
-    width: 80mm;
-    padding: 4mm 3mm 8mm;
+    width: var(--paper-width);
+    padding: var(--paper-padding);
   }
 
   /* Never split a slip's figures or a card's barcode across a tear. */

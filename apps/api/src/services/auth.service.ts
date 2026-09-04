@@ -1,4 +1,11 @@
-import { RoleSchema, type AuthTokens, type LoginResponse, type Role } from '@walaa/shared-types';
+import {
+  PaperWidthSchema,
+  RoleSchema,
+  type AuthTokens,
+  type LoginResponse,
+  type PaperWidth,
+  type Role,
+} from '@walaa/shared-types';
 import { unauthenticated } from '../lib/errors';
 import {
   ACCESS_TTL_SECONDS,
@@ -34,6 +41,21 @@ function parseRole(value: string): Role {
   return parsed.data;
 }
 
+/**
+ * The same discipline for the paper width: parse, never cast.
+ *
+ * SQLite holds it as a plain integer and would accept 72 as happily as 80. A width
+ * nothing has been measured at must not reach the print stylesheet, so an unexpected
+ * value falls back to 80 — the default, the width v3 hardcoded, and the one every
+ * existing layout was checked against. Falling back rather than throwing because a bad
+ * number here should not stop a shop logging in; it should print on the roll everyone
+ * already knows works.
+ */
+function parsePaperWidth(value: number): PaperWidth {
+  const parsed = PaperWidthSchema.safeParse(value);
+  return parsed.success ? parsed.data : 80;
+}
+
 async function issueTokens(user: {
   id: string;
   merchantId: string;
@@ -62,7 +84,7 @@ async function issueTokens(user: {
 export async function login(username: string, password: string): Promise<LoginResponse> {
   const user = await prisma.user.findFirst({
     where: { username },
-    include: { branch: { select: { code: true } }, merchant: { select: { name: true } } },
+    include: { branch: { select: { code: true } }, merchant: { select: { name: true, paperWidth: true } } },
   });
 
   // Verify a dummy hash when the user does not exist, so a missing username and a
@@ -93,6 +115,7 @@ export async function login(username: string, password: string): Promise<LoginRe
       role: parseRole(user.role),
       merchantId: user.merchantId,
       merchantName: user.merchant.name,
+      paperWidth: parsePaperWidth(user.merchant.paperWidth),
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,
     },
@@ -116,7 +139,7 @@ export async function refresh(presentedToken: string): Promise<LoginResponse> {
     where: { tokenHash },
     include: {
       user: {
-        include: { branch: { select: { code: true } }, merchant: { select: { name: true } } },
+        include: { branch: { select: { code: true } }, merchant: { select: { name: true, paperWidth: true } } },
       },
     },
   });
@@ -155,6 +178,7 @@ export async function refresh(presentedToken: string): Promise<LoginResponse> {
       role: parseRole(user.role),
       merchantId: user.merchantId,
       merchantName: user.merchant.name,
+      paperWidth: parsePaperWidth(user.merchant.paperWidth),
       branchId: user.branchId,
       branchCode: user.branch?.code ?? null,
     },

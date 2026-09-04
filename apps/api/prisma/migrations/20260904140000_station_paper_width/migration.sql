@@ -1,0 +1,12 @@
+-- The Loyalty Station's thermal roll width (CLAUDE_UPDATE_4.md §5, §10.7).
+--
+-- 58 or 80 millimetres, chosen by the merchant, because the slip has to fit the paper
+-- actually loaded in the station's printer. Merchant-level rather than per-station: a
+-- shop running two different roll widths is hypothetical, and a per-station setting
+-- would be a settings surface on an app that has none by design (§6.4).
+--
+-- Additive `ADD COLUMN` with a default, so it needs no table rebuild — which on this
+-- schema would be destructive (§10.1). Existing merchants default to 80, the width the
+-- print stylesheet has hardcoded since v3, so an upgrade changes nothing about what
+-- comes out of the printer until somebody deliberately selects otherwise.
+ALTER TABLE "merchant" ADD COLUMN "paper_width" INTEGER NOT NULL DEFAULT 80;
