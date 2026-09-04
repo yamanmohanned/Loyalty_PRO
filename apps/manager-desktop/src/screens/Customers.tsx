@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowRight, Download, Search, Users } from 'lucide-react';
+import { ArrowRight, Download, RotateCcw, Search, Users } from 'lucide-react';
 import {
   formatCardNumber,
   type Customer,
@@ -47,6 +47,14 @@ export function CustomersScreen() {
   const [category, setCategory] = useState<'' | 'REGULAR' | 'WHOLESALE' | 'VIP'>('');
   const [sort, setSort] = useState<'createdAt' | 'lifetimeSpend' | 'name'>('createdAt');
   const [page, setPage] = useState(1);
+
+  /** Whether any filter is narrowing the list — sort alone is not a filter. */
+  const filtersActive = phone !== '' || category !== '';
+  const clearFilters = (): void => {
+    setPhone('');
+    setCategory('');
+    setPage(1);
+  };
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -152,12 +160,23 @@ export function CustomersScreen() {
               <option value="name">{locale.customers.sortName}</option>
             </Select>
           </Field>
+
+          {/* Taken from the reference's «إعادة تعيين». It earns its place: three
+              filters compound silently, and "why is this list empty" is answered by
+              one button rather than by remembering which of them is still set. Hidden
+              while nothing is set, so it never offers to undo nothing. */}
+          {filtersActive ? (
+            <Button variant="ghost" onClick={clearFilters} className="mb-0.5">
+              <RotateCcw size={18} aria-hidden />
+              {locale.customers.resetFilters}
+            </Button>
+          ) : null}
         </div>
       </Card>
 
       <Card>
         {isLoading ? (
-          <SkeletonTable rows={6} columns={5} />
+          <SkeletonTable rows={6} columns={6} />
         ) : isError || !data ? (
           <EmptyState title={locale.common.error} body={locale.common.errorBody} />
         ) : data.customers.length === 0 ? (
@@ -177,6 +196,9 @@ export function CustomersScreen() {
                     </th>
                     <th className="px-6 py-3 text-start font-medium">
                       {locale.customers.colBalance}
+                    </th>
+                    <th className="px-6 py-3 text-start font-medium">
+                      {locale.customers.colCard}
                     </th>
                     <th className="px-6 py-3 text-start font-medium">
                       {locale.customers.colCategory}
@@ -206,6 +228,29 @@ export function CustomersScreen() {
                         <span className="block text-sm text-steel">
                           {customer.transactionCount} {locale.customer.invoices}
                         </span>
+                      </td>
+                      {/*
+                        The card number was already in this response and rendered
+                        nowhere — found by the §10.9 standing check, the same way
+                        `capturedSales` was on the Overview. It answers the support
+                        question this screen exists for ("which card does this person
+                        hold"), and it makes the no-card state visible: a customer
+                        between reporting one lost and being issued a replacement holds
+                        none, and that is normal rather than an error (§12.25).
+
+                        `dir="ltr"` is load-bearing. Under the RTL page the bidi
+                        algorithm lays the four groups out right-to-left and the reader
+                        sees the number backwards — §12.25's defect, which no test could
+                        see because the string and the DOM were both correct.
+                      */}
+                      <td className="px-6 py-4">
+                        {customer.cardNumber ? (
+                          <bdi dir="ltr" className="font-mono text-sm text-ink">
+                            {formatCardNumber(customer.cardNumber)}
+                          </bdi>
+                        ) : (
+                          <span className="text-sm text-steel">{locale.customers.noCard}</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <Chip tone="accent">
