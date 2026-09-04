@@ -504,3 +504,33 @@ wholesale would reopen it.
 | **Paper width** | Merchant-level (`58 \| 80`), not per-station: a shop running two roll widths is hypothetical, and a per-station setting is a real settings surface on an app that has none by design (§6.4). One CSS custom property feeds both the print root and the preview — they had **already drifted** (`8mm` vs `6mm` bottom padding) while nominally sharing `PrintableSlip`, which is the evidence for why one source is required |
 | **`apps/dashboard`** | Deleted at the end of V4-4, as its own commit, with a verification pass across **every** package — §12.24's lesson is that a fix verified only where the symptom appeared is verified nowhere else |
 | **`customer_found.png`** | Depicts the card-scan **step 1**, not a scan result. Used as the step-1 reference; the result view derives from `login`/`dashboard`'s visual grammar |
+
+### 10.8 Verification gap — two scanner terminators are proven below the harness
+*(recorded 2026-09-04, at the operator's instruction, so nobody reads "verified" as
+end-to-end)*
+
+§3.2 requires all three keyboard-wedge terminator behaviours to keep working, and V4-2
+re-proved all three. **They were not all proved at the same layer, and the difference
+matters to whoever reads this next.**
+
+| Terminator | How it was exercised | Strength |
+|---|---|---|
+| **16 digits, no terminator** | real typed characters through the browser harness | end-to-end |
+| **Enter** | `KeyboardEvent` dispatched into the focused input | **below the harness** |
+| **Tab** | `KeyboardEvent` dispatched into the focused input | **below the harness** |
+
+**The cause is the harness, not the app.** Its `key` action does not map the names the
+app listens for: `Return` produced no `key: 'Enter'` that React saw, and its `Tab` never
+reached the React handler at all — while the field kept focus and its value, so the app
+was demonstrably fine and the input event simply never arrived. Dispatching the events
+directly submitted correctly both times, with `defaultPrevented: true` on Tab proving the
+app's own handler ran.
+
+**So what is proven is that `onKeyDown` does the right thing when it receives an Enter
+or a Tab — not that a physical scanner's Enter or Tab arrives as one.** Those are
+different claims, and only the first is covered.
+
+**This closes with real hardware, not with a better test.** *(operator ruling.)* A USB
+keyboard-wedge scanner is the only thing that proves what a keyboard-wedge scanner does,
+and it belongs to the field validation that already owes item (d) from §12.11. Writing a
+cleverer browser test would move the claim sideways, not forward.
