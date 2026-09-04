@@ -192,6 +192,13 @@ export const locale = {
   },
 
   login: {
+    /* ── V4-4: the brand panel's real content, in place of marketing copy ── */
+    tagline: 'لوحة تحكم برنامج الولاء — الزبائن، شرائح الخصم، التقارير والنسخ الاحتياطي.',
+    greeting: 'مرحباً بك مجدداً',
+    /* The card says what to DO. The panel beside it already says what this app IS,
+       and rendering both showed the same sentence twice on one screen. */
+    signInHint: 'أدخل بيانات حسابك للمتابعة إلى لوحة التحكم',
+    serverLabel: 'الخادم المتصل به هذا الجهاز',
     title: 'تسجيل الدخول',
     subtitle: 'لوحة تحكم برنامج الولاء',
     username: 'اسم المستخدم',

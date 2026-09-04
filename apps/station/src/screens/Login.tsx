@@ -4,9 +4,9 @@ import { isStationRole, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
-import { BrandMark } from '../components/BrandMark';
+import { AuthLayout } from '../components/AuthLayout';
 import { Guide } from '../components/Guide';
-import { Button, Card, Field, Input } from '../components/ui';
+import { Button, Field, Input } from '../components/ui';
 
 /**
  * Station operator login (§6.2 #2).
@@ -59,14 +59,11 @@ export function LoginScreen({
   }
 
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6 py-10">
-      {/* Glass rather than a plain card: this surface sits on the canvas, where
-          even `steel` clears 4.5:1 (4.76). It is the first thing anyone sees. */}
-      <Card className="glass w-full max-w-md border-transparent">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <BrandMark size={56} className="mb-3" />
-          <h1 className="font-display text-3xl font-bold text-accent">{locale.app.name}</h1>
-          <p className="text-base text-steel">{locale.app.station}</p>
+    <>
+      <AuthLayout>
+        <div className="mb-6">
+          <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
+          <p className="mt-1 text-base text-steel">{locale.login.subtitle}</p>
         </div>
 
         <form onSubmit={submit} className="space-y-5">
@@ -93,38 +90,38 @@ export function LoginScreen({
             />
           </Field>
 
-          <Button type="submit" disabled={busy} className="w-full">
+          <Button type="submit" size="large" disabled={busy} className="w-full">
             {busy ? locale.login.submitting : locale.login.submit}
           </Button>
         </form>
 
-        {/* Full width and a real button, not a footnote link: the reader who needs
-            it is the reader least likely to hunt for it. */}
-        <Button
-          variant="ghost"
-          onClick={() => setGuideOpen(true)}
-          className="mt-5 w-full"
-        >
-          <BookOpen size={20} aria-hidden />
-          {locale.guide.open}
-        </Button>
-        <p className="mt-2 text-center text-sm text-steel">{locale.guide.subtitle}</p>
-
-        <div className="mt-6 text-center">
-          <Button
-            variant="quiet"
-            className="min-h-0 px-0 text-sm"
-            onClick={() => {
-              clearApiUrl();
-              window.location.reload();
-            }}
-          >
-            {locale.setup.change}
+        {/* The reference's secondary-action slot, and ours is real: the walkthrough,
+            reachable before anyone signs in, because the operator who most needs it is
+            the one who cannot get past this screen (§12.31). Full width and a real
+            button rather than a footnote link, for the same reason. */}
+        <div className="mt-6 border-t border-border pt-5">
+          <Button variant="ghost" onClick={() => setGuideOpen(true)} className="w-full">
+            <BookOpen size={20} aria-hidden />
+            {locale.guide.open}
           </Button>
+          <p className="mt-2 text-center text-sm text-steel">{locale.guide.subtitle}</p>
+
+          <div className="mt-5 text-center">
+            <Button
+              variant="quiet"
+              className="min-h-0 px-0 text-sm"
+              onClick={() => {
+                clearApiUrl();
+                window.location.reload();
+              }}
+            >
+              {locale.setup.change}
+            </Button>
+          </div>
         </div>
-      </Card>
+      </AuthLayout>
 
       {guideOpen ? <Guide onClose={() => setGuideOpen(false)} /> : null}
-    </div>
+    </>
   );
 }

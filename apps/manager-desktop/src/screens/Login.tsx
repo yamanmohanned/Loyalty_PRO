@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
+import { getApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
-import { BrandMark } from '../components/BrandMark';
-import { Button, Card, Field, Input, Notice } from '../components/ui';
+import { AuthLayout } from '../components/AuthLayout';
+import { Button, Field, Input, Notice } from '../components/ui';
 
 /**
  * The signed-in user, as the API defines them.
@@ -64,53 +65,55 @@ export function LoginScreen({
     }
   }
 
+  const [serverUrl, setServerUrl] = useState<string | null>(null);
+  useEffect(() => {
+    void getApiUrl().then(setServerUrl);
+  }, []);
+
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-canvas px-6">
-      {/* Glass: this card sits on the canvas with nothing behind it, the one
-          placement where `steel` still clears 4.5:1 (4.76). */}
-      <Card className="glass w-full max-w-md border-transparent p-8">
-        <div className="mb-6 flex items-center gap-3">
-          <BrandMark size={48} />
-          <div>
-            <h1 className="font-display text-xl font-bold text-ink">{locale.login.title}</h1>
-            <p className="text-sm text-steel">{locale.login.subtitle}</p>
-          </div>
-        </div>
+    <AuthLayout tagline={locale.login.tagline} serverUrl={serverUrl}>
+      <div className="mb-7">
+        <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
+        <p className="mt-1 text-base text-steel">{locale.login.signInHint}</p>
+      </div>
 
-        <form onSubmit={submit} className="space-y-4">
-          <Field label={locale.login.username}>
-            <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              autoFocus
-            />
-          </Field>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label={locale.login.username}>
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            dir="ltr"
+            className="text-start"
+            autoFocus
+          />
+        </Field>
 
-          <Field label={locale.login.password}>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-          </Field>
+        <Field label={locale.login.password}>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            dir="ltr"
+            className="text-start"
+          />
+        </Field>
 
-          {error ? <Notice tone="danger">{error}</Notice> : null}
+        {error ? <Notice tone="danger">{error}</Notice> : null}
 
-          <Button type="submit" disabled={submitting} className="w-full">
-            {submitting ? locale.login.submitting : locale.login.submit}
-          </Button>
-        </form>
+        <Button type="submit" disabled={submitting} className="h-14 w-full text-lg">
+          {submitting ? locale.login.submitting : locale.login.submit}
+        </Button>
+      </form>
 
-        <button
-          type="button"
-          onClick={onChangeServer}
-          className="mt-6 w-full text-center text-sm text-steel underline-offset-4 hover:text-accent hover:underline"
-        >
+      {/* The reference puts a secondary action under a divider here. Ours is the one
+          real secondary path this screen has — pointing the app at a different shop. */}
+      <div className="mt-7 border-t border-border pt-5">
+        <Button variant="secondary" onClick={onChangeServer} className="w-full">
           {locale.login.changeServer}
-        </button>
-      </Card>
-    </div>
+        </Button>
+      </div>
+    </AuthLayout>
   );
 }
