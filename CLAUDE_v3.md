@@ -2317,6 +2317,40 @@ all print counts, and a count nobody can account for is the cheapest signal this
 produces — it costs one question, and the alternative here was a drawer of cards that
 scan as the wrong thing.
 
+#### And the rule applies to the measuring instrument, not only to the measurement
+
+*(added 2026-09-04, during the 58/80 mm print verification)*
+
+§12.27 says a human-readable format is only verifiable by looking. The corollary found
+while doing exactly that: **the tool you look with is subject to the same rule.**
+
+Measuring the slip at 80 mm, `getBoundingClientRect` reported the paper block as
+**70.4 mm** while `getComputedStyle().width` reported **302.35 px — exactly 80 mm**.
+Nothing failed. No test went red. The only signal was that a number did not match the
+situation, and the situation was known because the CSS custom property said 80 mm one
+line earlier.
+
+The cause: `getBoundingClientRect` returns *device* geometry, so it is scaled by the
+preview's own `zoom` **and** by whatever page scale the viewport is under — here 1.1
+rather than the 1.25 `zoom` alone, because the browser pane was scaling as well. Dividing
+by `zoom` corrected for one factor and not the other.
+
+**Had the number been trusted, the report would have read "measured at both widths, no
+overflow" — for a width that was never measured.** A verification step that is itself
+unverified is worse than no verification, because it is quoted as evidence.
+
+So, for any geometric check from now on:
+
+- **Absolute sizes come from layout values** — `getComputedStyle().width`, `offsetWidth`,
+  `clientWidth`. These are CSS pixels and are not scaled.
+- **Rects are for scale-invariant comparisons only** — does this child extend past that
+  parent, do these two runs share a line, is this character left of that one. Every
+  element is scaled identically, so ratios and orderings stay true while absolutes do
+  not.
+- **Cross-check one absolute against a known quantity** before trusting a batch of them.
+  Here the known quantity was the custom property the layout was driven from; a probe
+  element of declared size works as well.
+
 #### Per-customer discount overrides are DISCARDED BY DESIGN
 
 *(operator ruling, 2026-08-31 — recorded so no future session rebuilds them as a
