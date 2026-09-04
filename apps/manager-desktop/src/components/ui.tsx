@@ -303,7 +303,13 @@ export function Money({ value, className }: { value: number; className?: string 
   return (
     <span className={cn('amount selectable', className)}>
       {new Intl.NumberFormat('en-US').format(value)}
-      <span className="ms-1 text-xs font-normal text-steel">د.ع</span>
+      {/* The unit is part of the figure, not a caption about it — so it carries its
+          hierarchy by SIZE and WEIGHT rather than by colour. It was `text-steel`,
+          which measured **4.24:1** at 13px against a 4.5 floor on the surfaces this
+          actually renders on: a real failure, found by computing contrast from the
+          painted colours rather than trusting that steel passes because §12.34 says
+          it does on canvas. §2.3 — contrast and legibility beat effects. */}
+      <span className="ms-1 text-xs font-normal text-ink">د.ع</span>
     </span>
   );
 }

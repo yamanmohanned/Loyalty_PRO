@@ -156,7 +156,14 @@ module.exports = {
       spacing: {
         control: '48px',
         'control-mobile': '52px',
-        rail: '264px',
+        // 288 rather than 264: the v4 rail header carries the mark at 64px (§2.5).
+        // Measured rather than guessed, and the first guess was wrong — the preset's
+        // own `text-xl` is 22px, not the 20 assumed, so 'Customer loyalty' came to
+        // 161px against a 158px box and wrapped to two lines. It renders at 18px now
+        // (132px) inside a 158px budget: 26px of slack, so a font-loading difference
+        // cannot push it over. At 264 the budget is 136 and the slack is 4px, which
+        // is the kind of margin that breaks quietly on someone else's machine.
+        rail: '288px',
       },
       maxWidth: {
         content: '1440px',

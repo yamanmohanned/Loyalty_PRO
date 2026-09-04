@@ -211,6 +211,12 @@ export const locale = {
   },
 
   overview: {
+    /* ── V4-4: the four headline figures §2.4 asks for ─────────────────── */
+    kpiSales: 'المبيعات الملتقطة',
+    kpiSalesHint: (invoices: number, average: number) =>
+      `${group(invoices)} فاتورة · متوسط السلة ${group(average)} د.ع`,
+    kpiCustomersHint: (added: number) => `${group(added)} زبون جديد في هذه الفترة`,
+    kpiDiscountsHint: 'ما مُنح للزبائن من شرائح الخصم',
     title: 'نظرة عامة',
     subtitle: 'ملخّص أداء برنامج الولاء',
     kpiCustomers: 'الزبائن المسجّلون',
@@ -218,7 +224,6 @@ export const locale = {
     kpiAttributed: 'فواتير مرتبطة بزبون',
     kpiEnrolment: 'نسبة الارتباط',
     kpiDiscounts: 'قيمة الخصومات الممنوحة',
-    kpiSales: 'المبيعات الملتقطة',
     chartTitle: 'المبيعات الملتقطة عبر الوقت',
     chartEmpty: 'لا توجد فواتير ملتقطة في هذه الفترة',
     topCustomers: 'أفضل الزبائن',

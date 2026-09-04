@@ -89,12 +89,15 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
     // and the top highlight is what makes it read as a lit edge rather than a
     // faded panel.
     <aside className="glass flex w-rail shrink-0 flex-col border-0 border-e border-border">
-      <div className="border-b border-border px-6 py-5">
-        <div className="flex items-center gap-3">
-          <BrandMark size={40} />
+      {/* The mark at 64 rather than 40 (v4 §2.5). The rail header is where the
+          product identifies itself on every screen, and at 40 it read as a favicon
+          beside the wordmark rather than as the mark. The 384 px asset carries it. */}
+      <div className="border-b border-border px-6 py-6">
+        <div className="flex items-center gap-4">
+          <BrandMark size={64} />
           <div>
             <p className="font-display text-lg font-bold leading-tight text-ink">{locale.appName}</p>
-            <p className="text-xs text-steel">{locale.appTagline}</p>
+            <p className="text-sm text-steel">{locale.appTagline}</p>
           </div>
         </div>
       </div>
