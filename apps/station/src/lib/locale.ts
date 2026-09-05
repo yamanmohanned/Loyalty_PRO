@@ -42,6 +42,11 @@ export const locale = {
     submitting: 'جاري الدخول…',
     failed: 'اسم المستخدم أو كلمة المرور غير صحيحة',
     notStation: 'هذا الحساب لا يملك صلاحية تشغيل المحطة',
+    /* ── V4-4: the reference's strip, carrying what this appliance does ──── */
+    stripScan: 'مسح البطاقة والفاتورة',
+    stripPrint: 'طباعة القسيمة',
+    stripOffline: 'يعمل دون اتصال',
+    or: 'أو',
   },
 
   scan: {

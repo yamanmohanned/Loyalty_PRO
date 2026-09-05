@@ -4,7 +4,8 @@ import { api, ApiRequestError, setTokens } from '../lib/api';
 import { getApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
-import { Button, Field, Input, Notice } from '../components/ui';
+import { LogIn, Lock, User } from 'lucide-react';
+import { Button, Divider, Field, Input, Notice } from '../components/ui';
 
 /**
  * The signed-in user, as the API defines them.
@@ -72,12 +73,17 @@ export function LoginScreen({
 
   return (
     <AuthLayout tagline={locale.login.tagline} serverUrl={serverUrl}>
-      <div className="mb-7">
+      {/* Centred, as the reference's card is. A left-aligned heading over centred
+          actions is the composition the previous pass had, and it is what made the
+          panel read as a form rather than as a welcome. */}
+      <div className="mb-7 text-center">
         <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
-        <p className="mt-1 text-base text-steel">{locale.login.signInHint}</p>
+        <p className="mt-1.5 text-base text-steel">{locale.login.signInHint}</p>
       </div>
 
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-5">
+        {/* The glyph inside the field is the reference's, and it is decoration in the
+            strict sense — `aria-hidden`, with the label above carrying the meaning. */}
         <Field label={locale.login.username}>
           <Input
             value={username}
@@ -85,6 +91,7 @@ export function LoginScreen({
             autoComplete="username"
             dir="ltr"
             className="text-start"
+            icon={<User size={18} />}
             autoFocus
           />
         </Field>
@@ -97,20 +104,25 @@ export function LoginScreen({
             autoComplete="current-password"
             dir="ltr"
             className="text-start"
+            icon={<Lock size={18} />}
           />
         </Field>
 
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
+        {/* Tall, full-width, gradient, with a leading glyph — the reference's primary
+            action exactly, minus the neon rim beneath it (§6.4, §11). */}
         <Button type="submit" disabled={submitting} className="h-14 w-full text-lg">
+          <LogIn size={20} aria-hidden />
           {submitting ? locale.login.submitting : locale.login.submit}
         </Button>
       </form>
 
-      {/* The reference puts a secondary action under a divider here. Ours is the one
+      {/* The reference puts a divider and a secondary action here. Ours is the one
           real secondary path this screen has — pointing the app at a different shop. */}
-      <div className="mt-7 border-t border-border pt-5">
-        <Button variant="secondary" onClick={onChangeServer} className="w-full">
+      <div className="mt-7 space-y-5">
+        <Divider label={locale.login.or} />
+        <Button variant="secondary" onClick={onChangeServer} className="h-14 w-full text-base">
           {locale.login.changeServer}
         </Button>
       </div>

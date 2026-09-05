@@ -1,12 +1,12 @@
 import { useState, type FormEvent } from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Lock, LogIn, User } from 'lucide-react';
 import { isStationRole, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
 import { Guide } from '../components/Guide';
-import { Button, Field, Input } from '../components/ui';
+import { Button, Divider, Field, Input } from '../components/ui';
 
 /**
  * Station operator login (§6.2 #2).
@@ -61,9 +61,10 @@ export function LoginScreen({
   return (
     <>
       <AuthLayout>
-        <div className="mb-6">
+        {/* Centred, as the reference's card is — and as the manager app's now is. */}
+        <div className="mb-7 text-center">
           <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
-          <p className="mt-1 text-base text-steel">{locale.login.subtitle}</p>
+          <p className="mt-1.5 text-base text-steel">{locale.login.subtitle}</p>
         </div>
 
         <form onSubmit={submit} className="space-y-5">
@@ -75,6 +76,7 @@ export function LoginScreen({
               autoFocus
               dir="ltr"
               className="text-start"
+              icon={<User size={20} />}
             />
           </Field>
 
@@ -87,10 +89,12 @@ export function LoginScreen({
               dir="ltr"
               className="text-start"
               invalid={Boolean(error)}
+              icon={<Lock size={20} />}
             />
           </Field>
 
           <Button type="submit" size="large" disabled={busy} className="w-full">
+            <LogIn size={22} aria-hidden />
             {busy ? locale.login.submitting : locale.login.submit}
           </Button>
         </form>
@@ -99,14 +103,15 @@ export function LoginScreen({
             reachable before anyone signs in, because the operator who most needs it is
             the one who cannot get past this screen (§12.31). Full width and a real
             button rather than a footnote link, for the same reason. */}
-        <div className="mt-6 border-t border-border pt-5">
+        <div className="mt-7 space-y-5">
+          <Divider label={locale.login.or} />
           <Button variant="ghost" onClick={() => setGuideOpen(true)} className="w-full">
             <BookOpen size={20} aria-hidden />
             {locale.guide.open}
           </Button>
-          <p className="mt-2 text-center text-sm text-steel">{locale.guide.subtitle}</p>
+          <p className="-mt-2 text-center text-sm text-steel">{locale.guide.subtitle}</p>
 
-          <div className="mt-5 text-center">
+          <div className="text-center">
             <Button
               variant="quiet"
               className="min-h-0 px-0 text-sm"

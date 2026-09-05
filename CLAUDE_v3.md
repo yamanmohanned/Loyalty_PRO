@@ -2493,6 +2493,65 @@ rm -rf apps/manager-desktop/node_modules/.vite apps/station/node_modules/.vite
 
 ---
 
+#### 12.29.1 A build stamp proves the SERVER's HEAD, not the module the browser ran — 2026-09-05
+
+*(Addendum, after the stamp cost two rounds by answering a question next to the one
+being asked.)*
+
+The manager app renders its commit in the rail footer: `vite.config.ts` runs
+`git rev-parse --short HEAD` at server start and injects it. It was built to settle a
+disagreement about whose code was on screen, and it is genuinely useful. **It is also
+narrower than it looks, and the gap is the same category error twice over.**
+
+| The claim it supports | The claim it was read as |
+|---|---|
+| The dev server's git HEAD **at the moment the server started** | The code the browser is **currently executing** |
+
+Three ways those come apart:
+
+1. **Vite serves modules separately.** The stamp is a constant compiled into `App.tsx`.
+   A fresh `App.tsx` showing the right SHA can sit beside a stale `Customers.tsx` in the
+   same page — the stamp reports the repo, not the graph.
+2. **It is computed once, at server start.** Every commit after that leaves the running
+   server reporting the previous SHA, correctly and misleadingly.
+3. **It says nothing about the browser's cache** — its subject is the server process.
+
+This is exactly the distinction the operator drew about the type-rename proof: renaming
+a shared field and watching three files fail to compile proves the **annotation is
+wired**, not that the **runtime shape matches**. Two different claims. The stamp made the
+same mistake one level down, and neither instrument was wrong — both were *narrower than
+the sentence they were used to support*.
+
+**So the rule, which generalises past this stamp:** state what a diagnostic proves in the
+same breath as its reading. A verification tool is subject to §12.20 like anything else —
+and the way it fails is not by returning a wrong value, it is by returning a **true value
+about the wrong subject**.
+
+What actually answers "what is this browser running": ask the page. Fetch the module
+itself with `cache:'reload'` and grep the served source; read
+`performance.getEntriesByType('resource')` for `transferSize === 0` (reused from cache)
+and for `responseStatus === 404`; walk the fiber tree for the component in question.
+Those describe the page. The stamp describes the server.
+
+#### 12.29.2 A fresh Incognito window that lands anywhere but Setup is not fresh — 2026-09-05
+
+The cheapest check available, and it would have closed the above in one round instead of
+two.
+
+This app stores its server URL in `localStorage` (`api_url`) outside Tauri. A genuinely
+fresh private window has **empty** `localStorage`, so `getApiUrl()` returns null and the
+app can only render **Setup**. It cannot reach a dashboard route, and it certainly cannot
+reach a customer detail route.
+
+> **Therefore: a private window that opens on any screen other than Setup is carrying
+> state from an earlier session, and is not evidence about the current build.**
+
+That is a one-glance falsification test, it needs no tooling, and it belongs at the top
+of any "but my browser shows something different" investigation — before reading a stamp,
+before searching the disk for stale bundles, before suspecting the server.
+
+---
+
 ### 12.30 The Station's guided two-step flow, and the order it enforces — 2026-09-02
 *(operator ruling: card first, then invoice. Settled, not a question.)*
 

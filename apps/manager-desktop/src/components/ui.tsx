@@ -35,7 +35,20 @@ export function Button({
         'inline-flex min-h-control items-center justify-center gap-2 rounded-md px-4 text-base font-semibold',
         'transition-[transform,background-color,border-color] duration-fast ease-native',
         'active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50 disabled:active:translate-y-0',
-        variant === 'primary' && 'bg-accent text-white hover:bg-[#0c5c48]',
+        /*
+          A vertical gradient in ONE hue, not a flat fill.
+
+          `login.png`'s primary button is darker at the bottom than the top, and that
+          is what gives it weight next to the flat fields it sits under. It is depth,
+          not decoration: both stops are the brand accent, so the button is still one
+          colour, and §6.4's "flat, no glow" is about the neon rim the reference also
+          draws — which is refused (§11 bans it by name).
+
+          The top stop is `accent` itself, so every contrast figure already measured
+          against #0F6E56 still holds at the lightest point of the fill.
+        */
+        variant === 'primary' &&
+          'bg-gradient-to-b from-accent to-[#0B5A46] text-white hover:from-[#0d6650] hover:to-[#094a3a]',
         variant === 'secondary' && 'border border-border bg-surface text-ink hover:bg-canvas',
         variant === 'ghost' && 'text-steel hover:bg-canvas hover:text-ink',
         variant === 'danger' && 'bg-danger text-white hover:bg-[#9a2b28]',
@@ -77,20 +90,79 @@ export function Field({
   );
 }
 
+/**
+ * A text field.
+ *
+ * **`icon` is the reference's treatment and it is taken.** `login.png` seats a glyph
+ * inside each field at the END edge, which does two things worth having: it makes a
+ * stack of identical boxes tell itself apart at a glance, and it gives the field a
+ * visual weight the bare 1px outline did not have. `aria-hidden`, because the label
+ * above already says what the field is — nothing is signalled by the glyph alone.
+ *
+ * `adornment` is the start-edge slot, for a control rather than a decoration.
+ *
+ * Taller and rounder than before (56px, 12px radius) to match the reference's field
+ * rhythm; §6.4's 48px floor is a minimum, not a target.
+ */
 export function Input({
   className,
+  icon,
+  adornment,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  icon?: ReactNode;
+  adornment?: ReactNode;
+}) {
+  const field = (
     <input
       className={cn(
         'block min-h-control w-full rounded-md border border-border bg-surface px-3 text-base text-ink',
         'placeholder:text-steel/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30',
         'disabled:bg-canvas disabled:text-steel',
+        icon && 'pe-11',
+        adornment && 'ps-11',
         className,
       )}
       {...props}
     />
+  );
+
+  if (!icon && !adornment) return field;
+
+  return (
+    <div className="relative">
+      {field}
+      {icon ? (
+        <span
+          className="pointer-events-none absolute inset-y-0 end-3.5 flex items-center text-steel"
+          aria-hidden
+        >
+          {icon}
+        </span>
+      ) : null}
+      {adornment ? (
+        <span className="absolute inset-y-0 start-2 flex items-center">{adornment}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A rule with a word set into it — `login.png`'s separator between the primary action
+ * and the secondary path below it.
+ *
+ * It exists because the reference's two full-width buttons need something between them
+ * to stop reading as a pair of equals; the word is what says one of these is the way
+ * out, not the other way in.
+ */
+export function Divider({ label }: { label?: string }) {
+  if (!label) return <hr className="border-0 border-t border-border" />;
+  return (
+    <div className="flex items-center gap-4" role="separator">
+      <span className="h-px flex-1 bg-border" />
+      <span className="text-sm text-steel">{label}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
   );
 }
 

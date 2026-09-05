@@ -192,6 +192,12 @@ export const locale = {
   },
 
   login: {
+    /* ── V4-4: the reference's strip, carrying facts rather than marketing ── */
+    stripReports: 'تقارير وتسويات',
+    stripSecure: 'نسخ احتياطي مشفّر',
+    /* Short, because a strip cell is one line. The long form stays for prose. */
+    stripServer: 'الخادم',
+
     /* ── V4-4: the brand panel's real content, in place of marketing copy ── */
     tagline: 'لوحة تحكم برنامج الولاء — الزبائن، شرائح الخصم، التقارير والنسخ الاحتياطي.',
     greeting: 'مرحباً بك مجدداً',
@@ -205,6 +211,7 @@ export const locale = {
     password: 'كلمة المرور',
     submit: 'دخول',
     submitting: 'جارٍ الدخول…',
+    or: 'أو',
     changeServer: 'تغيير الخادم',
     /** Shown when the credentials are valid but belong to another app entirely. */
     wrongApp: 'هذا الحساب ليس مخصّصاً للوحة التحكم',

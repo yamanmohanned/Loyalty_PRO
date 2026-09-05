@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ServerCog } from 'lucide-react';
+import { PlugZap, Server, ServerCog } from 'lucide-react';
 import { setApiUrl, testApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
-import { Button, Field, Input, Notice } from '../components/ui';
+import { Button, Divider, Field, Input, Notice } from '../components/ui';
 
 /**
  * First-run setup (CLAUDE_v2.md §9.3).
@@ -47,12 +47,15 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }) {
     // is not one yet, and the panel would show an empty box asking a question this
     // form is about to answer.
     <AuthLayout tagline={locale.login.tagline}>
-      <div className="mb-7">
+      {/* Centred, matching its Login sibling — the two pre-session screens share a
+          shell and must share its rhythm, or the first-run experience changes shape
+          the moment setup completes. */}
+      <div className="mb-7 text-center">
         <h2 className="font-display text-2xl font-bold text-ink">{locale.setup.title}</h2>
-        <p className="mt-1 text-base leading-relaxed text-steel">{locale.setup.subtitle}</p>
+        <p className="mt-1.5 text-base leading-relaxed text-steel">{locale.setup.subtitle}</p>
       </div>
 
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-5">
         <Field
           label={locale.setup.urlLabel}
           hint={locale.setup.urlHint}
@@ -64,16 +67,19 @@ export function SetupScreen({ onConfigured }: { onConfigured: () => void }) {
             placeholder={locale.setup.urlPlaceholder}
             dir="ltr"
             className="text-start font-mono"
+            icon={<Server size={18} />}
             autoFocus
           />
         </Field>
 
         <Button type="submit" disabled={testing} className="h-14 w-full text-lg">
+          <PlugZap size={20} aria-hidden />
           {testing ? locale.setup.testing : locale.setup.connect}
         </Button>
       </form>
 
-      <div className="mt-7 border-t border-border pt-5">
+      <div className="mt-7 space-y-5">
+        <Divider />
         <Notice tone="neutral">
           <span className="inline-flex items-center gap-2">
             <ServerCog size={16} aria-hidden />

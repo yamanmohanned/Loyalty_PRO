@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Walaa manager desktop app — Tauri 2 + Vite + React, RTL Arabic.",
+  "description": "Walaa manager desktop app \u2014 Tauri 2 + Vite + React, RTL Arabic.",
   "scripts": {
     "dev": "vite --force",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "dev:alt": "vite --force --port 5180 --strictPort"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.1.1",

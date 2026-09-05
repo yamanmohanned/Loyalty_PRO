@@ -146,11 +146,30 @@ module.exports = {
         sm: '8px',
         md: '12px',
         lg: '16px',
+        // V4-4: the reference's panels are rounder than ours were. 20px is the
+        // radius `login.png` uses on its card and `dashboard.png` on its tiles —
+        // large enough to read as soft, short of the pill that would make a panel
+        // look like a control.
+        xl: '20px',
         pill: '999px',
       },
       boxShadow: {
         card: '0 1px 2px rgba(17,24,39,0.04), 0 8px 24px rgba(17,24,39,0.04)',
         raised: '0 2px 4px rgba(17,24,39,0.06), 0 12px 32px rgba(17,24,39,0.06)',
+        /*
+          V4-4 — the reference's panel elevation, which is wider and softer than
+          anything we had, and tinted with the brand hue rather than neutral grey.
+
+          That tint is the whole difference between "a box with a shadow" and the
+          reference's sense that the panel is floating on a warm ground. It is very
+          low alpha: a shadow that reads as colour has stopped being a shadow.
+
+          NOT a glow (§6.4, §11) — the offset is downward and the spread is wide and
+          diffuse. The reference's neon rim under its primary button is refused
+          separately; this is elevation.
+        */
+        panel:
+          '0 1px 2px rgba(17,24,39,0.03), 0 12px 28px -8px rgba(15,110,86,0.08), 0 32px 64px -24px rgba(15,110,86,0.10)',
         none: 'none',
       },
       spacing: {
@@ -167,6 +186,20 @@ module.exports = {
       },
       maxWidth: {
         content: '1440px',
+      },
+      backgroundImage: {
+        /*
+          The pre-session ground.
+
+          `login.png` does not sit its card on a flat colour — the page warms towards
+          the brand hue at one corner and falls back to the canvas everywhere else.
+          It is what stops a centred card from looking like a dialog on an empty page.
+
+          Anchored at 100% 0% so under `dir="rtl"` the warm corner is the TOP-START
+          edge, matching the reference once mirrored (§6.7 #4).
+        */
+        'auth-ground':
+          'radial-gradient(110% 80% at 100% 0%, #EDF6F2 0%, #F5F8F7 38%, #F7F8FA 72%)',
       },
       transitionTimingFunction: {
         native: 'cubic-bezier(0.32, 0.72, 0, 1)',

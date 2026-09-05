@@ -40,7 +40,11 @@ export function Button({
         // A 1px press-down instead of a glow or a scale (§6.4).
         'active:translate-y-px disabled:pointer-events-none disabled:opacity-45',
         size === 'large' ? 'min-h-[64px] px-8 text-xl' : 'min-h-[52px] px-6 text-lg',
-        variant === 'primary' && 'bg-accent text-white hover:bg-accent/92',
+        // A vertical gradient in ONE hue, matching `login.png`'s primary action and
+        // the manager app's. Depth, not decoration — the reference's neon rim beneath
+        // it is refused (§6.4 "flat, no glow", §11 bans it by name).
+        variant === 'primary' &&
+          'bg-gradient-to-b from-accent to-[#0B5A46] text-white hover:from-[#0d6650] hover:to-[#094a3a]',
         variant === 'ghost' && 'border border-border bg-surface text-ink hover:bg-canvas',
         variant === 'quiet' && 'text-steel hover:text-ink',
         className,
@@ -53,13 +57,21 @@ export function Button({
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
+  /**
+   * A glyph seated inside the field at the END edge — `login.png`'s treatment.
+   *
+   * `aria-hidden`: the label above carries the meaning, so nothing is signalled by
+   * the glyph alone. It earns its place by making a stack of identical boxes tell
+   * itself apart at arm's length, which is the distance this app is read from (§3.2).
+   */
+  icon?: ReactNode;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, invalid, ...props },
+  { className, invalid, icon, ...props },
   ref,
 ) {
-  return (
+  const field = (
     <input
       ref={ref}
       {...props}
@@ -68,11 +80,37 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         'min-h-[52px] placeholder:text-steel/70',
         'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-canvas',
         invalid ? 'border-danger' : 'border-border',
+        Boolean(icon) && 'pe-12',
         className,
       )}
     />
   );
+  if (!icon) return field;
+  return (
+    <div className="relative">
+      {field}
+      <span
+        className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-steel"
+        aria-hidden
+      >
+        {icon}
+      </span>
+    </div>
+  );
 });
+
+/** A rule with a word set into it — the reference's split between a primary action
+ *  and the secondary path below it. */
+export function Divider({ label }: { label?: string }): JSX.Element {
+  if (!label) return <hr className="border-0 border-t border-border" />;
+  return (
+    <div className="flex items-center gap-4" role="separator">
+      <span className="h-px flex-1 bg-border" />
+      <span className="text-base text-steel">{label}</span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
 
 /* ── Field ─────────────────────────────────────────────────────────────────── */
 

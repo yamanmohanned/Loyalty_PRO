@@ -40,6 +40,16 @@
         "dev:alt"
       ],
       "port": 4001
+    },
+    {
+      "name": "manager-desktop-alt",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@walaa/manager-desktop",
+        "dev:alt"
+      ],
+      "port": 5180
     }
   ]
 }
