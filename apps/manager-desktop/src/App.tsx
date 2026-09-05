@@ -141,9 +141,15 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
         </button>
 
         {/* TEMPORARY — the build this page was served from. Remove once the
-            stale-bundle question is settled. See vite.config.ts. */}
+            stale-bundle question is settled. See vite.config.ts.
+
+            Guarded with `typeof`, because the failure this is diagnosing is exactly
+            the one that would make it throw: a dev server started before the config
+            gained the define has no `__BUILD_STAMP__`, and a bare reference would
+            white-screen the app instead of reporting the staleness. The guard turns
+            that case into the answer. */}
         <p className="mt-2 select-text px-3 font-mono text-[11px] leading-tight text-steel">
-          build {__BUILD_STAMP__}
+          build {typeof __BUILD_STAMP__ === 'undefined' ? 'STALE SERVER — restart it' : __BUILD_STAMP__}
         </p>
       </div>
     </aside>
