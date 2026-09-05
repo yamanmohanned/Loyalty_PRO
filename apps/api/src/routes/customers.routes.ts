@@ -1,16 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  type CreateCustomerRequest,
   CreateCustomerRequestSchema,
+  type CustomerDetailResponse,
+  type CustomerListQuery,
   CustomerListQuerySchema,
   CustomerSearchQuerySchema,
   DASHBOARD_ROLES,
   ResolveCustomerQuerySchema,
   STATION_ROLES,
-  UpdateCustomerRequestSchema,
-  type CreateCustomerRequest,
-  type CustomerListQuery,
   type UpdateCustomerRequest,
+  UpdateCustomerRequestSchema,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import { getCustomerLifetime } from '../services/lifetime.service';
@@ -39,7 +40,10 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
       config: { roles: STATION_ROLES, rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: { querystring: ResolveCustomerQuerySchema },
     },
-    async (request) => {
+    // The annotation is the point, not decoration: it is what makes renaming
+    // `lifetime` on either side of the wire a compile error rather than a white
+    // screen. See `CustomerDetailResponse`.
+    async (request): Promise<CustomerDetailResponse> => {
       const auth = requireAuth(request);
       const { identifier } = request.query as { identifier: string };
       const customer = await resolveCustomer(auth.merchantId, identifier);
@@ -145,7 +149,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
   app.get(
     '/:id',
     { config: { roles: DASHBOARD_ROLES }, schema: { params: IdParamSchema } },
-    async (request) => {
+    async (request): Promise<CustomerDetailResponse> => {
       const auth = requireDashboardRole(request);
       const { id } = request.params as { id: string };
       const [customer, lifetime] = await Promise.all([

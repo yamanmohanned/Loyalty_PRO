@@ -1,7 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { AlertTriangle, type LucideIcon } from 'lucide-react';
+import { locale } from '../lib/locale';
 
 /**
  * UI primitives, built to the design system in CLAUDE.md §6.4.
@@ -449,6 +450,38 @@ export function EmptyState({
       {body ? <p className="max-w-sm text-sm leading-relaxed text-steel">{body}</p> : null}
       {action}
     </div>
+  );
+}
+
+/**
+ * The state a screen shows when its data could not be fetched.
+ *
+ * **Its absence was a defect on five screens.** Each one branched on `isLoading` and
+ * then fell back to a skeleton or to nothing at all, so a dead backend rendered as a
+ * shimmer that never resolved. That is worse than an error: a merchant watching a
+ * skeleton concludes the machine is slow and waits, where an error tells them the
+ * service is down and gives them the retry. The screens were not crashing, so nothing
+ * in a healthy-API sweep could have found it — which is §12.20's point, applied to a
+ * condition rather than to a rendering.
+ *
+ * `errorBody` names the actual first suspect ("تحقّق من الاتصال بالخادم"), because on
+ * this product the overwhelmingly likely cause is that the API on the manager PC has
+ * not started yet.
+ */
+export function ErrorState({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <EmptyState
+      icon={<AlertTriangle size={22} aria-hidden />}
+      title={locale.common.error}
+      body={locale.common.errorBody}
+      action={
+        onRetry ? (
+          <Button variant="ghost" onClick={onRetry}>
+            {locale.common.retry}
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }
 

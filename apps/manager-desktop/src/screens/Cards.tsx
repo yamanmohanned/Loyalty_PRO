@@ -21,13 +21,14 @@ import {
   Card,
   CardHeader,
   Chip,
+  cn,
   EmptyState,
+  ErrorState,
   Field,
   Input,
   Notice,
   PageHeader,
   Skeleton,
-  cn,
 } from '../components/ui';
 
 /**
@@ -58,7 +59,7 @@ export function CardsScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['card-batches'],
     queryFn: () => api.get<CardBatchListResponse>('/cards/batches'),
   });
@@ -104,13 +105,37 @@ export function CardsScreen() {
   const totalPrinted = data?.batches.reduce((sum, batch) => sum + batch.quantity, 0) ?? 0;
   const highestSerial = data ? data.nextSerial - 1 : 0;
 
+  const header = (
+    <PageHeader
+      icon={<CreditCard size={24} aria-hidden />}
+      title={locale.cards.title}
+      subtitle={locale.cards.subtitle}
+    />
+  );
+
+  /*
+    A dead backend renders an error, not a shimmer.
+
+    Every branch below tested `isLoading || !data`, which is true both while the
+    request is in flight AND after it has failed — so with the API down this screen
+    sat on a skeleton indefinitely and told the merchant nothing. Ordering the error
+    check FIRST is what separates the two conditions; `!data` still catches the
+    in-flight case underneath it.
+  */
+  if (isError) {
+    return (
+      <>
+        {header}
+        <Card>
+          <ErrorState onRetry={() => void refetch()} />
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHeader
-        icon={<CreditCard size={24} aria-hidden />}
-        title={locale.cards.title}
-        subtitle={locale.cards.subtitle}
-      />
+      {header}
 
       <div className="space-y-6">
         {notice ? <Notice tone="accent">{notice}</Notice> : null}

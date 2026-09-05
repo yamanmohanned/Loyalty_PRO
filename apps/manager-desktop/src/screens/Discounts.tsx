@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   CardHeader,
+  ErrorState,
   Field,
   Input,
   Money,
@@ -39,7 +40,7 @@ export function DiscountsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['discount-config'],
     queryFn: () => api.get<DiscountConfigResponse>('/discount'),
   });
@@ -118,6 +119,24 @@ export function DiscountsScreen() {
         setError(locale.common.errorBody);
       }
     }
+  }
+
+  // Error before loading, for the reason recorded on the Cards screen: `!settings`
+  // cannot tell "still fetching" from "the fetch failed", and only one of those
+  // should show a skeleton.
+  if (isError) {
+    return (
+      <>
+        <PageHeader
+          icon={<BadgePercent size={24} aria-hidden />}
+          title={locale.discounts.title}
+          subtitle={locale.discounts.subtitle}
+        />
+        <Card>
+          <ErrorState onRetry={() => void refetch()} />
+        </Card>
+      </>
+    );
   }
 
   if (isLoading || !settings || !rules) {

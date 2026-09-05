@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FeatureFlagKey } from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { locale } from '../lib/locale';
-import { Card, CardHeader, Chip, Notice, PageHeader, SkeletonTable, cn } from '../components/ui';
+import { Card, CardHeader, Chip, cn, ErrorState, Notice, PageHeader, SkeletonTable } from '../components/ui';
 
 /**
  * Feature flags (CLAUDE_v3.md §8).
@@ -33,7 +33,7 @@ const MODULES: Array<{ key: FeatureFlagKey; label: string; hint: string; locked?
 export function ModulesScreen() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['flags'],
     queryFn: () => api.get<{ flags: Record<FeatureFlagKey, boolean> }>('/flags'),
   });
@@ -54,7 +54,9 @@ export function ModulesScreen() {
 
       <Card>
         <CardHeader title={locale.modules.title} />
-        {isLoading || !data ? (
+        {isError ? (
+          <ErrorState onRetry={() => void refetch()} />
+        ) : isLoading || !data ? (
           <SkeletonTable rows={6} columns={2} />
         ) : (
           <ul className="divide-y divide-border">

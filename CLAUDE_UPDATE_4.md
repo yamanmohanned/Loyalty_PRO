@@ -622,3 +622,106 @@ across a 1088 px column leave about 161 px beside the icon and the label, and th
 figure needs 181. Giving the figure its own full-width row fixes it and holds the
 largest value the screen can produce. §6.5 forbids the overflow; nothing but rendering
 it at width would have shown it. Which is §12.20 again: the screen is the instrument.
+
+### 10.11 A shared payload type is not a shared contract — the ENVELOPE drifts too
+*(defect found by the operator, 2026-09-05. §12.27's drift class, and the reason the
+no-duplicate-DTO check missed it.)*
+
+The manager's customer detail screen white-screened with
+`Cannot read properties of undefined (reading 'totalSpend')`. The cause was not the
+dead backend it was found beside. It crashed on a **healthy** one, for every visitor,
+since the §10.4 contract split:
+
+```
+server   GET /customers/:id   →  { customer, lifetime }
+client   api.get<{ customer: Customer; balance: CustomerLifetime }>
+```
+
+**Say plainly which: the no-duplicate-DTO check did NOT catch it.** And the reason is
+worth more than the fix. `CustomerLifetime` — the payload — *was* correctly imported
+from `packages/shared-types`. The rule had been applied. What was written locally was
+the **two-key wrapper around it**, inline at the call site as an anonymous type
+argument. A wrapper is a DTO. It drifts the same way, and it is the part that a rename
+actually touches.
+
+Two properties combined to make it silent:
+
+1. **`api.get<T>` is an unchecked cast** — `return body as T`, no runtime validation.
+   The type argument is a promise TypeScript will believe without evidence.
+2. **Nothing bound the server's return to the client's expectation.** Both sides
+   compiled. Both sides were internally consistent. Only the wire disagreed.
+
+**The fix is the annotation, not the interface.** Naming `CustomerDetailResponse` in
+shared-types changes nothing on its own — the client would still cast to it and the
+server would still return whatever it liked. What closes the loop is declaring it as
+the route handler's **return type**:
+
+```ts
+async (request): Promise<CustomerDetailResponse> => { … }
+```
+
+Proven rather than asserted: renaming the field in the shared type fails the build in
+**three places at once** — `customers.routes.ts` twice (TS2353) and `Customers.tsx`
+once (TS2339). Restored, both clean.
+
+**Standing rule.** An inline `api.get<{ … }>` at a call site is a duplicated DTO and is
+treated as one. Every response envelope is named in `packages/shared-types` and
+declared as the handler's return type. Auditing the other 33 call sites found 13 more
+inline envelopes; all either match the server exactly or ask for a strict subset of its
+keys, which is safe in the direction that matters. This was the only drift.
+
+### 10.12 No screen may white-screen because the API is down
+*(operator ruling, 2026-09-05. §12.20 extended from "verify it rendered" to "verify it
+rendered under the failure it will actually meet".)*
+
+A dead backend is the single most likely real-world condition this product meets: the
+manager PC restarts, the service is slow to start, someone closes the window. Verifying
+against a healthy API tests the happy path and nothing else — which is how a screen that
+had been crashing since §10.4 survived a full design overhaul and an eight-screen
+verification sweep without being noticed. **I never opened the customer detail screen.**
+
+Three things came out of auditing every screen against a genuinely refused connection:
+
+**1. Five screens showed a skeleton forever.** Cards, Discounts, Modules, Backup and
+Capture each branched on `isLoading` and fell through to a shimmer — or, on Backup, to
+nothing at all below the header. They were not crashing, so no crash-hunt would find
+them, and a merchant watching a shimmer concludes the machine is slow and waits.
+`ErrorState` and an error branch **ordered before the loading branch** on each; `!data`
+cannot tell "still fetching" from "the fetch failed", so only checking `isError` first
+separates them.
+
+**2. Two screens had the opposite bug.** The customers list and the detail screen tested
+`isError || !data`, which renders the failure card while the very first request is still
+in flight. Same root confusion, opposite symptom.
+
+**3. A route-level error boundary, because fixing instances is not a guarantee.** These
+screens read from a service that can be down, mid-restart, or a version out of step with
+the build, so "no component will ever throw" is not a property this app can promise.
+`RouteErrorBoundary` wraps the routed content and **not** the shell, so the rail keeps
+rendering and the merchant can navigate off a broken screen — the difference between a
+fault and an outage. Keyed on the pathname, or it latches and poisons every later route.
+Verified by reintroducing the original crash: error card, rail intact, retry offered,
+and navigating away recovered.
+
+**The measurement instrument was wrong twice before it was right, and that is the
+lesson.** First reading: three screens appeared to hang forever, every query stuck at
+`fetchStatus: 'paused'` with `navigator.onLine === true`. That looked like React Query's
+`networkMode: 'online'` default. It was not. `onlineManager.isOnline()` was **true**;
+what was false was `focusManager.isFocused()` — the agent-browser tab was `hidden`, and
+React Query pauses retries on an unfocused window. **The hang was the harness.** Fronting
+the tab, all nine routes reach `error/idle` and render their error state. A second
+reading was invalid for a duller reason: a stale `QueryClient` reference captured before
+a reload, reporting frozen state from a dead client. Both were caught by making the probe
+report what it *observed* — the query keys, the request count — rather than only its
+verdict. §12.20 applies to the instrument.
+
+**`networkMode: 'always'` is set anyway, and it is honest to say it fixed nothing
+observed today.** It is correct for its own reason: `navigator.onLine` describes internet
+reachability, and this backend is on localhost or the shop's LAN. A manager PC with no
+internet reaches it perfectly; a PC with excellent internet reaches nothing if the
+service has not started. Leaving the default would pause every query forever on a shop
+whose WAN is down while the till works fine.
+
+**The Station needed no change.** Driven through the core loop with the API refused it
+switches to «غير متصل», queues the scan, and tells the cashier it will send on
+reconnect — the offline-first design (§8) doing exactly its job.

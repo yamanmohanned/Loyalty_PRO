@@ -4,8 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowRight, Download, RotateCcw, Search, Users } from 'lucide-react';
 import {
   formatCardNumber,
-  type Customer,
-  type CustomerLifetime,
+  type CustomerDetailResponse,
   type CustomerListResponse,
   type DiscountConfigResponse,
 } from '@walaa/shared-types';
@@ -16,16 +15,17 @@ import {
   Card,
   CardHeader,
   Chip,
+  cn,
   EmptyState,
+  ErrorState,
   Field,
   Input,
   Money,
   Monogram,
   Notice,
-  Select,
   PageHeader,
+  Select,
   SkeletonTable,
-  cn,
   tableHeadRow,
   tableRow,
   td,
@@ -76,7 +76,7 @@ export function CustomersScreen() {
     ...(category ? { category } : {}),
   });
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customers', params.toString()],
     queryFn: () => api.get<CustomerListResponse>(`/customers?${params.toString()}`),
   });
@@ -182,10 +182,15 @@ export function CustomersScreen() {
       </Card>
 
       <Card>
-        {isLoading ? (
+        {/* Error first, then loading. `isError || !data` conflated the two: `!data` is
+            also true while the very first request is in flight, so a slow response
+            rendered the failure card before it had failed. */}
+        {isError ? (
+          <ErrorState onRetry={() => void refetch()} />
+        ) : isLoading ? (
           <SkeletonTable rows={6} columns={6} />
-        ) : isError || !data ? (
-          <EmptyState title={locale.common.error} body={locale.common.errorBody} />
+        ) : !data ? (
+          <ErrorState onRetry={() => void refetch()} />
         ) : data.customers.length === 0 ? (
           <EmptyState
             icon={<Users size={22} aria-hidden />}
@@ -334,11 +339,28 @@ export function CustomerDetailScreen() {
     queryFn: () => api.get<DiscountConfigResponse>('/discount'),
   });
 
-  const { data, isLoading, isError } = useQuery({
+  /*
+    The envelope is `CustomerDetailResponse`, imported — not written inline here.
+
+    It used to be `api.get<{ customer: Customer; balance: CustomerLifetime }>`, and
+    the server has returned `{ customer, lifetime }` since the §10.4 split. `api.get<T>`
+    casts without checking, so `balance` was `undefined` and `balance.totalSpend` threw
+    on every visit to this screen — on a healthy backend. The shared type plus the
+    handler's return annotation is what turns that into a compile error.
+  */
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer', id],
-    queryFn: () => api.get<{ customer: Customer; balance: CustomerLifetime }>(`/customers/${id}`),
+    queryFn: () => api.get<CustomerDetailResponse>(`/customers/${id}`),
     enabled: Boolean(id),
   });
+
+  if (isError) {
+    return (
+      <Card>
+        <ErrorState onRetry={() => void refetch()} />
+      </Card>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -348,15 +370,15 @@ export function CustomerDetailScreen() {
     );
   }
 
-  if (isError || !data) {
+  if (!data) {
     return (
       <Card>
-        <EmptyState title={locale.common.error} body={locale.common.errorBody} />
+        <ErrorState onRetry={() => void refetch()} />
       </Card>
     );
   }
 
-  const { customer, balance } = data;
+  const { customer, lifetime } = data;
 
   return (
     <>
@@ -387,7 +409,7 @@ export function CustomerDetailScreen() {
       <div className="mb-6 grid grid-cols-[1.6fr_1fr] gap-6">
         <Card className="p-6">
           <p className="text-sm text-steel">{locale.customer.balanceThisPeriod}</p>
-          <Money value={balance.totalSpend} className="mt-2 text-3xl" />
+          <Money value={lifetime.totalSpend} className="mt-2 text-3xl" />
           <p className="mt-1 text-xs text-steel">{locale.customer.derivedNote}</p>
 
           {/* v3 showed the gap to this customer's next tier here. There is no such
@@ -401,7 +423,7 @@ export function CustomerDetailScreen() {
         <div className="space-y-6">
           <Card className="p-6">
             <p className="text-sm text-steel">{locale.overview.kpiAttributed}</p>
-            <p className="amount mt-2 text-2xl text-ink">{balance.transactionCount}</p>
+            <p className="amount mt-2 text-2xl text-ink">{lifetime.transactionCount}</p>
           </Card>
           <Card className="p-6">
             <p className="text-sm text-steel">رقم البطاقة</p>

@@ -25,7 +25,7 @@ import { BadgePercent, BarChart3, Percent, Ticket, TicketCheck } from 'lucide-re
 import {
   Card,
   CardHeader,
-  EmptyState,
+  ErrorState,
   Money,
   Notice,
   PageHeader,
@@ -66,7 +66,7 @@ import {
 export function ReportsScreen() {
   const [range, setRange] = useState<ReportRange>('30d');
 
-  const { data, isLoading, isError, isFetching } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     // The range is part of the key, so each window caches rather than refetching.
     queryKey: ['programme-report', range],
     queryFn: () => api.get<ProgrammeReportResponse>(`/reports/programme?range=${range}`),
@@ -94,7 +94,7 @@ export function ReportsScreen() {
       <>
         {header}
         <Card>
-          <EmptyState title={locale.common.error} body={locale.common.errorBody} />
+          <ErrorState onRetry={() => void refetch()} />
         </Card>
       </>
     );

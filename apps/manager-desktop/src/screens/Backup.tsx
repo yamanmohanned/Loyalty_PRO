@@ -2,7 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, CheckCircle2, CloudOff, DatabaseBackup, HardDrive, MinusCircle, RotateCcw, Usb } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
-import { Button, Card, CardHeader, Chip, Notice, PageHeader, Skeleton } from '../components/ui';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Chip,
+  ErrorState,
+  Notice,
+  PageHeader,
+  Skeleton,
+} from '../components/ui';
 import type {
   BackupOverview,
   HistoryEntry,
@@ -79,7 +88,14 @@ export function BackupScreen() {
         </Notice>
       </div>
 
-      {overview.isLoading ? (
+      {/* The failure branch was missing entirely: `{data ? … : null}` below meant a
+          dead backend rendered the header, the standing risk notice, and then nothing
+          — a screen that looks finished and is empty. */}
+      {overview.isError ? (
+        <Card>
+          <ErrorState onRetry={() => void overview.refetch()} />
+        </Card>
+      ) : overview.isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-24" />
           <Skeleton className="h-40" />

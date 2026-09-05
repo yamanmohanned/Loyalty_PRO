@@ -6,6 +6,7 @@ import {
   NavLink,
   Route,
   Routes,
+  useLocation,
   useNavigate,
 } from 'react-router-dom';
 import {
@@ -25,6 +26,7 @@ import { getApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { cn } from './components/ui';
 import { BrandMark } from './components/BrandMark';
+import { RouteErrorBoundary } from './components/ErrorBoundary';
 import { StorageBanner, useStorageStatus } from './components/StorageBanner';
 import { SetupScreen } from './screens/Setup';
 import { LoginScreen, type SessionUser } from './screens/Login';
@@ -63,6 +65,33 @@ const queryClient = new QueryClient({
       staleTime: 15_000,
       retry: 1,
       refetchOnWindowFocus: true,
+      /*
+        **`always`, and this is the fix for screens that hung instead of erroring.**
+
+        React Query's default is `networkMode: 'online'`: a query whose fetch fails as
+        a network error is left `pending` with `fetchStatus: 'paused'`, waiting for
+        connectivity to come back. `isError` never becomes true, so every error branch
+        on every screen is unreachable and the merchant watches a skeleton for as long
+        as they are willing to.
+
+        That default is written for a web app talking to the public internet, where
+        `navigator.onLine` is a fair proxy for "can I reach my server". **Here it is
+        not even related.** This backend is on localhost or the shop's LAN: a manager
+        PC with no internet reaches it perfectly, and a manager PC with excellent
+        internet reaches nothing if the service has not started — which is the
+        overwhelmingly common real failure.
+
+        `always` means a fetch is attempted regardless of what the browser believes
+        about connectivity, and a failure is reported as a failure. Measured, not
+        assumed: with the app pointed at a dead port and `navigator.onLine === true`,
+        every query sat at `pending/paused` and no screen ever showed its error state.
+      */
+      networkMode: 'always',
+    },
+    mutations: {
+      // Same reasoning: a mutation that cannot reach the server must fail and say so,
+      // not queue silently against a reconnection that is not what is broken.
+      networkMode: 'always',
     },
   },
 });
@@ -158,6 +187,7 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
 
 function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const keyStatus = useKeyStatus();
   const storage = useStorageStatus();
 
@@ -228,6 +258,13 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
           />
         ) : null}
         <div className="mx-auto max-w-content px-8 py-8">
+          {/*
+            Keyed on the pathname so navigating away from a broken screen clears the
+            caught error. Without the key the boundary stays latched and every
+            subsequent route renders the error card — the fix for one screen would
+            break all of them.
+          */}
+          <RouteErrorBoundary key={pathname}>
           <Routes>
             <Route path="/" element={<OverviewScreen />} />
             <Route path="/customers" element={<CustomersScreen />} />
@@ -240,6 +277,7 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
             <Route path="/modules" element={<ModulesScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </RouteErrorBoundary>
         </div>
       </main>
     </div>

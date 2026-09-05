@@ -9,11 +9,12 @@ import {
   Card,
   CardHeader,
   Chip,
+  cn,
+  ErrorState,
   Field,
   Notice,
   PageHeader,
   Select,
-  cn,
 } from '../components/ui';
 
 /**
@@ -219,6 +220,17 @@ function PaperWidthPanel(): JSX.Element {
   });
 
   const current = printing.data?.paperWidth;
+
+  /* Without this the select rendered blank and disabled-looking with no reason given,
+     which reads as "this setting is broken" rather than "the server is unreachable". */
+  if (printing.isError) {
+    return (
+      <Card className="mt-6">
+        <CardHeader title={locale.capture.paperTitle} />
+        <ErrorState onRetry={() => void printing.refetch()} />
+      </Card>
+    );
+  }
 
   return (
     <Card className="mt-6">

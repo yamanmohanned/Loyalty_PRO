@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CardOriginSchema, CustomerCategorySchema } from './enums';
 import { PhoneInputSchema } from './phone';
+import type { CustomerLifetime } from './transaction';
 
 /** Customer DTOs. Phone is the identifier; nothing sensitive is stored (CLAUDE.md §0.4). */
 
@@ -195,4 +196,30 @@ export interface CustomerListResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+/**
+ * `GET /customers/:id` and `GET /customers/resolve`.
+ *
+ * **This exists because its absence caused a white screen.** The manager's detail
+ * screen asked for `api.get<{ customer: Customer; balance: CustomerLifetime }>` — an
+ * envelope written inline at the call site — while the route had returned
+ * `{ customer, lifetime }` since the §10.4 contract split. `api.get<T>` is an
+ * unchecked cast (`return body as T`), so nothing on either side could notice: the
+ * server was correct, the client compiled, and `balance.totalSpend` threw at runtime
+ * for every visitor to the screen, on a perfectly healthy backend.
+ *
+ * §12.27 says duplicated DTOs fail silently by staying plausible. **The gap was that
+ * the rule was applied to the payload and not to the envelope** — `CustomerLifetime`
+ * itself was correctly imported from here; only the two-key wrapper around it was
+ * local. A wrapper is a DTO. It drifts the same way, and it is the part a rename
+ * touches.
+ *
+ * So the envelope is named, shared, and — the half that actually closes it — declared
+ * as the route handler's RETURN TYPE in `customers.routes.ts`. Renaming the field on
+ * either side is now a type error in the same commit as the rename.
+ */
+export interface CustomerDetailResponse {
+  customer: Customer;
+  lifetime: CustomerLifetime;
 }
