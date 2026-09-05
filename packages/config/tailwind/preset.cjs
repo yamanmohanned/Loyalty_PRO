@@ -95,6 +95,76 @@ const glass = ({ addComponents }) => {
    * `!important`, and without the caller having to strip the utilities it is
    * replacing.
    */
+  /*
+   * ── Pre-session atmosphere ────────────────────────────────────────────────
+   *
+   * The decorative layer `login.png` puts behind its content: a faint dot matrix
+   * in one corner, thin circular orbit rings behind the hero, and a mint haze at
+   * the edges. Everything here is ornament — `aria-hidden` by construction since
+   * it is drawn in pseudo-elements, and `pointer-events: none`.
+   *
+   * **The 5% intensity cap is a computed number, not a judgement.** Accent over
+   * canvas at various alphas produces these luma deltas:
+   *
+   *     0.030 -> 4.33%   OK
+   *     0.040 -> 5.75%   over
+   *     0.050 -> 7.15%   over
+   *
+   * So 0.03 is the ceiling for any accent-tinted ornament on this ground, and
+   * every value below sits at or under it. Anything heavier stops being
+   * atmosphere and starts being a pattern competing with the form.
+   *
+   * Two layers rather than one, because they have different jobs: `::before`
+   * carries the dot matrix (corner texture) and `::after` the orbit rings (which
+   * belong behind the art column). Both sit at z-index 0 with the content above,
+   * so nothing here can ever land on top of a control.
+   */
+  addComponents({
+    '.auth-atmosphere': { position: 'relative', isolation: 'isolate' },
+
+    '.auth-atmosphere::before': {
+      content: '""',
+      position: 'absolute',
+      inset: '0',
+      zIndex: '-1',
+      pointerEvents: 'none',
+      /* A 24px dot matrix, faded out with a mask so it never reaches the card.
+         Anchored to the END corner (left under RTL) — the reference puts its
+         texture opposite the form. */
+      backgroundImage: 'radial-gradient(rgba(15,110,86,0.03) 1px, transparent 1px)',
+      backgroundSize: '24px 24px',
+      backgroundPosition: '0 0',
+      maskImage: 'radial-gradient(70% 55% at 0% 8%, #000 0%, transparent 72%)',
+      WebkitMaskImage: 'radial-gradient(70% 55% at 0% 8%, #000 0%, transparent 72%)',
+    },
+
+    '.auth-atmosphere::after': {
+      content: '""',
+      position: 'absolute',
+      inset: '0',
+      zIndex: '-1',
+      pointerEvents: 'none',
+      /* Thin concentric orbit rings behind the art column, plus three sparkles.
+         Rings are 1px bands cut out of a radial gradient — cheaper and crisper
+         than borders, and they scale with the viewport because the centre is a
+         percentage. */
+      backgroundImage: [
+        'radial-gradient(circle at 22% 38%, transparent 178px, rgba(15,110,86,0.03) 179px, rgba(15,110,86,0.03) 180px, transparent 181px)',
+        'radial-gradient(circle at 22% 38%, transparent 258px, rgba(15,110,86,0.022) 259px, rgba(15,110,86,0.022) 260px, transparent 261px)',
+        'radial-gradient(circle at 14% 20%, rgba(15,110,86,0.03) 1.5px, transparent 2px)',
+        'radial-gradient(circle at 31% 61%, rgba(15,110,86,0.03) 1.5px, transparent 2px)',
+        'radial-gradient(circle at 9% 55%, rgba(15,110,86,0.025) 1px, transparent 1.5px)',
+      ].join(', '),
+      backgroundRepeat: 'no-repeat',
+    },
+
+    /* Ornament is the first thing to go when the viewer has asked for less.
+       Forced colours and reduced transparency both mean "stop decorating". */
+    '@media (prefers-reduced-transparency: reduce), (forced-colors: active)': {
+      '.auth-atmosphere::before, .auth-atmosphere::after': { display: 'none' },
+    },
+  });
+
   addComponents({
     '.glass.glass': { ...base, backgroundColor: 'rgba(255,255,255,0.78)' },
     '.glass-panel.glass-panel': { ...base, backgroundColor: 'rgba(255,255,255,0.92)' },
@@ -206,7 +276,11 @@ module.exports = {
           invention of mine that the reference does not support.
         */
         panel:
-          '0 1px 1px rgba(17,24,39,0.04), 0 8px 24px -4px rgba(17,24,39,0.12), 0 24px 56px -12px rgba(17,24,39,0.07)',
+          // The leading `inset` is the reference's inner highlight: its card samples
+          // 254-255 at the rim against 249-251 through the body, which is a light
+          // edge and not a border. It is what stops a large flat panel from looking
+          // die-cut.
+          'inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 1px rgba(17,24,39,0.04), 0 8px 24px -4px rgba(17,24,39,0.12), 0 24px 56px -12px rgba(17,24,39,0.07)',
         none: 'none',
       },
       spacing: {

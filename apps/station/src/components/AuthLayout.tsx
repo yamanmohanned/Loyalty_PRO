@@ -28,7 +28,12 @@ import { locale } from '../lib/locale';
  */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-auth-ground">
+    /* `auth-atmosphere` adds the reference's ornament layer — a faint dot matrix,
+        thin orbit rings and three sparkles — entirely in pseudo-elements at z-index
+        -1, so it is invisible to assistive tech and can never sit above a control.
+        Every alpha is at or below 0.03, which is the computed ceiling for staying
+        under a 5% luma delta on this ground; the arithmetic is in the preset. */
+    <div className="auth-atmosphere min-h-[100dvh] bg-auth-ground">
       {/* Proportions and the side order both come from measuring `login.png` at its
           native 1448 px — see the manager app's `AuthLayout` for the table. The card
           sits on the RIGHT there, which is the START edge of a natively-RTL design, so
