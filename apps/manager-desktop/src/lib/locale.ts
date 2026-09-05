@@ -245,6 +245,12 @@ export const locale = {
     attributionHint: 'الفواتير غير المرتبطة طبيعية — أغلب المتسوقين غير مسجّلين في البرنامج.',
 
     /* ── V4-4: the attribution split, drawn ──────────────────────────────── */
+    refresh: 'تحديث البيانات',
+    captureTrend: 'الالتقاط والارتباط يومياً',
+    seriesCaptured: 'فواتير ملتقطة',
+    seriesAttributed: 'مرتبطة بزبون',
+    colDate: 'التاريخ',
+    colNet: 'بعد الخصم',
     splitTitle: 'توزيع الفواتير الملتقطة',
     splitCentreLabel: 'نسبة الارتباط',
     splitAttributed: 'مرتبطة بزبون',

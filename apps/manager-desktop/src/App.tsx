@@ -24,7 +24,7 @@ import { setTokens, setUnauthenticatedHandler } from './lib/api';
 import { startRealtime } from './lib/realtime';
 import { getApiUrl } from './lib/config';
 import { locale } from './lib/locale';
-import { cn } from './components/ui';
+import { cn, Monogram } from './components/ui';
 import { BrandMark } from './components/BrandMark';
 import { RouteErrorBoundary } from './components/ErrorBoundary';
 import { StorageBanner, useStorageStatus } from './components/StorageBanner';
@@ -124,9 +124,21 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
       <div className="border-b border-border px-6 py-6">
         <div className="flex items-center gap-4">
           <BrandMark size={64} />
-          <div>
+          <div className="min-w-0">
             <p className="font-display text-lg font-bold leading-tight text-ink">{locale.appName}</p>
-            <p className="text-sm text-steel">{locale.appTagline}</p>
+            {/*
+              The SHOP's name, not a product label.
+
+              `merchantName` has been on the session since the Station needed a name to
+              print on cards, and the manager app rendered it nowhere — found by the
+              §10.9 standing check, which is now the fourth field this check has
+              recovered. A manager running two shops could not tell from this rail
+              which one they were looking at; «إدارة المتجر» told them nothing they
+              did not know.
+            */}
+            <p className="truncate text-sm text-steel" title={user.merchantName}>
+              {user.merchantName}
+            </p>
           </div>
         </div>
       </div>
@@ -156,9 +168,14 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
       </nav>
 
       <div className="border-t border-border p-3">
-        <div className="mb-2 px-3">
-          <p className="truncate text-sm font-medium text-ink">{user.name}</p>
-          <p className="text-xs text-steel">{locale.roles[user.role] ?? user.role}</p>
+        {/* The reference's profile block: an avatar, a name, a role. The avatar is a
+            monogram — we hold no photographs and §0.4 keeps stored data minimal. */}
+        <div className="mb-2 flex items-center gap-3 px-3 py-1">
+          <Monogram name={user.name} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{user.name}</p>
+            <p className="text-xs text-steel">{locale.roles[user.role] ?? user.role}</p>
+          </div>
         </div>
         <button
           type="button"
@@ -243,7 +260,10 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
     // <main> (the LTR habit) silently mirrors the whole layout the wrong way.
     <div className="flex min-h-[100dvh] max-h-[100dvh]">
       <NavRail user={user} onLogout={onLogout} />
-      <main className="flex-1 overflow-y-auto">
+      {/* `app-atmosphere`: two soft mint washes at 0.03 and 0.022 alpha — at or under
+          the computed 5% ceiling. No dot matrix here; a texture under a column of
+          figures is noise pretending to be depth. */}
+      <main className="app-atmosphere flex-1 overflow-y-auto">
         {/*
           Above the backup banner deliberately. Both are standing warnings, but this one
           is about an outage that may start with the next scan, and the backup one is

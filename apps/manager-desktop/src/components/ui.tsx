@@ -247,7 +247,9 @@ export function Card({
   children: ReactNode;
 }) {
   return (
-    <div className={cn('rounded-lg border border-border bg-surface shadow-card', className)}>
+    // 20px radius — the brief's 16–24 band, and the step below the 24 the pre-session
+    // panel uses, so a working card never out-rounds the shell it sits in.
+    <div className={cn('rounded-[20px] border border-border bg-surface shadow-card', className)}>
       {children}
     </div>
   );
@@ -362,6 +364,7 @@ export function StatTile({
   hint,
   loading = false,
   stale = false,
+  progressPct,
   tone = 'neutral',
 }: {
   icon?: LucideIcon;
@@ -372,6 +375,8 @@ export function StatTile({
   loading?: boolean;
   /** Dimmed while a refetch is in flight, so a figure is never silently out of date. */
   stale?: boolean;
+  /** Only for a figure that is already a percentage of a measured whole. */
+  progressPct?: number;
   tone?: 'neutral' | 'accent' | 'warning';
 }) {
   return (
@@ -408,6 +413,29 @@ export function StatTile({
           </p>
         )}
       </div>
+
+      {/*
+        A progress track, and it appears ONLY when the figure is genuinely a
+        proportion of a known whole.
+
+        The reference gives every tile a trend line and a "+18% عن الفترة السابقة".
+        Both are refused — there is no per-KPI series and no prior-period comparison
+        anywhere in `OverviewReport`, and a fabricated delta is indistinguishable from
+        a real one (§10.9). A percentage that already IS a fraction of a measured
+        total is a different thing: the bar restates the number, it does not add one.
+      */}
+      {progressPct !== undefined ? (
+        <div
+          className="mt-3 h-1.5 overflow-hidden rounded-pill bg-canvas"
+          role="img"
+          aria-label={`${progressPct}٪`}
+        >
+          <div
+            className={cn('h-full rounded-pill', tone === 'warning' ? 'bg-amber' : 'bg-accent')}
+            style={{ width: `${Math.max(0, Math.min(100, progressPct))}%` }}
+          />
+        </div>
+      ) : null}
 
       {hint ? <p className="mt-2 text-[13px] leading-relaxed text-steel">{hint}</p> : null}
     </Card>

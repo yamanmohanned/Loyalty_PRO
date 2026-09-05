@@ -5,6 +5,7 @@ import {
   BadgePercent,
   LayoutDashboard,
   Link2,
+  RefreshCw,
   Receipt,
   Users,
   Wallet,
@@ -31,6 +32,7 @@ import type { OverviewResponse } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {
+  Button,
   Card,
   CardHeader,
   Chip,
@@ -63,7 +65,7 @@ export function OverviewScreen() {
   // The window was hardcoded to 30 days while the API had accepted four all along.
   const [range, setRange] = useState<ReportRange>('30d');
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch } = useQuery({
     // The range is part of the key, so switching windows caches each one rather than
     // refetching the same month every time a manager glances back at it.
     queryKey: ['overview', range],
@@ -117,11 +119,32 @@ export function OverviewScreen() {
 
   return (
     <>
+      {/* The reference's header carries a range selector and a refresh control. Both
+          are real here. Its export action is not: this screen has no export endpoint,
+          and the Reports screen is where a report is produced. */}
       <PageHeader
         icon={<LayoutDashboard size={24} aria-hidden />}
         title={locale.overview.title}
         subtitle={locale.overview.subtitle}
-        action={<RangePicker value={range} onChange={setRange} />}
+        action={
+          <div className="flex items-center gap-3">
+            <RangePicker value={range} onChange={setRange} />
+            <Button
+              variant="secondary"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              aria-label={locale.overview.refresh}
+              title={locale.overview.refresh}
+              className="min-h-control px-3"
+            >
+              <RefreshCw
+                size={18}
+                aria-hidden
+                className={cn(isFetching && 'motion-safe:animate-spin')}
+              />
+            </Button>
+          </div>
+        }
       />
 
       {/*
@@ -160,6 +183,10 @@ export function OverviewScreen() {
           loading={!o}
           hint={o ? `${group(o.attributedInvoices)} ${locale.overview.kpiAttributed}` : undefined}
           tone={o && o.attributionRatePct < 20 ? 'warning' : 'accent'}
+          /* The only tile that gets a track: this figure already IS a fraction of a
+             measured whole (attributed ÷ captured), so the bar restates it rather
+             than inventing a second number beside it. */
+          progressPct={o?.attributionRatePct}
         />
         <StatTile
           icon={BadgePercent}
@@ -380,7 +407,17 @@ export function OverviewScreen() {
                       <p className="truncate text-base font-semibold text-ink">{c.name}</p>
                       <p className="mt-0.5 text-sm text-steel">
                         <Money value={c.spendInRange} className="text-sm" />
+                        <span className="ms-2">
+                          {c.transactionCount} {locale.overview.kpiCaptured}
+                        </span>
                       </p>
+                      {/* The brief asks for a "loyalty level" here and we have one:
+                          `category` was on this payload and rendered nowhere. It is a
+                          real classification the merchant sets, not a tier invented
+                          to fill the row. */}
+                      <Chip tone="neutral" className="mt-1.5 px-2 py-0.5 text-xs" dot>
+                        {locale.categories[c.category as 'REGULAR'] ?? c.category}
+                      </Chip>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <Monogram name={c.name} size="sm" />
@@ -406,10 +443,114 @@ export function OverviewScreen() {
         </Card>
       </div>
 
+      {/*
+        The second visualisation the brief asks for, built from the two per-day fields
+        that were computed and never drawn: `count` (invoices captured) against
+        `attributed` (those that reached an enrolled customer).
+
+        It is NOT the brief's «نمو العملاء». We hold no daily series of active or new
+        customers, and inventing one is the §10.9 failure. What we do hold is the
+        daily shape of the metric this whole screen is about — and a dual series is
+        the right instrument for it, because the gap between the two lines IS the
+        programme's reach, read directly off the chart.
+
+        Counts, not money, so it gets its own card and its own axis. Two units on one
+        axis is a chart that invites a comparison it cannot support.
+      */}
+      <Card className="mb-6">
+        <CardHeader title={locale.overview.captureTrend} />
+        <div className="h-56 px-6 pb-4 pt-2">
+          {isLoading ? (
+            <Skeleton className="h-full w-full" />
+          ) : o && o.timeseries.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={o.timeseries} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="capturedSeries" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={SERIES[1]} stopOpacity={0.18} />
+                    <stop offset="100%" stopColor={SERIES[1]} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="attributedSeries" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="rgba(17,24,39,0.07)" strokeDasharray="4 6" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 12, fill: '#6B7280' }}
+                  tickFormatter={(v) => String(v).slice(5)}
+                  axisLine={false}
+                  tickLine={false}
+                  reversed
+                />
+                <YAxis
+                  tick={{ fontSize: 12, fill: '#6B7280' }}
+                  axisLine={false}
+                  tickLine={false}
+                  orientation="right"
+                  width={40}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: '1px solid rgba(17,24,39,0.08)',
+                    fontFamily: 'IBM Plex Sans Arabic, sans-serif',
+                    direction: 'rtl',
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  name={locale.overview.seriesCaptured}
+                  stroke={SERIES[1]}
+                  strokeWidth={2}
+                  fill="url(#capturedSeries)"
+                  dot={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="attributed"
+                  name={locale.overview.seriesAttributed}
+                  stroke={SERIES[0]}
+                  strokeWidth={2.5}
+                  fill="url(#attributedSeries)"
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState
+              icon={<Receipt size={22} aria-hidden />}
+              title={locale.overview.chartEmpty}
+            />
+          )}
+        </div>
+        {/* Direct labels, not a colour key alone: `viz.ts` records a contrast WARN on
+            the categorical scale and obliges every chart on it to name its series in
+            text (§2.3 — never meaning by colour alone). */}
+        <ul className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border px-6 py-3">
+          {[
+            { name: locale.overview.seriesAttributed, fill: SERIES[0] },
+            { name: locale.overview.seriesCaptured, fill: SERIES[1] },
+          ].map((sr) => (
+            <li key={sr.name} className="flex items-center gap-2 text-sm text-ink">
+              <span
+                className="size-2.5 rounded-pill"
+                style={{ backgroundColor: sr.fill }}
+                aria-hidden
+              />
+              {sr.name}
+            </li>
+          ))}
+        </ul>
+      </Card>
+
       <Card>
         <CardHeader title={locale.overview.recent} />
         {isLoading ? (
-          <SkeletonTable rows={6} columns={5} />
+          <SkeletonTable rows={6} columns={7} />
         ) : o && o.recentTransactions.length > 0 ? (
         <table className="w-full text-start">
           <thead>
@@ -418,6 +559,11 @@ export function OverviewScreen() {
               <th className={th}>{locale.customers.colCustomer}</th>
               <th className={th}>{locale.customer.colGross}</th>
               <th className={th}>{locale.customer.colDiscount}</th>
+              {/* `amountNet` and `occurredAt` were both on this payload and shown
+                  nowhere — the §10.9 check again. The brief asks for exactly these
+                  two columns, so the shape it wants and the data we hold agree. */}
+              <th className={th}>{locale.overview.colNet}</th>
+              <th className={th}>{locale.overview.colDate}</th>
               <th className={th}>{locale.customer.colCapture}</th>
             </tr>
           </thead>
@@ -454,6 +600,12 @@ export function OverviewScreen() {
                   ) : (
                     <span className="text-steel">—</span>
                   )}
+                </td>
+                <td className={td}>
+                  <Money value={t.amountNet} />
+                </td>
+                <td className={cn(td, 'text-sm text-steel')}>
+                  {new Date(t.occurredAt).toLocaleDateString('ar-IQ')}
                 </td>
                 <td className={cn(td, 'text-sm text-steel')}>
                   {locale.captureModes[t.captureMode as keyof typeof locale.captureModes] ??

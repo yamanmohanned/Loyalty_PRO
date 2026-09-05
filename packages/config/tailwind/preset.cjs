@@ -158,10 +158,34 @@ const glass = ({ addComponents }) => {
       backgroundRepeat: 'no-repeat',
     },
 
+    /*
+     * The dashboard's variant: the same budget, a different placement.
+     *
+     * On a working screen the ornament sits BEHIND the analytics region and nowhere
+     * near a table or a figure — a dotted matrix under a column of numbers is noise
+     * pretending to be texture. So this one is a single soft mint wash anchored to
+     * the start-top corner, with no dot matrix at all.
+     */
+    '.app-atmosphere': { position: 'relative', isolation: 'isolate' },
+    '.app-atmosphere::before': {
+      content: '""',
+      position: 'absolute',
+      inset: '0',
+      zIndex: '-1',
+      pointerEvents: 'none',
+      backgroundImage: [
+        'radial-gradient(60% 44% at 96% 0%, rgba(15,110,86,0.03) 0%, transparent 70%)',
+        'radial-gradient(46% 34% at 4% 22%, rgba(15,110,86,0.022) 0%, transparent 72%)',
+      ].join(', '),
+      backgroundRepeat: 'no-repeat',
+    },
+
     /* Ornament is the first thing to go when the viewer has asked for less.
        Forced colours and reduced transparency both mean "stop decorating". */
     '@media (prefers-reduced-transparency: reduce), (forced-colors: active)': {
-      '.auth-atmosphere::before, .auth-atmosphere::after': { display: 'none' },
+      '.auth-atmosphere::before, .auth-atmosphere::after, .app-atmosphere::before': {
+        display: 'none',
+      },
     },
   });
 
@@ -239,7 +263,11 @@ module.exports = {
         pill: '999px',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(17,24,39,0.04), 0 8px 24px rgba(17,24,39,0.04)',
+        /* The same inner light rim the panel gets — measured off the reference's
+           cards, which are brighter at the edge than through the body. It is what
+           separates a card from the ground without spending a heavier border. */
+        card:
+          'inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 2px rgba(17,24,39,0.04), 0 8px 24px rgba(17,24,39,0.05)',
         raised: '0 2px 4px rgba(17,24,39,0.06), 0 12px 32px rgba(17,24,39,0.06)',
         /*
           V4-4 — the reference's panel elevation, which is wider and softer than
