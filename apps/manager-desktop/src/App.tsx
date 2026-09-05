@@ -139,6 +139,12 @@ function NavRail({ user, onLogout }: { user: SessionUser; onLogout: () => void }
           <LogOut size={20} strokeWidth={2} aria-hidden />
           <span>{locale.nav.logout}</span>
         </button>
+
+        {/* TEMPORARY — the build this page was served from. Remove once the
+            stale-bundle question is settled. See vite.config.ts. */}
+        <p className="mt-2 select-text px-3 font-mono text-[11px] leading-tight text-steel">
+          build {__BUILD_STAMP__}
+        </p>
       </div>
     </aside>
   );
