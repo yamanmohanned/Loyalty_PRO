@@ -440,7 +440,7 @@ function IdentityBanner({
 
   return (
     <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-lg border border-accent/20 bg-accent-tint px-5 py-4">
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-accent/12 text-accent">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-pill bg-accent-tint text-accent">
         <User size={22} aria-hidden />
       </span>
 

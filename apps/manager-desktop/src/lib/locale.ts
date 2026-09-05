@@ -193,6 +193,9 @@ export const locale = {
 
   login: {
     /* ── V4-4: the reference's strip, carrying facts rather than marketing ── */
+    /* The art column's headline. Says what this console IS — not a slogan about it,
+       which is what the reference's «نظام ولاء العملاء المتكامل» is. */
+    artHeadline: 'لوحة تحكم برنامج الولاء',
     stripReports: 'تقارير وتسويات',
     stripSecure: 'نسخ احتياطي مشفّر',
     /* Short, because a strip cell is one line. The long form stays for prose. */
@@ -211,6 +214,8 @@ export const locale = {
     password: 'كلمة المرور',
     submit: 'دخول',
     submitting: 'جارٍ الدخول…',
+    showPassword: 'إظهار كلمة المرور',
+    hidePassword: 'إخفاء كلمة المرور',
     or: 'أو',
     changeServer: 'تغيير الخادم',
     /** Shown when the credentials are valid but belong to another app entirely. */

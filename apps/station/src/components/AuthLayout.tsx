@@ -29,31 +29,47 @@ import { locale } from '../lib/locale';
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-[100dvh] bg-auth-ground">
-      <div className="mx-auto grid min-h-[100dvh] max-w-5xl items-center gap-10 px-6 py-10 lg:grid-cols-[1fr_1fr]">
-        {/* First child → right edge under RTL, which is where the reference's form
-            sits once mirrored (§6.7 #4). */}
-        <div className="flex flex-col items-center text-center lg:items-start lg:text-start">
-          {/* The reference's lit podium with the podium removed: a radial wash behind
-              the mark, drawn as a sibling rather than a filter so the halo pools under
-              the mark instead of tracing its glyph. */}
-          <div className="relative mb-7">
-            <span
-              className="absolute left-1/2 top-1/2 -z-10 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.16)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
-              aria-hidden
-            />
-            <BrandMark size={136} />
+      {/* Proportions and the side order both come from measuring `login.png` at its
+          native 1448 px — see the manager app's `AuthLayout` for the table. The card
+          sits on the RIGHT there, which is the START edge of a natively-RTL design, so
+          the card is the FIRST child and takes the FIRST (fixed) track. */}
+      <div className="mx-auto grid min-h-[100dvh] max-w-[76rem] items-center gap-12 px-6 py-10 lg:grid-cols-[40rem_1fr]">
+        <div className="order-1 w-full justify-self-center lg:justify-self-start">
+          {/* Near-white with the reference's barely-there vertical gradient (~5 levels),
+              24px radius, 56px padding, and the measured elevation. Solid, not `glass`. */}
+          <div className="mx-auto w-full rounded-xl bg-gradient-to-b from-white to-[#FAFAFB] p-14 shadow-panel">
+            {/* The card leads with the identity block, as the reference's does. */}
+            <div className="mb-11 flex flex-col items-center text-center">
+              <BrandMark size={72} />
+              <h1 className="mt-5 font-display text-[2.375rem] font-bold leading-none text-accent">
+                {locale.app.name}
+              </h1>
+              <p className="mt-3 text-lg text-steel">{locale.app.station}</p>
+            </div>
+            {children}
           </div>
+        </div>
 
-          {/* The wordmark in the ACCENT at display size — the reference's strongest
-              type decision, and what makes this read as a product rather than a form. */}
-          <h1 className="font-display text-[clamp(2.5rem,5vw,3.25rem)] font-bold leading-[1.15] text-accent">
-            {locale.app.name}
-          </h1>
-          <p className="mt-2 text-xl font-medium text-ink">{locale.app.station}</p>
+        <div className="relative order-2 flex flex-col items-center text-center lg:items-start lg:text-start">
+          {/* The illustration is refused (stock raster we do not own); what replaces it
+              is ambient light rather than another graphic, because light is not a
+              picture of anything. */}
+          <span
+            className="pointer-events-none absolute -start-24 -top-24 -z-10 h-[26rem] w-[26rem] rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.14)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
+            aria-hidden
+          />
+
+          {/* The identity block lives in the CARD now, as the reference has it, so this
+              column carries the headline and the strip — `login.png`'s left column
+              below its illustration. Rendering the mark and wordmark in both places
+              put the shop's name on screen twice; caught by looking at the render. */}
+          <h2 className="font-display text-[clamp(1.875rem,3.2vw,2.375rem)] font-bold leading-[1.25] text-ink">
+            {locale.app.station}
+          </h2>
           {/* Ink rather than steel, measured: this side sits on `bg-auth-ground`,
               whose warm stop takes `steel` to 4.39:1 against a 4.5 floor (§12.34 —
               a clearance is scoped to the surface it was measured on). */}
-          <p className="mt-3 max-w-sm text-lg leading-relaxed text-ink/80">
+          <p className="mt-4 max-w-sm text-lg leading-relaxed text-ink/80">
             {locale.login.tagline}
           </p>
 
@@ -64,14 +80,6 @@ export function AuthLayout({ children }: { children: ReactNode }) {
           </ul>
         </div>
 
-        <div className="w-full justify-self-center lg:justify-self-end">
-          {/* Solid, not `glass`. The reference's panel is an opaque near-white, and
-              converting to it retires the one surface §12.34 recorded as passing by
-              0.05 — style and legibility agreeing for once. */}
-          <div className="mx-auto w-full max-w-md rounded-xl bg-surface p-9 shadow-panel">
-            {children}
-          </div>
-        </div>
       </div>
     </div>
   );

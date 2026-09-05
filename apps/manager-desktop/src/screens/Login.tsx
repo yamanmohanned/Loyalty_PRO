@@ -4,7 +4,7 @@ import { api, ApiRequestError, setTokens } from '../lib/api';
 import { getApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
-import { LogIn, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Lock, User } from 'lucide-react';
 import { Button, Divider, Field, Input, Notice } from '../components/ui';
 
 /**
@@ -35,6 +35,12 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /* The reference puts a visibility toggle in its password field. Taken: it is a
+     real control that works against no backend and fabricates nothing, and at a till
+     a mistyped password behind dots is the most common way to be locked out of a
+     shift. Refused alongside it: the "forgot password?" link beneath, because that
+     flow genuinely does not exist (§12.31). */
+  const [reveal, setReveal] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -76,12 +82,24 @@ export function LoginScreen({
       {/* Centred, as the reference's card is. A left-aligned heading over centred
           actions is the composition the previous pass had, and it is what made the
           panel read as a form rather than as a welcome. */}
-      <div className="mb-7 text-center">
+      {/*
+        Vertical rhythm, measured off `login.png` and snapped to the 4 px grid:
+
+          greeting → its sub-line      11 px  →  12
+          sub-line → first label       33 px  →  32
+          label    → its input         11 px  →  12   (in `Field`)
+          input    → next label        27 px  →  28
+          input    → primary button    43 px  →  40   (the reference's 27 + a 16 px
+                                                       "forgot password" line we refuse)
+          button   → divider           29 px  →  28
+          divider  → secondary         23 px  →  24
+      */}
+      <div className="text-center">
         <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
-        <p className="mt-1.5 text-base text-steel">{locale.login.signInHint}</p>
+        <p className="mt-3 text-base text-steel">{locale.login.signInHint}</p>
       </div>
 
-      <form onSubmit={submit} className="space-y-5">
+      <form onSubmit={submit} className="mt-8 space-y-7">
         {/* The glyph inside the field is the reference's, and it is decoration in the
             strict sense — `aria-hidden`, with the label above carrying the meaning. */}
         <Field label={locale.login.username}>
@@ -91,28 +109,40 @@ export function LoginScreen({
             autoComplete="username"
             dir="ltr"
             className="text-start"
-            icon={<User size={18} />}
+            icon={<User size={19} />}
             autoFocus
           />
         </Field>
 
         <Field label={locale.login.password}>
           <Input
-            type="password"
+            type={reveal ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
             dir="ltr"
             className="text-start"
-            icon={<Lock size={18} />}
+            icon={<Lock size={19} />}
+            adornment={
+              <button
+                type="button"
+                onClick={() => setReveal((v) => !v)}
+                aria-label={reveal ? locale.login.hidePassword : locale.login.showPassword}
+                aria-pressed={reveal}
+                className="flex size-11 items-center justify-center rounded-md text-steel transition-colors duration-fast hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                {reveal ? <EyeOff size={19} aria-hidden /> : <Eye size={19} aria-hidden />}
+              </button>
+            }
           />
         </Field>
 
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {/* Tall, full-width, gradient, with a leading glyph — the reference's primary
-            action exactly, minus the neon rim beneath it (§6.4, §11). */}
-        <Button type="submit" disabled={submitting} className="h-14 w-full text-lg">
+            action exactly, minus the neon rim beneath it (§6.4, §11). The 40px above
+            it is the reference's 27px plus the 16px line we refuse. */}
+        <Button type="submit" disabled={submitting} className="!mt-10 h-field w-full text-lg">
           <LogIn size={20} aria-hidden />
           {submitting ? locale.login.submitting : locale.login.submit}
         </Button>
@@ -120,9 +150,9 @@ export function LoginScreen({
 
       {/* The reference puts a divider and a secondary action here. Ours is the one
           real secondary path this screen has — pointing the app at a different shop. */}
-      <div className="mt-7 space-y-5">
+      <div className="mt-7 space-y-6">
         <Divider label={locale.login.or} />
-        <Button variant="secondary" onClick={onChangeServer} className="h-14 w-full text-base">
+        <Button variant="secondary" onClick={onChangeServer} className="h-field w-full text-base">
           {locale.login.changeServer}
         </Button>
       </div>

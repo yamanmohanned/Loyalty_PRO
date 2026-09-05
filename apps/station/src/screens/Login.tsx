@@ -62,12 +62,14 @@ export function LoginScreen({
     <>
       <AuthLayout>
         {/* Centred, as the reference's card is — and as the manager app's now is. */}
-        <div className="mb-7 text-center">
+        <div className="text-center">
           <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
-          <p className="mt-1.5 text-base text-steel">{locale.login.subtitle}</p>
+          <p className="mt-3 text-base text-steel">{locale.login.subtitle}</p>
         </div>
 
-        <form onSubmit={submit} className="space-y-5">
+        {/* The reference's rhythm, snapped to the 4px grid: heading→sub 12,
+            sub→fields 32, label→input 12, input→next 28, input→action 40. */}
+        <form onSubmit={submit} className="mt-8 space-y-7">
           <Field label={locale.login.username}>
             <Input
               value={username}
@@ -93,7 +95,7 @@ export function LoginScreen({
             />
           </Field>
 
-          <Button type="submit" size="large" disabled={busy} className="w-full">
+          <Button type="submit" size="large" disabled={busy} className="!mt-10 w-full">
             <LogIn size={22} aria-hidden />
             {busy ? locale.login.submitting : locale.login.submit}
           </Button>

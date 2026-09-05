@@ -73,40 +73,93 @@ export function AuthLayout({
 }) {
   return (
     <div className="min-h-[100dvh] bg-auth-ground">
-      <div className="mx-auto grid min-h-[100dvh] max-w-6xl items-center gap-12 px-6 py-10 lg:grid-cols-[1fr_1.02fr]">
-        {/* Art side. First child, so under `dir="rtl"` it lands at the RIGHT edge —
-            the reference puts the form there and the art on the left, which mirrors
-            to this. §6.7 #4: auto-generated designs get this backwards, so it is
-            stated rather than assumed. */}
-        <div className="flex flex-col items-center text-center lg:items-start lg:text-start">
-          {/* The reference's lit podium, with the podium removed. A radial wash
-              behind the mark at low alpha — the mark is a PNG with its own
-              transparency, so the glow has to be a sibling behind it rather than a
-              filter on it, or the halo would trace the glyph instead of pooling
-              under it.
+      {/*
+        Proportions measured off `login.png` at its native 1448 px, not eyeballed:
 
-              The halo is wider than the mark, so this wrapper reports a `scrollWidth`
-              past its `clientWidth`. That is inert and it was checked rather than
-              waved away: the element is absolutely positioned, and the document does
-              not overflow at 1440, 1280, 820 or 390. Recorded so the next person to
-              run an overflow sweep knows this line is expected. */}
-          <div className="relative mb-7">
-            <span
-              className="absolute left-1/2 top-1/2 -z-10 h-52 w-52 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.16)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
-              aria-hidden
-            />
-            {/* The mark at size (§2.5). The 384 px master covers this at 3×. */}
-            <BrandMark size={128} />
+        | measured                    | px    | share  | ours          |
+        |-----------------------------|-------|--------|---------------|
+        | card width                  | 681   | 47.0%  | 42rem = 672   |
+        | card margin, START edge     | 131   |  9.0%  | 88 (6.1%)     |
+        | card padding, sides         |  54   |        | 56 (8px grid) |
+        | field / button height       |  58   |        | 56 (8px grid) |
+        | card radius                 |  24   |        | 24            |
+        | field / button radius       |  12   |        | 12            |
+
+        Everything snaps to the 4/8 px rhythm §6.5 requires, which is why 58 becomes
+        56 and 54 becomes 56 — within 2 px of the reference and on the grid.
+      */}
+      {/* The fixed track is FIRST, because the card is now the first child. Swapping
+          the DOM order without swapping the tracks put the card in the `1fr` column
+          and handed its 42rem to the art — caught by measuring the rendered box
+          (480 px where 672 was intended) rather than by reading the class. */}
+      <div className="mx-auto grid min-h-[100dvh] max-w-[82rem] items-center gap-12 px-6 py-10 lg:grid-cols-[42rem_1fr]">
+        {/*
+          THE FORM COMES FIRST, and that is a correction.
+
+          The previous pass put the art first "so it lands at the RIGHT edge, which
+          mirrors the reference". That reasoning treated `login.png` as an LTR design
+          needing mirroring. **It is not** — it is a finished Arabic RTL design, and in
+          it the form card sits on the RIGHT, which is the START edge. Measured: the
+          card occupies x 636–1317 of 1448, leaving 131 px on the right and 636 on the
+          left.
+
+          So mirroring it was mirroring it away from the reference. Under `dir="rtl"`
+          the first grid child is placed at the right, so the card is first.
+
+          It is also simply better: the form is the thing you act on, and it now sits
+          where an RTL reader starts (§6.7 #4).
+        */}
+        <div className="order-1 w-full justify-self-center lg:justify-self-start">
+          {/* Solid near-white with a barely-there vertical gradient — the reference's
+              card samples 254–255 at the top and 249–251 through the body, which is a
+              gradient of about 5 levels. Invisible as an effect, and the reason the
+              panel does not read as a flat rectangle. */}
+          <div className="mx-auto w-full rounded-xl bg-gradient-to-b from-white to-[#FAFAFB] p-14 shadow-panel">
+            {/*
+              The card LEADS with the mark, the wordmark and a subtitle — because that
+              is what `login.png`'s card does, measured: mark 154–215, wordmark
+              234–264, subtitle 276–289, and only then the greeting at 334.
+
+              The previous pass put these on the art side instead and left the card
+              starting cold at the greeting. That is most of why the panel read as a
+              plain form: the reference's card is 838 px tall and a third of it is this
+              identity block. Ours is now built the same way.
+
+              Gaps below are the reference's, snapped to the 4 px grid:
+              mark → wordmark 19 → 20 · wordmark → subtitle 12 · subtitle → greeting
+              45 → 44.
+            */}
+            <div className="mb-11 flex flex-col items-center text-center">
+              <BrandMark size={64} />
+              <h1 className="mt-5 font-display text-[2.25rem] font-bold leading-none text-accent">
+                {locale.appName}
+              </h1>
+              <p className="mt-3 text-base text-steel">{locale.appTagline}</p>
+            </div>
+
+            {children}
           </div>
+        </div>
 
-          {/* Accent, not ink. The reference's wordmark is the brand colour at
-              display size and it is what makes the page read as a product rather
-              than a form. #0F6E56 on the ground measures well past the floor at this
-              size and weight. */}
-          <h1 className="font-display text-[clamp(2.25rem,4.4vw,3rem)] font-bold leading-[1.15] text-accent">
-            {locale.appName}
-          </h1>
-          <p className="mt-2 text-lg font-medium text-ink">{locale.appTagline}</p>
+        {/*
+          Art side, second → END edge (left) under RTL, as the reference has it.
+
+          This is `login.png`'s left column with its illustration removed: a display
+          headline, a supporting line, and the strip. The refused 3D podium is
+          replaced by ambient light rather than by another graphic — a soft radial
+          wash behind the headline, which is the one part of that illustration we can
+          honestly keep, because light is not a picture of anything.
+        */}
+        <div className="relative order-2 flex flex-col items-center text-center lg:items-start lg:text-start">
+          <span
+            className="pointer-events-none absolute -start-24 -top-24 -z-10 h-[26rem] w-[26rem] rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.14)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
+            aria-hidden
+          />
+          {/* The reference's left headline is its largest type after the wordmark —
+              30px bold there, and the thing that gives that column its weight. */}
+          <h2 className="font-display text-[clamp(1.75rem,3vw,2.125rem)] font-bold leading-[1.25] text-ink">
+            {locale.login.artHeadline}
+          </h2>
           {/* Ink, not steel — measured, not assumed (§12.34).
 
               `steel` #6B7280 clears 4.5:1 on `canvas` by 0.007 (4.557). The art side
@@ -118,7 +171,7 @@ export function AuthLayout({
 
               Hierarchy is carried by SIZE and WEIGHT instead — the same resolution
               already recorded for `Notice` and for `Money`'s currency suffix. */}
-          <p className="mt-3 max-w-md text-base leading-relaxed text-ink/80">{tagline}</p>
+          <p className="mt-4 max-w-md text-base leading-relaxed text-ink/80">{tagline}</p>
 
           {/*
             The reference's feature strip, carrying facts instead of marketing.
@@ -142,12 +195,6 @@ export function AuthLayout({
           </ul>
         </div>
 
-        {/* Form side. */}
-        <div className="w-full justify-self-center lg:justify-self-end">
-          <div className="mx-auto w-full max-w-[27rem] rounded-xl bg-surface p-10 shadow-panel">
-            {children}
-          </div>
-        </div>
       </div>
     </div>
   );

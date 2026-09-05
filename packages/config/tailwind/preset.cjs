@@ -126,6 +126,16 @@ module.exports = {
       colors: {
         ...colors,
         border: 'rgba(17,24,39,0.08)',
+        /*
+          The reference's FIELD border, measured: rgb(227,227,229) on its near-white
+          card. Solving 255(1−a) + 17a = 227 gives a = 0.117.
+
+          It is deliberately stronger than `border` — in `login.png` a panel's edge is
+          a whisper and an input's edge is a statement, because one is separating
+          surfaces and the other is marking a target you have to hit. Using one token
+          for both is what made our fields look like faint rectangles beside it.
+        */
+        'border-strong': 'rgba(17,24,39,0.12)',
       },
       fontFamily: {
         display: ['Cairo', 'Noto Sans Arabic', 'Tahoma', 'sans-serif'],
@@ -146,11 +156,16 @@ module.exports = {
         sm: '8px',
         md: '12px',
         lg: '16px',
-        // V4-4: the reference's panels are rounder than ours were. 20px is the
-        // radius `login.png` uses on its card and `dashboard.png` on its tiles —
-        // large enough to read as soft, short of the pill that would make a panel
-        // look like a control.
-        xl: '20px',
+        /*
+          MEASURED off `login.png`, not chosen.
+
+          The card's corner arc was sampled at four depths and solved for r:
+          inset 15px at 2px down, 6px at 8px down, 3px at 12px down — all three
+          fit r ≈ 24. The controls inside it solve to ≈ 12 (`md`), so the panel is
+          exactly twice its contents' radius, which is why the card reads as soft
+          while the buttons still read as controls.
+        */
+        xl: '24px',
         pill: '999px',
       },
       boxShadow: {
@@ -168,13 +183,38 @@ module.exports = {
           diffuse. The reference's neon rim under its primary button is refused
           separately; this is elevation.
         */
+        /*
+          MEASURED off `login.png` by sampling luma outward from the card edge.
+
+          | direction | at edge+4px | recovers to ground by |
+          |-----------|-------------|-----------------------|
+          | sides     | −25 levels  | ~40 px                |
+          | below     | −13 levels  | ~40 px                |
+          | above     | −10 levels  | ~40 px                |
+
+          Two things follow, and the first is why the earlier attempt looked flat:
+          the shadow is **present right at the edge**, not a distant halo. The
+          previous value used −8px and −24px spreads, which pull the darkness away
+          from the border exactly where the reference puts it.
+
+          Second, it is stronger at the sides than above — the signature of a large
+          blur with a small downward offset, not of a big vertical drop. Hence a
+          tight layer at 1px, a broad one at 8px with a small negative spread, and a
+          wide diffuse layer for the falloff.
+
+          Neutral, not brand-tinted: the sampled shadow is grey. Tinting it was an
+          invention of mine that the reference does not support.
+        */
         panel:
-          '0 1px 2px rgba(17,24,39,0.03), 0 12px 28px -8px rgba(15,110,86,0.08), 0 32px 64px -24px rgba(15,110,86,0.10)',
+          '0 1px 1px rgba(17,24,39,0.04), 0 8px 24px -4px rgba(17,24,39,0.12), 0 24px 56px -12px rgba(17,24,39,0.07)',
         none: 'none',
       },
       spacing: {
         control: '48px',
         'control-mobile': '52px',
+        // `login.png`'s fields and buttons both measure 58px tall; 56 is the 8px-grid
+        // step beside it (§6.5) and the height every auth control now uses.
+        field: '56px',
         // 288 rather than 264: the v4 rail header carries the mark at 64px (§2.5).
         // Measured rather than guessed, and the first guess was wrong — the preset's
         // own `text-xl` is 22px, not the 20 assumed, so 'Customer loyalty' came to

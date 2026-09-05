@@ -49,7 +49,20 @@ export function Button({
         */
         variant === 'primary' &&
           'bg-gradient-to-b from-accent to-[#0B5A46] text-white hover:from-[#0d6650] hover:to-[#094a3a]',
-        variant === 'secondary' && 'border border-border bg-surface text-ink hover:bg-canvas',
+        /*
+          An accent-TINTED border, not a neutral one.
+
+          `login.png`'s secondary button is outlined in rgb(147,173,163) — a green-grey,
+          plainly not the same token as its field borders. That tint is what stops the
+          two stacked full-width buttons from reading as a pair of equals: one is
+          filled and one is outlined, but both belong to the brand.
+
+          `accent/40` lands on rgb(159,197,187) over white — the red channel matches the
+          reference exactly, green and blue sit a little lighter. Approximated rather
+          than hard-coded, so it tracks the accent if the brand colour ever moves.
+        */
+        variant === 'secondary' &&
+          'border border-accent/40 bg-surface text-ink hover:border-accent/70 hover:bg-accent-tint/40',
         variant === 'ghost' && 'text-steel hover:bg-canvas hover:text-ink',
         variant === 'danger' && 'bg-danger text-white hover:bg-[#9a2b28]',
         className,
@@ -79,7 +92,10 @@ export function Field({
 }) {
   return (
     <label className={cn('block', className)}>
-      <span className="mb-1 block text-sm font-medium text-ink">{label}</span>
+      {/* 12px to the input (reference: 11px, snapped to the 4px rhythm of §6.5),
+          and the label at 15px — `login.png`'s label is the same size as its body
+          text, not a step down from it. */}
+      <span className="mb-3 block text-[0.9375rem] font-medium text-ink">{label}</span>
       {children}
       {error ? (
         <span className="mt-1 block text-sm text-danger">{error}</span>
@@ -116,11 +132,22 @@ export function Input({
   const field = (
     <input
       className={cn(
-        'block min-h-control w-full rounded-md border border-border bg-surface px-3 text-base text-ink',
-        'placeholder:text-steel/70 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30',
+        // 56px tall, 12px radius, 18px of horizontal padding — the reference's
+        // fields measure 58 × 12 with ~18px to the placeholder. `border-strong`
+        // rather than `border`: an input's edge is a target, not a seam.
+        'block min-h-field w-full rounded-md border border-border-strong bg-surface px-[18px] text-base text-ink',
+        'transition-[border-color,box-shadow] duration-fast ease-native',
+        'placeholder:text-steel/70 hover:border-[rgba(17,24,39,0.2)]',
+        // Focus: the border goes accent AND a soft accent ring appears outside it.
+        // Two channels, because a border colour alone is a colour-only signal.
+        // `/20`, not an arbitrary fraction. Tailwind only generates opacity modifiers for
+        // values in its scale (…,10,20,25,30,40,…); `ring-accent/12` and `border-accent/45`
+        // both compiled to NOTHING and the states were silently absent — found by reading
+        // the generated rules out of `document.styleSheets`, not by looking at the class.
+        'focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20',
         'disabled:bg-canvas disabled:text-steel',
-        icon && 'pe-11',
-        adornment && 'ps-11',
+        icon && 'pe-12',
+        adornment && 'ps-12',
         className,
       )}
       {...props}
@@ -134,14 +161,14 @@ export function Input({
       {field}
       {icon ? (
         <span
-          className="pointer-events-none absolute inset-y-0 end-3.5 flex items-center text-steel"
+          className="pointer-events-none absolute inset-y-0 end-4 flex items-center text-steel"
           aria-hidden
         >
           {icon}
         </span>
       ) : null}
       {adornment ? (
-        <span className="absolute inset-y-0 start-2 flex items-center">{adornment}</span>
+        <span className="absolute inset-y-0 start-1.5 flex items-center">{adornment}</span>
       ) : null}
     </div>
   );
@@ -159,9 +186,9 @@ export function Divider({ label }: { label?: string }) {
   if (!label) return <hr className="border-0 border-t border-border" />;
   return (
     <div className="flex items-center gap-4" role="separator">
-      <span className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border-strong" />
       <span className="text-sm text-steel">{label}</span>
-      <span className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border-strong" />
     </div>
   );
 }

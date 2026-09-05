@@ -45,7 +45,10 @@ export function Button({
         // it is refused (§6.4 "flat, no glow", §11 bans it by name).
         variant === 'primary' &&
           'bg-gradient-to-b from-accent to-[#0B5A46] text-white hover:from-[#0d6650] hover:to-[#094a3a]',
-        variant === 'ghost' && 'border border-border bg-surface text-ink hover:bg-canvas',
+        // Accent-tinted outline, matching `login.png`'s secondary action — the tint is
+        // what keeps a filled and an outlined button reading as one family.
+        variant === 'ghost' &&
+          'border border-accent/40 bg-surface text-ink hover:border-accent/70 hover:bg-accent-tint/40',
         variant === 'quiet' && 'text-steel hover:text-ink',
         className,
       )}
@@ -76,10 +79,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       ref={ref}
       {...props}
       className={cn(
-        'w-full rounded-md border bg-surface px-4 text-lg text-ink',
-        'min-h-[52px] placeholder:text-steel/70',
-        'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-canvas',
-        invalid ? 'border-danger' : 'border-border',
+        // Measured off `login.png`: 12px radius, 18px of horizontal padding, and a
+        // border a step stronger than a panel's — an input's edge is a target.
+        'w-full rounded-md border bg-surface px-[18px] text-lg text-ink',
+        'min-h-[56px] placeholder:text-steel/70',
+        'transition-[border-color,box-shadow] duration-fast ease-native',
+        'focus:border-accent focus:outline-none focus:ring-4 focus:ring-accent/20',
+        invalid ? 'border-danger' : 'border-border-strong hover:border-[rgba(17,24,39,0.2)]',
         Boolean(icon) && 'pe-12',
         className,
       )}
@@ -105,9 +111,9 @@ export function Divider({ label }: { label?: string }): JSX.Element {
   if (!label) return <hr className="border-0 border-t border-border" />;
   return (
     <div className="flex items-center gap-4" role="separator">
-      <span className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border-strong" />
       <span className="text-base text-steel">{label}</span>
-      <span className="h-px flex-1 bg-border" />
+      <span className="h-px flex-1 bg-border-strong" />
     </div>
   );
 }
@@ -128,7 +134,8 @@ export function Field({
   return (
     <label className="block">
       {/* Label above, helper and error below — one vertical rhythm everywhere (§6.4). */}
-      <span className="mb-2 block text-base font-semibold text-ink">{label}</span>
+      {/* 12px to the input — the reference's 11px snapped to the 4px rhythm (§6.5). */}
+      <span className="mb-3 block text-base font-semibold text-ink">{label}</span>
       {children}
       {error ? (
         <span className="mt-2 block text-sm text-danger">{error}</span>
