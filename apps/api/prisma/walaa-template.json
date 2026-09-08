@@ -1,9 +1,9 @@
 {
   "file": "walaa-template.db",
   "bytes": 331776,
-  "sha256": "095c03a0b968f41bb4a53cc1ba028ba9f15da96a1fbcc912dca58a1d5151f84d",
+  "sha256": "6b5d82b2fc08364593068b067561bbda3e6da90bdce8b7e05d8d682e8c87ac89",
   "productVersion": "0.1.1-preview",
-  "installationId": "2a689897-98cd-4105-a23f-cf936a4c80f8",
+  "installationId": "8f9686c3-dbaa-4715-9f39-7e7cc5da1bca",
   "schemaHash": "4dc27d78754356925e805953e86dc63778d798f3eb2843887ef3893f96d51225",
   "migrationsFingerprint": "e66d74a9871c3e88435d2ce3f15765ceb2c8e211eb129d9f9a65dbc93ddce70d",
   "migrations": [
@@ -15,5 +15,5 @@
     "20260904090000_v4_invoice_bracket_discounts",
     "20260904140000_station_paper_width"
   ],
-  "builtAt": "2026-09-08T15:51:34.672Z"
+  "builtAt": "2026-09-08T15:55:05.310Z"
 }

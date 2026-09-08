@@ -928,7 +928,31 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         .replace("{{QR_TOKEN_SECRET}}", &random_secret());
 
     if let Some(port) = port {
-        contents = contents.replace("API_PORT=4000", &format!("API_PORT={port}"));
+        /*
+          ── Rewritten by line prefix, not by matching the default ───────────────
+
+          This was `replace("API_PORT=4000", …)`, which silently coupled two files: the
+          moment `packaging/walaa.env.template` ships a different default, the match
+          finds nothing, the substitution no-ops, and the service binds 4000 while the
+          installer's firewall rule, the status file and the dashboard all expect the
+          port that was asked for. Nothing fails; the machine simply cannot be reached,
+          and the reason is a string that used to be in two places and now is not.
+
+          Matching the KEY is the same rule `set_configured_port` already uses, and it
+          holds whatever the template's default becomes.
+        */
+        contents = contents
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with("API_PORT=") {
+                    format!("API_PORT={port}")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        contents.push('\n');
     }
 
     fs::write(&paths.env_file, contents)
