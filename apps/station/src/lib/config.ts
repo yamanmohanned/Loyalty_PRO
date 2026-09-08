@@ -52,7 +52,19 @@ export async function testApiUrl(url: string): Promise<UrlCheck> {
     const response = await fetch(`${base}/health`, { signal: controller.signal });
     clearTimeout(timeout);
 
-    if (!response.ok) return { ok: false, message: `الخادم ردّ برمز ${response.status}` };
+    /*
+      An HTTP status is not a sentence.
+
+      This answered «الخادم ردّ برمز 404» — "the server replied with code 404" — to a
+      cashier standing at a till. A status code tells the operator nothing they can act
+      on and tells them this appliance expects them to know what a 404 is; the actionable
+      fact is identical to the one below, which is that whatever is at this address is
+      not ولاء. The number goes to the console, where it is worth having.
+    */
+    if (!response.ok) {
+      console.error('[station] health check refused', { base, status: response.status });
+      return { ok: false, message: 'هذا العنوان لا يشير إلى خادم ولاء' };
+    }
 
     const body = (await response.json()) as { service?: string };
     if (body.service !== 'walaa-api') {

@@ -133,14 +133,123 @@ const EnvSchema = z.object({
    */
   GOOGLE_DRIVE_CLIENT_ID: z.string().optional(),
   GOOGLE_DRIVE_CLIENT_SECRET: z.string().optional(),
+  /**
+   * Legacy escape hatch, and deliberately no longer the normal way in.
+   *
+   * A refresh token is a standing credential for a person's Google account, not a
+   * configuration value, and §7.6 keeps secrets out of plain config files. The grant
+   * obtained through the manager app is stored encrypted instead — see
+   * `backup/drive-store.ts` for why it is not encrypted under the backup key. This
+   * variable still works so an installation that was configured the old way keeps
+   * backing up, and it is read only when the encrypted store holds nothing.
+   */
   GOOGLE_DRIVE_REFRESH_TOKEN: z.string().optional(),
   /** Must name a folder THIS APP created — the `drive.file` scope sees no others. */
   GOOGLE_DRIVE_FOLDER_ID: z.string().optional(),
+  /** Where the encrypted grant is kept. Defaults beside the local backup directory. */
+  GOOGLE_DRIVE_STATE_DIR: z.string().optional(),
+  /**
+   * Google's endpoints, overridable **outside production only**.
+   *
+   * The whole OAuth and upload protocol is exercised against a local stand-in for
+   * Google, because the real one needs a Google Cloud project that no code can conjure.
+   * A test that mocks `fetch` proves the calling code and nothing about the wiring; one
+   * that points the real client at a real HTTP server proves the request that actually
+   * leaves the process.
+   *
+   * Ignored when `NODE_ENV=production`, enforced in `loadEnv()` below. A merchant's
+   * install cannot be redirected to a look-alike token endpoint by editing a config
+   * file, which is the reason that guard exists rather than trusting the deployment.
+   */
+  GOOGLE_OAUTH_BASE: z.string().optional(),
+  GOOGLE_DRIVE_API_BASE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
 
 let cached: Env | null = null;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  A CONFIGURATION FAILURE IS READ BY A SHOP OWNER, NOT BY A DEVELOPER
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ── What the merchant used to be shown ───────────────────────────────────────
+ *
+ * Every throw in this file went, verbatim, onto the merchant's screen. `server.ts`
+ * records the message, `startup-error.json` carries it, and `BackendGate` renders it —
+ * that chain exists precisely so a refusal reaches the person in the shop rather than
+ * dying in a log file only SYSTEM can read. Which meant he saw:
+ *
+ *     فشل التحقق من متغيرات البيئة:
+ *       - DATABASE_URL: Required
+ *       - JWT_ACCESS_SECRET: Required
+ *     انسخ .env.example إلى .env واملأ القيم.
+ *
+ * English variable names he has never heard of, and an instruction to copy a developer
+ * file that does not exist on his machine and that he could not fill in if it did.
+ * There is nothing in that sentence he can act on, and its last line actively sends him
+ * looking for something that is not there.
+ *
+ * ── What replaces it ─────────────────────────────────────────────────────────
+ *
+ * Two audiences, two artefacts. The merchant gets one Arabic sentence naming what was
+ * observed (how many settings are wrong), where (the file, by full path), and the one
+ * thing he can actually do about it. The variable names, the per-field messages and the
+ * Zod paths go to stderr, which the service host captures into `api.log` — where the
+ * person who can use them will be looking.
+ *
+ * `process.stderr.write` rather than a logger, for the same reason `main.ts` hand-rolls
+ * its bootstrap log: this file is evaluated at module scope, before any logger exists,
+ * and pulling pino in through pnpm's isolated store here is the kind of import that
+ * works in the repo and fails in the staged runtime.
+ */
+function configFailure(merchantMessage: string, detail: Record<string, unknown>): Error {
+  try {
+    process.stderr.write(
+      `${JSON.stringify({
+        level: 50,
+        time: Date.now(),
+        configFile: envFile ?? null,
+        ...detail,
+        msg: 'configuration validation failed',
+      })}\n`,
+    );
+  } catch {
+    /* Already failing. A log line is not worth masking the real error for. */
+  }
+  return new Error(merchantMessage);
+}
+
+/**
+ * Where the merchant's settings are, as a phrase — never as a path.
+ *
+ * The no-file case gets its own wording rather than an empty quotation: «the settings
+ * file is missing» and «the settings file has a wrong value in it» are different
+ * problems with different remedies, and a message that cannot tell them apart sends
+ * somebody to the wrong one.
+ *
+ * ── The path is deliberately not in here ─────────────────────────────────────
+ *
+ * An earlier version interpolated `envFile`, producing
+ * «…في ملف الإعدادات «C:\ProgramData\Walaa\walaa.env»» on the shop owner's screen.
+ * Three things are wrong with that. He cannot act on it — the file is locked to SYSTEM
+ * and the remedy in the same sentence is "reinstall or call support" either way. A
+ * Windows path inside an RTL sentence renders with its drive letter stranded at the
+ * far end, so it is not even readable as a path. And it teaches him that this product
+ * expects him to go looking inside `C:\ProgramData`, which is the last place anybody
+ * wants a merchant poking at a database holding his customers.
+ *
+ * The path is still recorded, once, as `configFile` in the stderr line beside this —
+ * which is where whoever can use it is looking.
+ */
+const settingsLocation = (): string =>
+  envFile ? 'في ملف إعدادات البرنامج' : 'ولم يُعثر على ملف إعدادات البرنامج أصلاً';
+
+/** The one thing a merchant can do about any of these. Stated the same way every time. */
+const CONFIG_REMEDY =
+  'أعد تثبيت البرنامج من ملف التثبيت الكامل — المُثبِّت هو من يكتب ملف الإعدادات — ' +
+  'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.';
 
 /** Parses and caches the environment. Throws a readable error listing every problem. */
 export function loadEnv(): Env {
@@ -148,36 +257,89 @@ export function loadEnv(): Env {
 
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
-    const problems = parsed.error.issues
-      .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
-      .join('\n');
-    throw new Error(
-      `فشل التحقق من متغيرات البيئة:\n${problems}\n\nانسخ .env.example إلى .env واملأ القيم.`,
+    const issues = parsed.error.issues.map((issue) => ({
+      setting: issue.path.join('.'),
+      problem: issue.message,
+    }));
+
+    throw configFailure(
+      `تعذّر تشغيل الخدمة: ${issues.length} من إعدادات البرنامج ناقصة أو غير صالحة ` +
+        `${settingsLocation()}. لم يبدأ البرنامج ولم يُمَسّ أي شيء في قاعدة البيانات. ` +
+        CONFIG_REMEDY,
+      { issues, count: issues.length },
     );
   }
 
   // The WhatsApp provider is useless without credentials — fail at boot, not at send time.
   if (parsed.data.NOTIFICATION_PROVIDER === 'whatsapp') {
     if (!parsed.data.WHATSAPP_PHONE_NUMBER_ID || !parsed.data.WHATSAPP_ACCESS_TOKEN) {
-      throw new Error(
-        'NOTIFICATION_PROVIDER=whatsapp يتطلب WHATSAPP_PHONE_NUMBER_ID و WHATSAPP_ACCESS_TOKEN',
+      throw configFailure(
+        'تعذّر تشغيل الخدمة: إشعارات واتساب مفعّلة لكن بيانات الاتصال بها ناقصة ' +
+          `${settingsLocation()}. ` +
+          CONFIG_REMEDY,
+        {
+          provider: 'whatsapp',
+          missing: [
+            parsed.data.WHATSAPP_PHONE_NUMBER_ID ? null : 'WHATSAPP_PHONE_NUMBER_ID',
+            parsed.data.WHATSAPP_ACCESS_TOKEN ? null : 'WHATSAPP_ACCESS_TOKEN',
+          ].filter(Boolean),
+        },
       );
     }
   }
 
-  // Partial Drive credentials are a typo, not a decision. Left to fall through, the
+  // Half an OAuth client is a typo, not a decision. Left to fall through, the
   // destination would silently not register and the merchant would believe backups were
   // going off-machine — §7.3's most costly failure, arrived at by a missing line in a
   // config file.
-  const drive = [
-    parsed.data.GOOGLE_DRIVE_CLIENT_ID,
-    parsed.data.GOOGLE_DRIVE_CLIENT_SECRET,
-    parsed.data.GOOGLE_DRIVE_REFRESH_TOKEN,
-  ];
-  if (drive.some(Boolean) && !drive.every(Boolean)) {
-    throw new Error(
-      'إعداد Google Drive ناقص: يلزم GOOGLE_DRIVE_CLIENT_ID و GOOGLE_DRIVE_CLIENT_SECRET و GOOGLE_DRIVE_REFRESH_TOKEN معاً',
+  //
+  // The refresh token is NOT part of this check any more, and that is the point of the
+  // change: it now arrives through the manager app's consent flow and is stored
+  // encrypted (`backup/drive-store.ts`), so a client id and secret with no token is the
+  // ordinary state of a machine waiting for somebody to press "connect". Requiring all
+  // three together would have made the API refuse to boot on exactly that machine.
+  const client = [parsed.data.GOOGLE_DRIVE_CLIENT_ID, parsed.data.GOOGLE_DRIVE_CLIENT_SECRET];
+  if (client.some(Boolean) && !client.every(Boolean)) {
+    throw configFailure(
+      'تعذّر تشغيل الخدمة: إعداد النسخ الاحتياطي إلى Google Drive ناقص ' +
+        `${settingsLocation()}. النسخ الاحتياطي على هذا الجهاز غير متأثّر. ` +
+        CONFIG_REMEDY,
+      {
+        integration: 'google-drive',
+        missing: [
+          parsed.data.GOOGLE_DRIVE_CLIENT_ID ? null : 'GOOGLE_DRIVE_CLIENT_ID',
+          parsed.data.GOOGLE_DRIVE_CLIENT_SECRET ? null : 'GOOGLE_DRIVE_CLIENT_SECRET',
+        ].filter(Boolean),
+      },
     );
+  }
+  if (parsed.data.GOOGLE_DRIVE_REFRESH_TOKEN && !client.every(Boolean)) {
+    throw configFailure(
+      'تعذّر تشغيل الخدمة: إعداد النسخ الاحتياطي إلى Google Drive غير مكتمل ' +
+        `${settingsLocation()}. النسخ الاحتياطي على هذا الجهاز غير متأثّر. ` +
+        CONFIG_REMEDY,
+      { integration: 'google-drive', have: 'GOOGLE_DRIVE_REFRESH_TOKEN', missingClient: true },
+    );
+  }
+
+  // Endpoint overrides are a testing affordance and must not survive into a shop. A
+  // production process that finds them set refuses to start rather than quietly talking
+  // to whatever host the file names — a mis-set variable here would send a merchant's
+  // OAuth consent to a machine that is not Google.
+  if (parsed.data.NODE_ENV === 'production') {
+    if (parsed.data.GOOGLE_OAUTH_BASE || parsed.data.GOOGLE_DRIVE_API_BASE) {
+      throw configFailure(
+        'تعذّر تشغيل الخدمة: ملف الإعدادات يحتوي على قيم مخصّصة للاختبار فقط، ' +
+          'ولا يجوز تشغيل البرنامج بها في متجر. ' +
+          CONFIG_REMEDY,
+        {
+          testOnlyOverrides: [
+            parsed.data.GOOGLE_OAUTH_BASE ? 'GOOGLE_OAUTH_BASE' : null,
+            parsed.data.GOOGLE_DRIVE_API_BASE ? 'GOOGLE_DRIVE_API_BASE' : null,
+          ].filter(Boolean),
+        },
+      );
+    }
   }
 
   cached = parsed.data;
