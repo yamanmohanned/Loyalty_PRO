@@ -57,3 +57,14 @@ stitch_wala_a_loyalty_management_dashboard.zip
 # Dev-only backup destination. The installed service writes under %PROGRAMDATA%;
 # a checkout writes here, because it cannot write there (see backup.service.ts).
 .walaa-dev/
+
+# Updater signing key — losing it means no shop can ever be updated again.
+packaging/updater/*.key
+
+# Scratch experiment drivers kept beside the package they probe. They are named with a
+# leading underscore precisely so they never reach a commit: each one is a one-off
+# harness for an experiment whose RESULT belongs in a test or a docblock, not a file
+# nobody will run again.
+apps/api/_*
+apps/api/prisma/_*
+apps/manager-desktop/uilab.*

@@ -1,0 +1,19 @@
+{
+  "file": "walaa-template.db",
+  "bytes": 331776,
+  "sha256": "3bb0cb9fec16f9d58f369c5e07b103d06e67fef3f17162ab27b3c30fd5871f96",
+  "productVersion": "0.1.0",
+  "installationId": "0bcd5215-e024-4eb8-814b-81ccd0e0c8b9",
+  "schemaHash": "4dc27d78754356925e805953e86dc63778d798f3eb2843887ef3893f96d51225",
+  "migrationsFingerprint": "e66d74a9871c3e88435d2ce3f15765ceb2c8e211eb129d9f9a65dbc93ddce70d",
+  "migrations": [
+    "20260828021006_v3_instant_discount_sqlite",
+    "20260830221926_audit_action_index",
+    "20260831120000_pre_printed_cards",
+    "20260901022739_settlement_default_merchant_defined",
+    "20260902230000_discount_uncapped_value",
+    "20260904090000_v4_invoice_bracket_discounts",
+    "20260904140000_station_paper_width"
+  ],
+  "builtAt": "2026-09-08T02:23:36.819Z"
+}

@@ -2,7 +2,7 @@
   "name": "@walaa/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Walaa loyalty backend \u2014 Fastify service, Prisma data layer.",
+  "description": "Walaa loyalty backend — Fastify service, Prisma data layer.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -13,13 +13,18 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:verify": "tsx prisma/verify.ts",
+    "db:template": "dotenv -e ../../.env -- tsx prisma/build-db-template.ts",
     "db:reset-ceremony": "tsx prisma/reset-ceremony.ts",
+    "restore": "tsx src/tools/restore-cli.ts",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint .",
     "dev": "tsx watch src/server.ts",
     "dev:alt": "dotenv -e ../../.env -v API_PORT=4001 -v API_CORS_ORIGINS=http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://localhost:5174,http://localhost:5180,http://localhost:4000 -- tsx watch src/server.ts",
     "start": "node dist/server.js",
-    "build": "tsup src/server.ts --format esm --target node20 --clean"
+    "build": "tsup src/server.ts --format esm --target node20 --clean",
+    "db:seed:demo": "dotenv -e ../../.env -v WALAA_DATA_DIR=./prisma -v DATABASE_URL=file:./walaa-demo.db -- tsx prisma/seed-demo.ts && pnpm db:assert:demo",
+    "db:assert:demo": "dotenv -e ../../.env -v WALAA_DATA_DIR=./prisma -v DATABASE_URL=file:./walaa-demo.db -v WALAA_DEMO=1 -- tsx prisma/assert-demo-migrated.ts && pnpm db:assert:login",
+    "db:assert:login": "dotenv -e ../../.env -v WALAA_DATA_DIR=./prisma -v DATABASE_URL=file:./walaa-demo.db -v WALAA_DEMO=1 -- tsx prisma/assert-demo-login.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

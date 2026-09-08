@@ -186,6 +186,80 @@ export function liveDatabasePath(databaseUrl: string): string | null {
   return isAbsolute(raw) ? raw : resolve(process.cwd(), 'prisma', raw);
 }
 
+/** Explicit path to the shipped, fully-migrated database template. */
+const DB_TEMPLATE_VAR = 'WALAA_DB_TEMPLATE';
+
+/** Filename of the shipped production template, in the repo and in the staged runtime. */
+export const DB_TEMPLATE_FILENAME = 'walaa-template.db';
+
+/**
+ * The fully-migrated database the installer ships, or `null` when none is present.
+ *
+ * ── Why a template exists at all ─────────────────────────────────────────────
+ *
+ * Until this existed, a merchant's very first launch created an empty file and ran
+ * seven migrations against it. Every one of those is a write, on a machine nobody has
+ * ever run this software on, before anything has been backed up — and the class of
+ * failure is not hypothetical: a pre-migration snapshot whose free-space guard refused
+ * put the API into a thirty-second restart loop and the shop never opened. A first
+ * launch that migrates is a first launch that can fail for reasons the build could
+ * have caught.
+ *
+ * So the build produces the migrated file, `assert-db-template.ts` proves it is
+ * current, and the merchant's first launch copies it into place and verifies it.
+ *
+ * Resolution mirrors the migrations directory:
+ *
+ *  1. `WALAA_DB_TEMPLATE` — an explicit path. A value naming a file that does not
+ *     exist is a hard error rather than a silent fall-through to migrating, for the
+ *     same reason `WALAA_ENV_FILE` is: a typo must not quietly select the behaviour
+ *     the variable was set to prevent.
+ *  2. `<cwd>/walaa-template.db` — the installed layout, where the staged runtime
+ *     directory is the working directory.
+ *  3. `<repo>/apps/api/prisma/walaa-template.db` — a development build, found by
+ *     walking up.
+ *
+ * `null` is a normal answer in development, where the database is provisioned by
+ * `prisma migrate deploy` and no template has been built.
+ */
+export function resolveDatabaseTemplate(startDir: string = process.cwd()): string | null {
+  const explicit = process.env[DB_TEMPLATE_VAR];
+  if (explicit && explicit.trim()) {
+    const path = resolve(explicit.trim());
+    if (!existsSync(path)) {
+      throw new Error(`${DB_TEMPLATE_VAR} يشير إلى ملف غير موجود: ${path}`);
+    }
+    return path;
+  }
+
+  let current = resolve(startDir);
+  const { root } = parse(current);
+
+  for (;;) {
+    for (const candidate of [
+      join(current, DB_TEMPLATE_FILENAME),
+      join(current, 'prisma', DB_TEMPLATE_FILENAME),
+      join(current, 'apps', 'api', 'prisma', DB_TEMPLATE_FILENAME),
+    ]) {
+      if (existsSync(candidate)) return candidate;
+    }
+    if (current === root) return null;
+    current = dirname(current);
+  }
+}
+
+/**
+ * Where the process records that it is running, and that it stopped cleanly.
+ *
+ * Read at boot before it is rewritten: a file saying "running" from a process that is
+ * no longer alive means the last shutdown was not clean, which is the one condition
+ * that earns a full `integrity_check` rather than the cheap `quick_check`
+ * (`lib/db-integrity.ts` states the measured costs behind that choice).
+ */
+export function resolveRuntimeStatePath(): string {
+  return join(resolveDataDir(), 'runtime-state.json');
+}
+
 /** Explicit path to the built Loyalty Station bundle. */
 const STATION_DIR_VAR = 'WALAA_STATION_DIR';
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../config/env';
@@ -7,10 +7,11 @@ import {
   ensureSqliteDirectory,
   liveDatabasePath,
   resolveDataDir,
+  resolveDatabaseTemplate,
   resolveMigrationsDir,
 } from '../config/paths';
 import { applySqlitePragmas, prisma as defaultClient } from './prisma';
-import { takeSnapshot } from '../services/backup/snapshot';
+import { InsufficientSpaceError, takeSnapshot } from '../services/backup/snapshot';
 
 /**
  * Runtime migrator — applies committed Prisma migrations without the Prisma CLI.
@@ -69,7 +70,13 @@ export interface MigrateOptions {
   client?: PrismaClient;
   /** Overrides discovery. Used by the tests. */
   directory?: string;
-  log?: (message: string) => void;
+  /**
+   * Structured, like `bootstrapLog` in `main.ts`, which is what is passed here in
+   * production. The second argument is where the technical detail goes when the
+   * merchant-facing message deliberately withholds it — migration names, counts, the
+   * environment the decision was taken in. One-argument callers still typecheck.
+   */
+  log?: (message: string, extra?: Record<string, unknown>) => void;
 }
 
 /** SHA-256 of the migration file, hex — the same value the Prisma CLI stores. */
@@ -362,10 +369,33 @@ async function snapshotBeforeMigrating(
     );
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
+
+    /*
+      ── The remedy has to match the cause ──────────────────────────────────────
+
+      Every failure here used to end with «أفرغ مساحة على القرص أو خذ نسخة يدوية» —
+      free up disk space. A permissions error, a missing directory and a locked file
+      all told the merchant to clear his disk, which cannot work, on a screen that had
+      already told him one wrong thing. It was not hypothetical: pointing the data
+      directory at a folder the process could not read produced `EPERM ... statfs` and
+      an instruction to free space on a disk that was 78% empty.
+
+      Only a genuine out-of-space refusal gets the out-of-space instruction. Anything
+      else names the folder and says it could not be written, which is both true and
+      actionable. `InsufficientSpaceError` already carries the free bytes, the required
+      bytes, the database size and the multiple, so the numbers behind the verdict are
+      in the sentence rather than left for someone to guess at.
+    */
+    const folder = resolveDataDir();
+    const remedy =
+      error instanceof InsufficientSpaceError
+        ? `أفرغ مساحة على القرص الذي يحتوي «${folder}» ثم أعد التشغيل.`
+        : `تعذّر الكتابة في «${folder}» — تحقّق من وجود هذا المجلد ومن صلاحيات الوصول إليه، ثم أعد التشغيل.`;
+
     throw new Error(
       `تعذّر أخذ نسخة احتياطية قبل ترحيل قاعدة البيانات، والترحيل موقوف. ` +
         `الترحيلات المعلّقة: ${pending.join('، ')}. السبب: ${reason}. ` +
-        'قاعدة البيانات لم تتغيّر — أفرغ مساحة على القرص أو خذ نسخة يدوية ثم أعد التشغيل.',
+        `قاعدة البيانات لم تتغيّر — ${remedy}`,
     );
   }
 }
@@ -388,6 +418,7 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
   const databaseUrl = loadEnv().DATABASE_URL;
   ensureSqliteDirectory(databaseUrl);
   const client = options.client ?? defaultClient;
+  const log = options.log ?? ((): void => {});
 
   try {
     await applySqlitePragmas(client);
@@ -395,9 +426,210 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
     throw explainCorruption(error, databaseUrl);
   }
 
-  const log = options.log ?? ((): void => {});
-  const pending = await listPendingMigrations({ ...options, client });
-  if (pending.length > 0) await snapshotBeforeMigrating(pending, log);
+  /*
+    Resolved here rather than left to `applyPendingMigrations`, because the common path
+    now returns before ever calling it. A missing migrations directory must still be the
+    hard error it has always been: without one, "nothing is pending" is not a verdict,
+    it is an absence of evidence, and answering it with a successful boot is how a
+    service comes up against a schema nobody checked.
+  */
+  const directory = options.directory ?? resolveMigrationsDir();
+  if (!directory) {
+    throw new Error(
+      'تعذّر العثور على مجلد الترحيلات (migrations). حدّد WALAA_MIGRATIONS_DIR أو شغّل الخدمة من مجلد التثبيت.',
+    );
+  }
 
-  return applyPendingMigrations({ ...options, client });
+  const pending = await listPendingMigrations({ ...options, client, directory });
+
+  if (pending.length > 0 && migrationPolicy() === 'verify') {
+    /*
+      ── A merchant's machine does not migrate ────────────────────────────────
+
+      The shipped template is already at this schema, so reaching here in production
+      means one of three things, none of which a service start should resolve on its
+      own: the runtime directory pairs a new bundle with an old database, the database
+      came from somewhere else, or the template was not shipped at all.
+
+      Every one of those is repaired by a person with the backup in front of them, and
+      every one of them gets worse if the process writes first and reports afterwards.
+
+      The migration NAMES stay in the log. They are English directory names with
+      timestamps in them and mean nothing to a shop owner; the count and the remedy do.
+    */
+    log('refusing to migrate outside development', {
+      pending,
+      count: pending.length,
+      nodeEnv: loadEnv().NODE_ENV,
+      hint: 'set WALAA_ALLOW_MIGRATIONS=1 to permit this deliberately',
+    });
+
+    throw new Error(
+      `تعذّر تشغيل الخدمة: قاعدة البيانات تحتاج ${pending.length} تحديثاً لبنيتها، ` +
+        'والبرنامج لا يُحدّث بنية قاعدة البيانات من تلقاء نفسه على جهاز المتجر. ' +
+        'المطلوب أن تكون قاعدة البيانات والبرنامج من نفس الإصدار. ' +
+        'لم يُكتب أي شيء في قاعدة البيانات. أعد تثبيت البرنامج من ملف التثبيت الكامل، ' +
+        'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+    );
+  }
+
+  if (pending.length > 0) await snapshotBeforeMigrating(pending, (message) => log(message));
+
+  /*
+    Called on every path, including the one where nothing is pending, and that is not
+    a wasted call. `applyPendingMigrations` is where an ALREADY-applied migration is
+    validated: a file whose checksum no longer matches what was recorded, one marked
+    rolled back, one that started and never finished. Returning early on
+    "nothing pending" would silently drop all three, because `listPendingMigrations`
+    compares names and nothing else — and a schema that quietly stopped being the
+    schema the code was built against is the failure this module opens by naming.
+  */
+  return applyPendingMigrations({ ...options, client, directory });
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  WHO IS ALLOWED TO MIGRATE, AND WHY IT IS NOT THE MERCHANT'S MACHINE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Applying migrations at boot was the right call while this was the only provisioning
+ * step there was — §12.11 wanted an installer with no "now run the migration tool"
+ * instruction for a shop owner to get wrong. It is the wrong call now that the build
+ * ships an already-migrated template, and it was wrong for a reason that already cost a
+ * shop its opening: a first launch that migrates is a first launch that can fail, and
+ * the failure it produced was an API exiting 1 on a thirty-second loop with a snapshot
+ * guard refusing over disk space it did not need.
+ *
+ * Development still migrates. That is where migrations are written, where branches move
+ * the schema several times a day, and where the whole test suite provisions itself.
+ *
+ * `WALAA_ALLOW_MIGRATIONS=1` restores the old behaviour in production for one situation:
+ * an operator upgrading a shop, deliberately, with the pre-migration snapshot below
+ * doing its job and someone watching the log. It is not written into `walaa.env` by
+ * anything, and the refusal above names it only in the technical log — a shop owner
+ * following a sentence on his screen must never be able to talk himself into it.
+ */
+export function migrationPolicy(): 'apply' | 'verify' {
+  if (process.env.WALAA_ALLOW_MIGRATIONS === '1') return 'apply';
+  return loadEnv().NODE_ENV === 'production' ? 'verify' : 'apply';
+}
+
+export interface TemplateInstall {
+  installed: boolean;
+  reason:
+    | 'installed'
+    | 'database-present'
+    | 'no-template'
+    | 'not-a-file-datasource'
+    | 'template-unreadable';
+  databasePath: string | null;
+  templatePath: string | null;
+  bytes: number | null;
+  /** Sidecars moved out of the way because they had no database to belong to. */
+  orphanedSidecars: string[];
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  FIRST LAUNCH: COPY THE SHIPPED DATABASE, DO NOT BUILD ONE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pure filesystem, and it must stay that way: it runs **before any connection is
+ * opened**, because opening one is itself what creates the empty file this is trying to
+ * avoid. SQLite creates the database on connect, so a guard that ran after the first
+ * `PRAGMA` would always find a database present and never install anything.
+ *
+ * ── A zero-byte file counts as absent, and that is the point ─────────────────
+ *
+ * SQLite treats a zero-length file as a valid empty database, which is precisely how
+ * the `C:\ProgramData\Walaa\walaa.db` incident happened: a file left behind by an
+ * earlier install, containing nothing, adopted without a word by a build that had
+ * never placed it. Treating it as absent means that exact file gets replaced by the
+ * shipped template instead of migrated into existence — and the replacement is
+ * announced, with the file named.
+ *
+ * ── Orphaned sidecars are moved aside, never deleted ─────────────────────────
+ *
+ * A `-wal` with no database beside it cannot be replayed into anything: the WAL holds
+ * page images, and without the base file most of the database is simply not there. But
+ * "cannot be used" is not "safe to destroy" — the rule in `explainCorruption` below
+ * holds here too. They are renamed with a timestamp, named in the log, and left for a
+ * person to look at.
+ */
+export function installDatabaseTemplateIfAbsent(
+  log: (message: string, extra?: Record<string, unknown>) => void = () => {},
+): TemplateInstall {
+  const databaseUrl = loadEnv().DATABASE_URL;
+  const databasePath = liveDatabasePath(databaseUrl);
+
+  const nothing = (reason: TemplateInstall['reason']): TemplateInstall => ({
+    installed: false,
+    reason,
+    databasePath,
+    templatePath: null,
+    bytes: null,
+    orphanedSidecars: [],
+  });
+
+  if (!databasePath) return nothing('not-a-file-datasource');
+
+  const present = existsSync(databasePath) && statSync(databasePath).size > 0;
+  if (present) return nothing('database-present');
+
+  const templatePath = resolveDatabaseTemplate();
+  if (!templatePath) {
+    // Normal in development, where `prisma migrate deploy` provisions the database and
+    // no template has been built. In production `stage.mjs` refuses to ship without
+    // one, so this branch cannot be reached from an installer.
+    return nothing('no-template');
+  }
+
+  ensureSqliteDirectory(databaseUrl);
+
+  const orphanedSidecars: string[] = [];
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  for (const suffix of ['-wal', '-shm'] as const) {
+    const sidecar = `${databasePath}${suffix}`;
+    if (!existsSync(sidecar)) continue;
+    const parked = `${sidecar}.orphan-${stamp}`;
+    try {
+      renameSync(sidecar, parked);
+      orphanedSidecars.push(parked);
+    } catch (error) {
+      log('could not move an orphaned sidecar aside', {
+        sidecar,
+        err: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const existedEmpty = existsSync(databasePath);
+  try {
+    copyFileSync(templatePath, databasePath);
+  } catch (error) {
+    log('could not install the shipped database template', {
+      templatePath,
+      databasePath,
+      err: error instanceof Error ? error.message : String(error),
+    });
+    return { ...nothing('template-unreadable'), templatePath, orphanedSidecars };
+  }
+
+  const bytes = statSync(databasePath).size;
+  log('installed the shipped database template', {
+    templatePath,
+    databasePath,
+    bytes,
+    replacedEmptyFile: existedEmpty,
+    orphanedSidecars,
+  });
+
+  return {
+    installed: true,
+    reason: 'installed',
+    databasePath,
+    templatePath,
+    bytes,
+    orphanedSidecars,
+  };
 }

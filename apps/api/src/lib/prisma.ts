@@ -49,6 +49,76 @@ export async function applySqlitePragmas(client: PrismaClient = prisma): Promise
   // application crash, trading only a power-loss window that a UPS or the
   // mandatory backups (§7.3) already cover.
   await client.$queryRawUnsafe('PRAGMA synchronous = NORMAL');
+  await client.$queryRawUnsafe(`PRAGMA wal_autocheckpoint = ${WAL_AUTOCHECKPOINT_PAGES}`);
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  THE WAL SIZE, SET FROM ARITHMETIC RATHER THAN LEFT TO A DEFAULT
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * **What was observed.** The development database was 385 KB with a 2.38 MB `-wal`
+ * beside it — a write-ahead log six times the size of the database it belongs to,
+ * which reads like a checkpoint that never ran.
+ *
+ * **What it actually was.** 2,434,952 bytes is the 32-byte WAL header plus exactly
+ * 591 frames of (4096-byte page + 24-byte frame header). SQLite's default
+ * `wal_autocheckpoint` is **1000 frames**, so the file was 409 frames short of the
+ * threshold that would have checkpointed it. Nothing had gone wrong. The default is
+ * expressed in *pages*, and is therefore not proportional to the database at all: on
+ * a small database the WAL is allowed to reach ~3.93 MiB no matter how little is in
+ * the main file, and on a 500 MB database the same 3.93 MiB is a rounding error.
+ *
+ * **Why not simply leave it.** Three costs scale with the WAL's ceiling, and none of
+ * them is paid for by a bigger one at this write volume:
+ *
+ *   - a crash replays the whole WAL on the next open;
+ *   - anything that copies `walaa.db` without its sidecar is behind by up to the
+ *     WAL's size (the §12.17 loss — `backup/snapshot.ts` avoids it with
+ *     `VACUUM INTO`, but the ceiling is the size of the hole for anything that does
+ *     not);
+ *   - the sidecar is that much of the volume §12.15 is about.
+ *
+ * **What a checkpoint costs, measured.** Against a 5.4 MB database carrying a
+ * 636-frame (2.6 MB) WAL: `wal_checkpoint(PASSIVE)` **21.5 ms** to fold every frame
+ * back, then `wal_checkpoint(TRUNCATE)` **0.8 ms** with nothing left to do. A shop
+ * writing a few dozen page-images per sale crosses 512 frames a handful of times a
+ * day, so this buys a ~2.0 MiB ceiling for tens of milliseconds a day.
+ *
+ * 512 rather than something smaller because the WAL's entire purpose is to let
+ * readers proceed while the single writer works; checkpointing on every few writes
+ * would spend the property being paid for.
+ */
+export const WAL_AUTOCHECKPOINT_PAGES = 512;
+
+/**
+ * Folds the WAL back into the database and truncates it to nothing.
+ *
+ * Called on clean shutdown, so an installation that is stopped by the Service Control
+ * Manager, by an upgrade, or by the merchant closing the app leaves one file behind
+ * rather than three — and the next start has no log to replay.
+ *
+ * **Never throws.** It runs while the process is already on its way out, where a
+ * blocked checkpoint (`busy`, because something still holds a read) is a fact to
+ * record, not a reason to fail a shutdown. The data is committed either way: an
+ * un-checkpointed WAL is folded in automatically on the next open.
+ */
+export async function checkpointWal(
+  client: PrismaClient = prisma,
+): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const rows = await client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      'PRAGMA wal_checkpoint(TRUNCATE)',
+    );
+    const row = rows[0] ?? {};
+    const busy = Number(row.busy ?? 0);
+    return {
+      ok: busy === 0,
+      detail: `busy=${String(row.busy ?? '?')} log=${String(row.log ?? '?')} checkpointed=${String(row.checkpointed ?? '?')}`,
+    };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /** Prisma's code for a unique-constraint violation. The idempotency guard fires as this. */

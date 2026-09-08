@@ -81,6 +81,12 @@ const envFile = join(DATA, 'walaa.env');
 writeFileSync(
   envFile,
   readFileSync(join(PROGRAM, 'walaa.env.template'), 'utf8')
+    // The database name differs by build kind — `walaa.db` for production,
+    // `walaa-demo.db` for a demo — so the installer fills this in rather than the
+    // template carrying one name that both would have to share. That sharing is what
+    // let a demo silently adopt a database it had not placed. This is the production
+    // path, so: walaa.db.
+    .replace('{{DATABASE_FILE}}', join(DATA, 'walaa.db').replace(/\\/g, '/'))
     .replace('{{DATA_DIR}}', DATA.replace(/\\/g, '/'))
     .replace('{{JWT_ACCESS_SECRET}}', secret())
     .replace('{{JWT_REFRESH_SECRET}}', secret())
@@ -142,9 +148,39 @@ try {
     'WAL mode is active',
     'the -wal sidecar exists (§12.5)',
   );
+  /*
+    ── The check that used to assert the opposite ────────────────────────────
+
+    This read `includes('database migrations applied')` — first boot was expected to
+    migrate, and the check existed to prove the runtime migrator worked without the
+    Prisma CLI. That contract is now inverted deliberately: a merchant's machine must
+    never migrate. It installs the pre-migrated template the installer ships and then
+    verifies it.
+
+    So the assertion is inverted too, and it is the automated guard for the headline
+    requirement. Left as it was, it would go green on exactly the behaviour that is no
+    longer allowed.
+  */
+  const firstBoot = output.join('');
   check(
-    output.join('').includes('database migrations applied'),
-    'migrations were applied at first boot, without the Prisma CLI',
+    !firstBoot.includes('database migrations applied'),
+    'first boot applied NO migration — the shipped schema is used as-is',
+  );
+  check(
+    firstBoot.includes('installed the shipped database template'),
+    'first boot installed the pre-migrated template the installer ships',
+  );
+  check(
+    firstBoot.includes('migration set verified'),
+    'the migrations beside the binary are the ones it was built against',
+  );
+  check(
+    firstBoot.includes('database identity verified'),
+    'the database that was actually opened was identified and accepted',
+  );
+  check(
+    firstBoot.includes('database integrity verified'),
+    'integrity and foreign keys were checked before the first request',
   );
 
   // The Loyalty Station, served by the API on its own port (§12.3). This is what the
@@ -232,8 +268,9 @@ try {
   second.stderr.on('data', (chunk) => secondOutput.push(chunk.toString()));
   await waitForHealth(45_000);
   check(
-    !secondOutput.join('').includes('database migrations applied'),
-    'a restart applies nothing — the migrator is idempotent',
+    !secondOutput.join('').includes('database migrations applied') &&
+      !secondOutput.join('').includes('installed the shipped database template'),
+    'a restart neither migrates nor re-installs the template',
   );
   second.kill();
   await sleep(500);
@@ -242,6 +279,54 @@ try {
   console.log('\n--- service output ---\n' + output.join('') + '\n----------------------');
 } finally {
   child.kill();
+}
+
+/*
+  ── A configuration failure must leave a readable reason ─────────────────────
+
+  Configuration is resolved while the module graph is being evaluated, so a missing
+  `walaa.env` throws before `main` runs. `server.ts` defers the application behind a
+  dynamic import specifically so that throw is catchable and gets written down — and
+  that only works if the bundler keeps the import lazy rather than hoisting it.
+
+  "esbuild currently wraps lazily-imported modules in an initialiser" is a claim about
+  a build tool's behaviour under a configuration nobody re-checks. It was already false
+  once in spirit: the recorder sat inside `main().catch`, covered nothing in front of
+  it, and a demo install died with `exit code: 1` and no cause. So the property is
+  checked against the built artefact, not the source.
+*/
+{
+  const failDir = join(CLEANROOM, 'bootfail');
+  mkdirSync(join(failDir, 'logs'), { recursive: true });
+
+  const dead = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], {
+    cwd: PROGRAM,
+    env: {
+      ...childEnv,
+      WALAA_DATA_DIR: failDir,
+      WALAA_ENV_FILE: join(failDir, 'no-such-file.env'),
+    },
+    windowsHide: true,
+  });
+  await new Promise((done) => dead.on('exit', done));
+
+  const recorded = join(failDir, 'logs', 'startup-error.json');
+  check(existsSync(recorded), 'a module-load failure still records why it could not start');
+
+  if (existsSync(recorded)) {
+    const reason = JSON.parse(readFileSync(recorded, 'utf8').replace(/^﻿/, '')).reason ?? '';
+    check(
+      reason.includes('WALAA_ENV_FILE'),
+      'the recorded reason is the real one, not a generic failure',
+      reason,
+    );
+    // The merchant reads this file through the dashboard. A BOM-less UTF-8 file is
+    // read as ANSI by PowerShell 5.1 and Notepad, which turns the Arabic to mojibake.
+    check(
+      readFileSync(recorded, 'utf8').charCodeAt(0) === 0xfeff,
+      'the reason file carries a BOM so Arabic survives Notepad and Get-Content',
+    );
+  }
 }
 
 if (exitInfo && exitInfo.code !== null && exitInfo.code !== 0 && failures === 0) {
