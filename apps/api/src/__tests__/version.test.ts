@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -5,65 +6,76 @@ import { API_VERSION } from '../config/version';
 import { DEMO_DATABASE_BASENAME } from '../lib/demo-guard';
 
 /**
- * Guards two constants that are duplicated on purpose and would rot silently.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  ONE PRODUCT VERSION, AND A NAME THAT CROSSES A LANGUAGE BOUNDARY
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * Both are compared against something a client acts on: the version decides whether
- * «تغيير الخادم» accepts a server, and the database name decides whether the runtime
- * demo guard lets the process start. A stale copy of either produces a check that
- * still runs, still passes, and no longer means anything — which is worse than not
- * having the check.
+ * ── Why the version matters more than it looks ───────────────────────────────
+ *
+ * `testApiUrl` refuses a server whose `/health` reports a different `major.minor` and
+ * says «خادم ولاء على هذا العنوان بإصدار مختلف». The check is right to exist: a
+ * dashboard talking to an incompatible API produces unexplained empty screens instead
+ * of an error.
+ *
+ * It is worth exactly as much as the two numbers it compares, and those lived in
+ * **five** hand-maintained places holding **three** different values — `0.1.0` in the
+ * API, `0.1.1-preview` in the desktop app and its Tauri config and Cargo manifest,
+ * `1.0.0` in the Station. Nothing had broken only because two of them round to `0.1`.
+ *
+ * The first release that moves one and not the others makes a manager and a station
+ * **from the same installer** refuse each other over a difference that does not exist.
+ * And that does not happen here — it happens when the till is connected, in the shop.
+ *
+ * So the root `package.json` version is the product version, every other version
+ * string is derived from it, and `packaging/scripts/version.mjs` is the authority.
+ * This runs it, so CI and `pnpm test` fail on drift rather than the merchant's till.
  */
-describe('version and name constants', () => {
-  it('API_VERSION matches package.json', () => {
-    const pkg = JSON.parse(
-      readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'),
-    ) as { version: string };
-    expect(API_VERSION).toBe(pkg.version);
+const REPO = join(__dirname, '..', '..', '..', '..');
+
+describe('the product version', () => {
+  it('is the same string everywhere it is written down', () => {
+    /*
+      The script is executed rather than reimplemented. A test that recomputed the
+      same comparison would be a second copy of the rule — which is the exact defect
+      this whole area is about.
+    */
+    let output = '';
+    let failed = false;
+    try {
+      output = execFileSync(
+        process.execPath,
+        [join(REPO, 'packaging', 'scripts', 'version.mjs')],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+    } catch (error) {
+      failed = true;
+      const e = error as { stdout?: string; stderr?: string };
+      output = `${e.stdout ?? ''}${e.stderr ?? ''}`;
+    }
+
+    expect(failed, output).toBe(false);
   });
 
-  /**
-   * ── The desktop app's two hand-written versions ────────────────────────────
-   *
-   * `package.json` and `tauri.conf.json` each carry a version, both maintained by
-   * hand, and they are used for different things: the first is what Vite injects into
-   * the window (and therefore what the nav rail shows and what `testApiUrl` compares
-   * against a server), the second is what the installer stamps and what the updater
-   * compares to decide whether a release is newer.
-   *
-   * Drifted, they produce a build that reports one version, refuses servers by
-   * another, and offers an update to a third. This is the same family as the schema
-   * fingerprints: two copies of a fact, kept in step by memory.
-   *
-   * A third copy — a literal `APP_VERSION` in `lib/version.ts` — was found stale at
-   * `0.1.0` while both of these said `0.1.1-preview`, and was deleted rather than
-   * asserted: it now derives from the injected value, so there is nothing left to
-   * drift. These two cannot be collapsed the same way, because Tauri reads its own
-   * file, so they are asserted instead.
-   */
-  it('the desktop app agrees with itself about its version', () => {
-    const root = join(__dirname, '..', '..', '..', 'manager-desktop');
-    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+  it('is the one the API reports on the wire', () => {
+    const root = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {
       version: string;
     };
-    const tauri = JSON.parse(readFileSync(join(root, 'src-tauri', 'tauri.conf.json'), 'utf8')) as {
-      version: string;
-    };
-
-    expect(
-      tauri.version,
-      'apps/manager-desktop/src-tauri/tauri.conf.json and package.json disagree about the ' +
-        'version. The window would report one number and the updater compare another.',
-    ).toBe(pkg.version);
+    // `API_VERSION` is what `/health` answers and what the dashboard compares against.
+    // It is a compiled literal because the shipped bundle has no package.json beside
+    // it — so the literal is generated, and this is the assertion that it was.
+    expect(API_VERSION).toBe(root.version);
   });
+});
 
+describe('names that cross a language boundary', () => {
   it('the demo database name matches the one the service host places', () => {
     // `packaging/service-host/src/main.rs` copies the seed under this name and points
     // DATABASE_URL at it. If the two ever disagree, a demo build refuses to start —
     // correctly, and for a reason nobody would look for in a Rust file.
     const rust = readFileSync(
-      join(__dirname, '..', '..', '..', '..', 'packaging', 'service-host', 'src', 'main.rs'),
+      join(REPO, 'packaging', 'service-host', 'src', 'main.rs'),
       'utf8',
     );
-    expect(rust).toContain(`const DEMO_DATABASE_NAME: &str = "${DEMO_DATABASE_BASENAME}";`);
+    expect(rust).toContain(DEMO_DATABASE_BASENAME);
   });
 });

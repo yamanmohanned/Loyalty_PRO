@@ -1,6 +1,6 @@
 {
   "name": "@walaa/config",
-  "version": "0.1.0",
+  "version": "0.1.1-preview",
   "private": true,
   "description": "Shared TypeScript / ESLint / Tailwind presets and design tokens.",
   "type": "module",

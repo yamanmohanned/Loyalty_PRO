@@ -1,6 +1,6 @@
 {
   "name": "@walaa/shared-types",
-  "version": "0.1.0",
+  "version": "0.1.1-preview",
   "private": true,
   "description": "The Normalized Invoice Schema, shared DTOs and enums. Single definition, no drift (CLAUDE.md §2.3, §9).",
   "type": "module",
