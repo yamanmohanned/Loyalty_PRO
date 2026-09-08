@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, KeyRound, LogOut, Printer, ShieldCheck } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
 import type { KeyStatus } from '@walaa/shared-types';
-import { locale } from '../lib/locale';
+import { locale, formatDate, formatDateTime } from '../lib/locale';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
 /**
@@ -70,7 +70,7 @@ function PrintableKey({ value, fingerprint }: { value: string; fingerprint: stri
       </p>
 
       <p className="text-sm">
-        {locale.keyCeremony.printGeneratedAt}: {new Date().toLocaleString('ar-IQ')}
+        {locale.keyCeremony.printGeneratedAt}: {formatDateTime(new Date())}
       </p>
     </div>
   );
@@ -324,7 +324,7 @@ export function KeyConfirmedSummary({ status }: { status: KeyStatus }) {
         <p className="text-ink">
           {locale.keyCeremony.confirmedBy} {status.confirmedBy} ·{' '}
           {locale.keyCeremony.confirmedAt}{' '}
-          {status.confirmedAt ? new Date(status.confirmedAt).toLocaleDateString('ar-IQ') : ''} ·{' '}
+          {status.confirmedAt ? formatDate(status.confirmedAt) : ''} ·{' '}
           <span className="font-mono" dir="ltr">
             {status.fingerprint}
           </span>

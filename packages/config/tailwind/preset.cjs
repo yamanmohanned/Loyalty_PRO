@@ -245,6 +245,35 @@ module.exports = {
         '2xl': ['1.75rem', { lineHeight: '1.3' }],
         '3xl': ['2.25rem', { lineHeight: '1.2' }],
         amount: ['2.75rem', { lineHeight: '1.1', fontWeight: '700' }],
+        /*
+          The KPI figure. It was `text-[1.75rem]` written inline in `StatTile` and
+          again in the Overview's tiles — a magic number in two places, which is the
+          shape a type scale exists to prevent. Between `2xl` (1.75rem) and `amount`
+          (2.75rem) there was no step for "dominant, but four across", so the screens
+          invented one. This is that step, named.
+        */
+        stat: ['2rem', { lineHeight: '1.05', fontWeight: '700' }],
+        /*
+          The KPI figure one step down, for the band where four tiles share a narrow
+          content column.
+
+          **Measured in the running app, and the measurement is the whole reason it
+          exists.** `1,062,000 د.ع` — the largest value this dataset produces — sets
+          to 196 px at 2 rem. The value row inside a tile is 218 px at 1440, 200 px at
+          1366, and **178 px at 1280**: the widest window where four tiles still share
+          the column with the rail expanded. So 2 rem fits at 1440 with 22 px to
+          spare, fits at 1366 by 4 px, and **overflows at 1280 by 18 px**.
+
+          At 1.625 rem the same string sets to about 160 px and clears every width. The
+          full 2 rem returns at `2xl`, where the column is wide enough to carry it.
+
+          This token was briefly deleted on the reading that 2 rem fitted everywhere —
+          a measurement taken while this very step was still applied, so it compared
+          the small font against the large font's budget. `capture.mjs` reports the
+          glyph width against the box at every review width on each run; that is what
+          caught it, and it is why the check is in the harness rather than in a memory.
+        */
+        'stat-sm': ['1.625rem', { lineHeight: '1.1', fontWeight: '700' }],
       },
       borderRadius: {
         sm: '8px',
@@ -260,6 +289,13 @@ module.exports = {
           while the buttons still read as controls.
         */
         xl: '24px',
+        /*
+          The working card, one step inside the pre-session panel's 24 so a card can
+          never out-round the shell it sits in. It was `rounded-[20px]` inline in
+          `Card`; naming it is what lets the tiles, the chart panels and the table
+          agree without each restating the number.
+        */
+        card: '20px',
         pill: '999px',
       },
       boxShadow: {
@@ -325,6 +361,15 @@ module.exports = {
         // cannot push it over. At 264 the budget is 136 and the slack is 4px, which
         // is the kind of margin that breaks quietly on someone else's machine.
         rail: '288px',
+        /*
+          The rail with its labels dropped, below 1280.
+
+          76 rather than 64: the nav glyph is 20px inside a 48px control (§6.4's
+          minimum target), and 76 leaves the 14px of gutter either side that keeps a
+          column of icons from touching the border. Measured against the control, not
+          against the icon.
+        */
+        'rail-collapsed': '76px',
       },
       maxWidth: {
         content: '1440px',

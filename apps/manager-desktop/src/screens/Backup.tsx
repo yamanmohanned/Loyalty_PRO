@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, CheckCircle2, CloudOff, DatabaseBackup, HardDrive, MinusCircle, RotateCcw, Usb } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
-import { locale } from '../lib/locale';
+import { locale, formatDateTime } from '../lib/locale';
 import {
   Button,
   Card,
@@ -12,6 +12,8 @@ import {
   PageHeader,
   Skeleton,
 } from '../components/ui';
+import { DemoHardwareNotice, DemoResetCard } from '../components/DemoSurfaces';
+import { IS_DEMO } from '../lib/demo';
 import type {
   BackupOverview,
   HistoryEntry,
@@ -35,7 +37,7 @@ import { KeyConfirmedSummary } from './KeyCeremony';
  */
 
 const dateTime = (iso: string | null): string =>
-  iso ? new Date(iso).toLocaleString('ar-IQ', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  iso ? formatDateTime(iso) : '—';
 
 const megabytes = (bytes: number | null): string =>
   bytes === null ? '—' : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -296,6 +298,17 @@ export function BackupScreen() {
               </ul>
             )}
           </Card>
+        </div>
+      ) : null}
+
+      {/* Demo only — absent from a production bundle. The Backup screen is where a
+          merchant already comes to think about his data, so "put it back the way it
+          was" belongs beside "keep a copy of it" rather than in a settings drawer. */}
+      {IS_DEMO ? (
+        <div className="mt-6 space-y-6">
+          {/* What the suppressed banner would have said, said calmly and in place. */}
+          <DemoHardwareNotice />
+          <DemoResetCard />
         </div>
       ) : null}
     </>

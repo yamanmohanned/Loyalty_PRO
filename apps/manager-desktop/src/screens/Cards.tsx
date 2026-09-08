@@ -15,7 +15,7 @@ import type {
   CardBatchListResponse,
 } from '@walaa/shared-types';
 import { api } from '../lib/api';
-import { locale } from '../lib/locale';
+import { locale, formatDate } from '../lib/locale';
 import {
   Button,
   Card,
@@ -414,14 +414,14 @@ function BatchPanel({
               {batch.generatedByName ?? locale.common.none}
             </span>
           }
-          hint={new Date(batch.generatedAt).toLocaleDateString('ar-IQ')}
+          hint={formatDate(batch.generatedAt)}
         />
         <Fact
           label={locale.cards.exportedAt}
           value={
             <span className="text-base text-ink">
               {batch.exportedAt
-                ? new Date(batch.exportedAt).toLocaleDateString('ar-IQ')
+                ? formatDate(batch.exportedAt)
                 : locale.cards.exportedNever}
             </span>
           }

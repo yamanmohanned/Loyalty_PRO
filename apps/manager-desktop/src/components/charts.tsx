@@ -153,11 +153,28 @@ export function ChartFrame({
 function EmptyChart({ message }: { message: ReactNode }) {
   return (
     <div className="py-2">
+      {/*
+        **Empty TRACKS, not grey bars — and the difference is the whole point.**
+
+        These ghost rules used to be filled: `bg-border/60` and `bg-border/40` blocks
+        at three decreasing widths. That is very close to what the loading branch
+        directly above renders, and the only thing separating them was the skeleton's
+        shimmer. In a screenshot the shimmer is not there, and the two states became
+        indistinguishable — a reviewer reading the Reports page could not tell «لم
+        تصدر قسائم اليوم» from a panel still waiting on the server, and reported it
+        as a stuck skeleton.
+
+        An outlined track reads as "a bar could be here and there isn't one", which
+        is the actual statement. A filled one reads as "a bar is being drawn".
+      */}
       <div className="space-y-3" aria-hidden>
         {[0.55, 0.35, 0.2].map((width) => (
           <div key={width} className="flex items-center gap-3">
-            <div className="h-2 w-20 rounded-pill bg-border/60" />
-            <div className="h-2 rounded-pill bg-border/40" style={{ width: `${width * 100}%` }} />
+            <div className="h-2 w-20 rounded-pill border border-dashed border-border-strong" />
+            <div
+              className="h-2 rounded-pill border border-dashed border-border-strong"
+              style={{ width: `${width * 100}%` }}
+            />
           </div>
         ))}
       </div>

@@ -9,7 +9,7 @@ import {
   type DiscountConfigResponse,
 } from '@walaa/shared-types';
 import { api } from '../lib/api';
-import { locale } from '../lib/locale';
+import { locale, formatDate } from '../lib/locale';
 import {
   Button,
   Card,
@@ -132,20 +132,27 @@ export function CustomersScreen() {
             hint={locale.customers.searchHint}
             className="min-w-64 flex-1"
           >
-            <div className="relative">
-              <Search
-                size={18}
-                className="pointer-events-none absolute inset-y-0 start-3 my-auto text-steel"
-                aria-hidden
-              />
-              <Input
-                value={phone}
-                onChange={(e) => reset(setPhone)(e.target.value)}
-                placeholder="07701234567"
-                className="ps-10 font-mono"
-                dir="ltr"
-              />
-            </div>
+            {/*
+              The magnifier goes through `Input`'s start slot rather than being
+              positioned by hand.
+
+              Hand-rolled, it was the same defect the primitive had: the glyph was
+              pinned with a logical inset on a wrapper inheriting the page's RTL, and
+              its space was reserved with `ps-10` on an input marked `dir="ltr"` — so
+              40px was cleared on the left while the glyph sat 12px from the right,
+              and a phone number long enough to fill the field ran under it. Measured
+              at 12px of overlap before the change. The slot is a flex sibling now, so
+              the text cannot reach it whatever the value is.
+            */}
+            <Input
+              value={phone}
+              onChange={(e) => reset(setPhone)(e.target.value)}
+              placeholder="07701234567"
+              className="font-mono"
+              dir="ltr"
+              inputMode="tel"
+              adornment={<Search size={18} className="text-steel" aria-hidden />}
+            />
           </Field>
 
           <Field label={locale.customers.colCategory} className="w-48">
@@ -276,7 +283,7 @@ export function CustomersScreen() {
                         </Chip>
                       </td>
                       <td className={cn(td, 'text-sm text-steel')}>
-                        {new Date(customer.createdAt).toLocaleDateString('ar-IQ')}
+                        {formatDate(customer.createdAt)}
                       </td>
                       <td className={cn(td, 'text-end')}>
                         <Link

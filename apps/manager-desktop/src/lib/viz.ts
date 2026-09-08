@@ -124,10 +124,43 @@ export const VIZ = {
   axisInk: '#6B7280',
   surface: '#FFFFFF',
   canvas: '#F7F8FA',
+  /**
+   * The ABSENCE of a category, never a category.
+   *
+   * The unattributed share of captured invoices is not a second series — it is what
+   * is left when the first one is taken away, and painting it from `SERIES` would
+   * claim a symmetry that is not there. `border` at one step stronger, so the wedge
+   * reads as the ring's unfilled remainder.
+   *
+   * It lived as a literal `rgba(17,24,39,0.14)` inside the Overview screen, which is
+   * exactly the kind of value that gets copied to a second screen and then drifts.
+   */
+  absence: 'rgba(17,24,39,0.14)',
   /** The 2px separation between adjacent fills, drawn as surface rather than a border. */
   gap: 2,
   /** Data-ends are rounded; the baseline end is square so bars sit on the axis. */
   radius: 4,
+} as const;
+
+/**
+ * Recharts' `<Tooltip contentStyle>`, in one place.
+ *
+ * Two screens had their own copy of this object and they had already drifted apart in
+ * padding. It is a style, not a token set, so it lives here beside the chrome it has
+ * to match rather than in the Tailwind preset, which cannot express it.
+ *
+ * `direction: 'rtl'` is not cosmetic: recharts renders the tooltip in an absolutely
+ * positioned div outside the chart's own flow, and without it the currency suffix
+ * lands on the wrong side of the digits.
+ */
+export const TOOLTIP_STYLE = {
+  borderRadius: 12,
+  border: '1px solid rgba(17,24,39,0.08)',
+  boxShadow: '0 8px 24px rgba(17,24,39,0.08)',
+  fontFamily: 'IBM Plex Sans Arabic, sans-serif',
+  fontSize: 13,
+  padding: '8px 12px',
+  direction: 'rtl',
 } as const;
 
 /**

@@ -18,6 +18,55 @@
  */
 const group = (value: number): string => new Intl.NumberFormat('en-US').format(value);
 
+/**
+ * Dates, in Arabic, with Western digits.
+ *
+ * ── The inconsistency this removes ───────────────────────────────────────────
+ *
+ * Money and counts already used `en-US`, deliberately and for the reason above.
+ * Dates used `ar-IQ`, which renders Arabic-Indic digits (٠١٢٣). So five of the eight
+ * screens showed both numeral systems at once — a customer's join date in ٢٠٢٦ beside
+ * their spend in 34,299,500 — and neither choice was wrong on its own. Mixed, they
+ * read as two products stitched together, and a merchant comparing a date on screen
+ * with a date on a printed slip is doing a conversion nobody asked him to do.
+ *
+ * `-u-nu-latn` keeps everything else about the Iraqi Arabic locale — month names,
+ * ordering, the calendar — and changes only the numbering system. So this is the same
+ * date a merchant already reads, with the digits the rest of the product uses.
+ *
+ * Not a display detail: §6.3 makes the numeral system a product-wide rule, and this is
+ * the half that had not been applied.
+ */
+export const DATE_LOCALE = 'ar-IQ-u-nu-latn';
+
+/**
+ * One metric, one name.
+ *
+ * `attributionRatePct` — the share of captured invoices tied to a known customer — was
+ * labelled «نسبة الارتباط» on the Overview KPI and inside its donut, and
+ * «نسبة الارتباط بالزبائن» on Reports. Same field, same number, two names, and no way
+ * for a merchant to know that the figure he is comparing between two screens is the
+ * same figure. The longer form is kept because it says what the rate is *of*; the
+ * short one could equally have meant capture rate or redemption rate.
+ *
+ * Defined here and referenced from all three sites, so the next edit cannot reintroduce
+ * the drift by touching one of them.
+ */
+export const ATTRIBUTION_RATE_LABEL = 'نسبة الارتباط بالزبائن';
+
+export const formatDate = (value: string | number | Date): string =>
+  new Date(value).toLocaleDateString(DATE_LOCALE);
+
+export const formatDateTime = (
+  value: string | number | Date,
+  options: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' },
+): string => new Date(value).toLocaleString(DATE_LOCALE, options);
+
+export const formatTime = (
+  value: string | number | Date,
+  options: Intl.DateTimeFormatOptions = {},
+): string => new Date(value).toLocaleTimeString(DATE_LOCALE, options);
+
 export const locale = {
   appName: 'Customer loyalty',
   appTagline: 'إدارة المتجر',
@@ -28,10 +77,54 @@ export const locale = {
     discounts: 'قواعد الخصم',
     reports: 'التقارير',
     capture: 'التقاط الفواتير',
-    cards: 'البطاقات',
+    /* «بطاقات الولاء», matching the page title it opens. «البطاقات» alone was the
+       one nav label in the rail that did not say what its screen says at the top. */
+    cards: 'بطاقات الولاء',
     backup: 'النسخ الاحتياطي',
     modules: 'الوحدات',
+    settings: 'الإعدادات',
     logout: 'تسجيل الخروج',
+    /**
+     * The word only — the number is rendered separately inside a `<bdi dir="ltr">`.
+     *
+     * It used to interpolate the version into the string, and `0.1.0-preview` came
+     * out as `preview-0.1.0`: an isolate cannot be applied to a fragment of a plain
+     * string, so the two have to be separate nodes.
+     */
+    version: 'الإصدار',
+    collapseRail: 'طيّ القائمة',
+    expandRail: 'توسيع القائمة',
+  },
+
+  /**
+   * The notification bell.
+   *
+   * Every string here describes a condition the system can actually observe. There is
+   * no «لديك 3 إشعارات» because there is no notification store — the count is the
+   * number of standing warnings that are true right now, and the healthy answer is
+   * zero.
+   */
+  /**
+   * The update path.
+   *
+   * Three short lines. The merchant does not need to know what a release is, what was
+   * fixed, or that anything was downloaded — only that a newer version is on his
+   * machine and restarting will use it.
+   */
+  update: {
+    ready: 'يتوفّر تحديث جديد للبرنامج، وقد تم تنزيله. سيُطبَّق عند إعادة التشغيل.',
+    restart: 'إعادة التشغيل الآن',
+    later: 'لاحقاً',
+    installed: 'الإصدار المثبَّت',
+  },
+
+  alerts: {
+    title: 'التنبيهات',
+    label: (n: number) => (n === 0 ? 'التنبيهات — لا يوجد' : `التنبيهات — ${n}`),
+    none: 'لا توجد تنبيهات. النسخ الاحتياطي والمساحة الحرة على ما يُرام.',
+    backupKeyTitle: 'النسخ الاحتياطي متوقف',
+    backupKeyFirstRun: 'لم يُؤكَّد مفتاح التشفير بعد — لا تعمل أي نسخة احتياطية',
+    backupKeyReplaced: 'تم استبدال المفتاح ولم يُؤكَّد الجديد بعد',
   },
 
   /** The reporting window, shared by Overview and Reports. */
@@ -178,6 +271,71 @@ export const locale = {
     error: 'حدث خطأ',
     errorBody: 'تعذّر تحميل البيانات. تحقّق من الاتصال بالخادم وأعد المحاولة.',
     comingSoon: 'قيد التطوير',
+
+    /**
+     * ── The three sentences that replace a browser's English ─────────────────
+     *
+     * Every screen renders `error.message` from whatever its mutation threw. When
+     * that is an `ApiRequestError` the message is this product's own Arabic. When it
+     * is anything else — a dropped connection, a reply that was not JSON — it is
+     * whatever the browser said, in English, in a shop in Baghdad: «Failed to fetch»,
+     * «Unexpected token < in JSON at position 0».
+     *
+     * Fixing that at each of the twelve call sites would fix it until the thirteenth.
+     * `apiFetch` converts instead, so nothing but an Arabic sentence can leave the API
+     * client, and the browser's own words go to the console where they are useful.
+     */
+    networkError: 'تعذّر الاتصال بالخادم. تأكّد من تشغيل جهاز المدير ومن اتصال الشبكة، ثم أعد المحاولة.',
+    badResponse: 'وصل ردّ غير مفهوم من الخادم. أعد المحاولة، وإذا تكرّر الأمر أعد تشغيل الجهاز.',
+    noServer: 'لم يُعثر على خادم ولاء. افتح «الإعدادات» لتحديد جهاز المدير، أو أعد تشغيل الجهاز.',
+  },
+
+  /**
+   * The backend gate.
+   *
+   * Every string here answers one of three questions a merchant actually has when the
+   * dashboard does not open: is it still coming up, has it given up, and what do I do.
+   * `errorBody` in `common` — «تحقّق من الاتصال بالخادم» — answered none of them, and
+   * was shown for a failure it never described. It stays only for genuine per-panel
+   * fetch failures on a live backend; a backend that is down gets these instead.
+   */
+  backend: {
+    startingTitle: 'جارٍ تشغيل البرنامج',
+    startingBody: 'يستغرق التشغيل الأول بضع ثوانٍ. لا تُغلق النافذة.',
+
+    failedTitle: 'تعذّر تشغيل البرنامج',
+    /* Shown only when the backend left no explanation of its own. It says what is
+       known — that it stopped — and does not invent a cause. */
+    failedFallback: 'توقّف البرنامج ولم يترك سبباً مكتوباً.',
+
+    terminalTitle: 'توقّف البرنامج ولن يُعيد المحاولة',
+    terminalBody: 'تكرّر الخطأ نفسه عدّة مرّات، لذلك توقّفت المحاولات. عالِج السبب أدناه ثم أعد فتح البرنامج.',
+
+    stoppedTitle: 'البرنامج متوقّف',
+    stoppedBody: 'أعد فتح البرنامج.',
+
+    unknownTitle: 'لا يمكن الوصول إلى البرنامج',
+    unknownBody: 'البرنامج لا يستجيب ولم يترك سبباً. أعد فتحه، وإذا تكرّر الأمر تواصل مع الدعم الفني.',
+
+    /**
+     * ── No backend at all, which is different from a backend that failed ─────
+     *
+     * A machine that hosts the service and whose service is down needs "restart it".
+     * A machine that hosts nothing — a second PC someone installed the dashboard on —
+     * needs "tell me which machine to talk to", and telling *that* person to restart
+     * a service sends them looking for something that was never installed.
+     *
+     * This is also the one screen in the product that may show an address field
+     * outside Settings, because it is the one moment Settings cannot be reached: it
+     * is behind the login, the login is behind a working backend, and there is none.
+     */
+    missingTitle: 'لم يُعثر على خادم ولاء',
+    missingBody:
+      'إذا كان هذا هو جهاز المدير، أعد تشغيل الجهاز — يبدأ الخادم مع النظام. وإذا كان جهازاً ثانياً في المتجر، أدخل عنوان جهاز المدير أدناه.',
+
+    reasonLabel: 'السبب',
+    retry: 'إعادة المحاولة الآن',
+    retrying: 'جارٍ إعادة المحاولة…',
   },
 
   setup: {
@@ -189,6 +347,30 @@ export const locale = {
     connect: 'اتصال والمتابعة',
     testing: 'جارٍ الاختبار…',
     support: 'إذا لم تكن متأكداً، تواصل مع الدعم الفني.',
+
+    /**
+     * The four ways pointing the app at a server can fail.
+     *
+     * They were previously three sentences and a status code, and two genuinely
+     * different problems — "nothing is there" and "something is there but it is not
+     * ولاء" — shared one message. A merchant who has typed his neighbour's printer
+     * address and a merchant whose service has not started need different next moves,
+     * so they are told different things.
+     */
+    errors: {
+      /** Not a URL at all. */
+      malformed: 'العنوان غير صالح. يجب أن يبدأ بـ http:// أو https:// ثم عنوان الجهاز.',
+      /** Nothing answered: wrong address, wrong port, machine off, or firewall. */
+      unreachable:
+        'لا يوجد خادم على هذا العنوان. تأكّد من تشغيل جهاز المدير ومن رقم المنفذ، ومن أنّ الجهازين على الشبكة نفسها.',
+      /** Something answered, but it is not this product. */
+      notWalaa: 'يوجد خادم على هذا العنوان لكنّه ليس خادم ولاء. راجع العنوان ورقم المنفذ.',
+      /** It is ولاء, at a version this dashboard cannot talk to. */
+      versionMismatch: 'خادم ولاء على هذا العنوان بإصدار مختلف. حدّث الطرفين إلى الإصدار نفسه.',
+      /** It is ولاء, but the demo one — which holds sample data, not the shop's. */
+      demoServer: 'هذا العنوان يشير إلى النسخة التجريبية، وليس إلى خادم متجرك.',
+    },
+    connected: 'تم الاتصال بنجاح',
   },
 
   login: {
@@ -198,16 +380,17 @@ export const locale = {
     artHeadline: 'لوحة تحكم برنامج الولاء',
     stripReports: 'تقارير وتسويات',
     stripSecure: 'نسخ احتياطي مشفّر',
-    /* Short, because a strip cell is one line. The long form stays for prose. */
-    stripServer: 'الخادم',
+    /* The third cell used to print the server address. It is now a statement about
+       the product rather than a technical detail about this installation — see the
+       note further down for why nothing on this screen names a machine. */
+    stripOffline: 'يعمل دون إنترنت',
 
     /* ── V4-4: the brand panel's real content, in place of marketing copy ── */
-    tagline: 'لوحة تحكم برنامج الولاء — الزبائن، شرائح الخصم، التقارير والنسخ الاحتياطي.',
+    tagline: 'لوحة تحكم برنامج الولاء — الزبائن، مستويات الخصم، التقارير والنسخ الاحتياطي.',
     greeting: 'مرحباً بك مجدداً',
     /* The card says what to DO. The panel beside it already says what this app IS,
        and rendering both showed the same sentence twice on one screen. */
     signInHint: 'أدخل بيانات حسابك للمتابعة إلى لوحة التحكم',
-    serverLabel: 'الخادم المتصل به هذا الجهاز',
     title: 'تسجيل الدخول',
     subtitle: 'لوحة تحكم برنامج الولاء',
     username: 'اسم المستخدم',
@@ -216,25 +399,110 @@ export const locale = {
     submitting: 'جارٍ الدخول…',
     showPassword: 'إظهار كلمة المرور',
     hidePassword: 'إخفاء كلمة المرور',
-    or: 'أو',
-    changeServer: 'تغيير الخادم',
     /** Shown when the credentials are valid but belong to another app entirely. */
     wrongApp: 'هذا الحساب ليس مخصّصاً للوحة التحكم',
+    /**
+     * ── What this screen no longer says ──────────────────────────────────────
+     *
+     * `changeServer` («تغيير الخادم»), `serverLabel` and `stripServer` are gone, with
+     * the controls and the panel cell that carried them. A shop owner signing in has
+     * no use for an address, a port or a button offering to change the server that is
+     * working — and that button is precisely how he talks himself into believing the
+     * product is broken. Server configuration now lives in Settings (`settings.server`
+     * below) and in the recovery screen that appears when there genuinely is no
+     * backend, which is the only moment an address is the actionable thing.
+     */
+    /** A failed sign-in says what to do, and never names a machine or a port. */
+    failed: 'تعذّر تسجيل الدخول. تأكّد من اسم المستخدم وكلمة المرور ثم حاول مرّة أخرى.',
+  },
+
+  /**
+   * Settings — where every technical control lives, off the daily path.
+   *
+   * ── The distinction this wording has to carry ────────────────────────────
+   *
+   * There are two machines in this product and they need opposite things said to
+   * them. The MANAGER PC runs the service; it has nothing to configure and asking
+   * it to would be inventing a question. A SECOND machine — another manager
+   * workstation, or a PC beside the till — has to be told which machine to talk to.
+   *
+   * Conflating them is what produced a first-run address form on every install,
+   * including the one that already knew the answer. So the two are separate
+   * sections with separate headings, and the first one is a statement of fact
+   * rather than a form.
+   */
+  settings: {
+    title: 'الإعدادات',
+    subtitle: 'إعدادات الخادم والنسخ الاحتياطي — لا حاجة لتغييرها في التشغيل اليومي',
+
+    server: {
+      title: 'الخادم',
+
+      /* The normal case: this machine hosts the service. */
+      localTitle: 'خادم هذا الجهاز',
+      localBody:
+        'هذا الجهاز يشغّل خادم ولاء بنفسه. لا يحتاج إلى أي إعداد — يتعرّف البرنامج على الخادم تلقائياً عند كل تشغيل.',
+      localRunning: 'يعمل الآن',
+      localStopped: 'متوقّف',
+      localUnknown: 'لم يُعثر على خادم على هذا الجهاز',
+      localUnknownBody:
+        'لم يتمكّن البرنامج من العثور على خدمة ولاء على هذا الجهاز. إذا كان هذا الجهاز هو جهاز المدير، أعد تشغيله؛ وإذا كان جهازاً ثانياً، اربطه بجهاز المدير من القسم أدناه.',
+      /* The address the Loyalty Station tablet types in, on the shop's own network.
+         Shown because somebody has to type it on the till — it is information the
+         merchant needs, unlike the address of the machine he is already sitting at. */
+      stationLabel: 'العنوان الذي تُدخله في جهاز نقطة الولاء',
+      stationHint: 'افتح هذا العنوان من متصفّح الجهاز اللوحي المتّصل بشبكة المتجر نفسها',
+
+      /* The second-machine case. */
+      remoteTitle: 'الاتصال بجهاز مدير آخر',
+      remoteBody:
+        'استخدم هذا القسم فقط إذا كان هذا الجهاز ليس جهاز المدير، وتريد ربطه بجهاز المدير الموجود في المتجر.',
+      remoteLabel: 'عنوان جهاز المدير',
+      remotePlaceholder: 'http://192.168.1.10:4000',
+      remoteHint: 'اسأل من ثبّت البرنامج عن هذا العنوان إن لم تكن تعرفه',
+      remoteActive: 'هذا الجهاز متّصل حالياً بجهاز مدير آخر',
+      test: 'اختبار وحفظ',
+      testing: 'جارٍ الاختبار…',
+      saved: 'تم الحفظ. أعد تشغيل البرنامج لتطبيق العنوان الجديد.',
+      useLocal: 'العودة إلى خادم هذا الجهاز',
+      useLocalDone: 'تمت العودة إلى خادم هذا الجهاز. أعد تشغيل البرنامج.',
+    },
   },
 
   overview: {
     /* ── V4-4: the four headline figures §2.4 asks for ─────────────────── */
     kpiSales: 'المبيعات الملتقطة',
+    /**
+     * ── Two keys held in place, deliberately unused ────────────────────────
+     *
+     * `kpiSalesHint` and `kpiCustomersHint` packed four real figures — captured
+     * invoices, average basket, new customers — into 13px grey sentences beneath a
+     * 32px number, which is where a figure goes to be skipped. All four now have
+     * their own cards in the Overview's activity band, at a weight somebody will
+     * actually read, and repeating them in a caption above would be saying the same
+     * number twice in two sizes.
+     *
+     * They stay defined rather than deleted because a locale key is a contract with
+     * whatever else may be translating against this file; the numbers they carried
+     * are all still on the screen.
+     */
     kpiSalesHint: (invoices: number, average: number) =>
-      `${group(invoices)} فاتورة · متوسط السلة ${group(average)} د.ع`,
+      `${group(invoices)} فاتورة · متوسط قيمة الفاتورة ${group(average)} د.ع`,
     kpiCustomersHint: (added: number) => `${group(added)} زبون جديد في هذه الفترة`,
-    kpiDiscountsHint: 'ما مُنح للزبائن من شرائح الخصم',
+    kpiDiscountsHint: 'ما مُنح للزبائن من مستويات الخصم',
+    /**
+     * `totalCustomers` counts every registered customer, not the ones who bought in
+     * the selected window — the only figure on this screen the range control does
+     * not move. Saying so is the difference between a tile that is understood and a
+     * tile that looks broken when the range changes and it does not.
+     */
+    kpiCustomersNote: 'إجمالي المسجّلين في البرنامج، غير محدود بالفترة',
     title: 'نظرة عامة',
     subtitle: 'ملخّص أداء برنامج الولاء',
     kpiCustomers: 'الزبائن المسجّلون',
     kpiCaptured: 'فواتير ملتقطة',
     kpiAttributed: 'فواتير مرتبطة بزبون',
-    kpiEnrolment: 'نسبة الارتباط',
+    kpiEnrolment: ATTRIBUTION_RATE_LABEL,
     kpiDiscounts: 'قيمة الخصومات الممنوحة',
     chartTitle: 'المبيعات الملتقطة عبر الوقت',
     chartEmpty: 'لا توجد فواتير ملتقطة في هذه الفترة',
@@ -252,11 +520,72 @@ export const locale = {
     colDate: 'التاريخ',
     colNet: 'بعد الخصم',
     splitTitle: 'توزيع الفواتير الملتقطة',
-    splitCentreLabel: 'نسبة الارتباط',
+    splitCentreLabel: ATTRIBUTION_RATE_LABEL,
     splitAttributed: 'مرتبطة بزبون',
     splitUnattributed: 'غير مرتبطة',
     splitInvoices: (n: number) => `${group(n)} فاتورة`,
     rankLabel: (n: number) => `المرتبة ${group(n)}`,
+
+    /* ── The presentation rebuild (2026-09-05) ───────────────────────────── */
+
+    /** From `dataUpdatedAt` on the query that is already running — not a new fetch. */
+    lastUpdated: (time: string) => `آخر تحديث ${time}`,
+    /**
+     * The reference's primary action is «تصدير». This screen has no export endpoint,
+     * and the screen that produces a report does. So the emerald button navigates
+     * there rather than pretending to a capability that does not exist.
+     */
+    detailedReport: 'التقارير التفصيلية',
+
+    /*
+      The trend pill's wording, and it is the whole reason the pill is defensible.
+
+      `/reports/overview` takes a window and no offset, so «عن الفترة السابقة» — what
+      the reference writes — is a comparison the API cannot answer. What IS in the
+      response is every day of the selected window, so the two halves of it can be
+      compared honestly. The caption says exactly that, because a correctly computed
+      number under a wrong label is still a wrong statement.
+    */
+    deltaCaption: 'مقارنةً بالنصف الأول من الفترة',
+    /*
+      **These return the numeric token ALONE, and the unit word travels separately.**
+
+      Not a style choice — a bidi one, measured in the running app. `'+685.0٪ '` as a
+      single string inside `dir="rtl"` paints as **`685.0٪+`**: `+` is bidi class ES,
+      it has no European number before it to bind to, so it resolves to the paragraph
+      direction and is laid out at the far end of the run. A sign printed after the
+      percent sign is not a formatting blemish, it is a different statement — a reader
+      scanning a row of pills cannot tell a rise from a fall.
+
+      So the token goes inside a `<bdi dir="ltr">` in `DeltaPill`, which is the same
+      remedy §12.25 applies to invoice numbers, and any Arabic unit word stays outside
+      it in the RTL flow where it belongs.
+
+      One decimal below 100 and none above it: at 685٪ the tenth is noise, and it is
+      exactly the magnitude at which the extra glyphs start to crowd the pill.
+    */
+    deltaPct: (v: number) =>
+      `${v > 0 ? '+' : v < 0 ? '-' : ''}${Math.abs(v) >= 100 ? Math.round(Math.abs(v)) : Math.abs(v).toFixed(1)}٪`,
+    /** A rate moves in percentage POINTS. Reporting it in ٪ would compound a ratio. */
+    deltaPoints: (v: number) =>
+      `${v > 0 ? '+' : v < 0 ? '-' : ''}${Math.abs(v) >= 100 ? Math.round(Math.abs(v)) : Math.abs(v).toFixed(1)}`,
+    deltaPointsUnit: 'نقطة',
+
+    sectionAnalytics: 'التحليلات',
+    sectionActivity: 'مؤشرات النشاط',
+
+    chartSubtitle: 'قيمة الفواتير الملتقطة لكل يوم',
+    splitSubtitle: 'كم منها بلغ زبوناً مسجّلاً',
+    captureTrendSubtitle: 'عدد الفواتير يومياً، وما ارتبط منها بزبون',
+    topCustomersSubtitle: 'الأعلى إنفاقاً خلال الفترة المحددة',
+    recentSubtitle: 'آخر عشر فواتير التقطها النظام',
+
+    /* «متوسط قيمة الفاتورة», the name `locale.reports` already gave this field.
+       It is capturedSales ÷ capturedInvoices — the mean INVOICE, and «سلة
+       المشتريات» was the reference's word for it, not the model's. */
+    miniBasket: 'متوسط قيمة الفاتورة',
+    miniNew: 'زبائن جدد',
+    miniNewCaption: 'خلال الفترة المحددة',
   },
 
   customers: {
@@ -357,14 +686,14 @@ export const locale = {
     colRate: 'قيمة الخصم',
     addRule: 'إضافة مستوى',
     /* ── V4-4 ─────────────────────────────────────────────────────────── */
-    colRuleCap: 'حد أقصى لهذه الشريحة',
+    colRuleCap: 'حد أقصى لهذا المستوى',
     colRuleCapHint: 'اتركه فارغاً ليطبَّق الحد الأقصى العام',
     assessmentDiscount: 'الخصم عند هذه القيمة:',
     assessmentProfit: 'الربح الصافي التقديري:',
     assessmentSafe: (min: number, max: number) => `ضمن النطاق الآمن (${min}–${max}٪).`,
     inactiveRule: 'غير مفعّلة',
     inactiveRuleHint:
-      'هذه الشريحة مخزّنة كغير مفعّلة، فلا يطبّقها المحرّك. لا يمكن إنشاء هذه الحالة من هذه الشاشة — راجع من كتبها مباشرةً في قاعدة البيانات.',
+      'هذا المستوى مخزّن كغير مفعّل، فلا يطبّقها المحرّك. لا يمكن إنشاء هذه الحالة من هذه الشاشة — راجع من كتبها مباشرةً في قاعدة البيانات.',
     removeRule: 'حذف',
     safeBand: 'النطاق الآمن الموصى به: 1–3٪',
     marginTitle: 'تحذير الهامش',
@@ -417,7 +746,7 @@ export const locale = {
     paperLabel: 'عرض الورق',
     paperOption: (mm: number) => `${mm} ملم`,
     paperPropagation:
-      'يصل التغيير إلى المحطة عند تحديث جلستها (خلال ١٥ دقيقة تقريباً) أو عند إعادة تسجيل الدخول.',
+      'يصل التغيير إلى المحطة عند تحديث جلستها (خلال 15 دقيقة تقريباً) أو عند إعادة تسجيل الدخول.',
     calibrationStart: 'بدء المعايرة',
     calibrationPending: 'بانتظار فاتورة تجريبية من الوكيل…',
   },
@@ -434,7 +763,7 @@ export const locale = {
     localTitle: 'نسخة محلية',
     usbTitle: 'نسخة على USB',
     scheduleTitle: 'الجدولة',
-    scheduleHint: 'يومياً بعد الإغلاق، وبعد كل ٥٠٠ عملية.',
+    scheduleHint: 'يومياً بعد الإغلاق، وبعد كل 500 عملية.',
     restoreTitle: 'اختبار الاستعادة',
     restoreHint: 'نسخة احتياطية لم تُختبر ليست نسخة احتياطية. اختبرها شهرياً.',
     lastBackup: 'آخر نسخة',
@@ -558,16 +887,16 @@ export const locale = {
     outstandingHint: 'قسائم صدرت ولم تصل إلى الصندوق — تحقّق إذا استمر الرقم بالارتفاع.',
     redemptionRate: 'نسبة الاستخدام',
     captureHealth: 'صحة الالتقاط',
-    attributionRate: 'نسبة الارتباط بالزبائن',
+    attributionRate: ATTRIBUTION_RATE_LABEL,
     averageBasket: 'متوسط قيمة الفاتورة',
 
     /* ── Breakdowns ──────────────────────────────────────────────────────── */
 
     categoryTitle: 'توزيع الزبائن حسب الفئة',
     categoryEmpty: 'لا يوجد زبائن مسجّلون بعد',
-    tierTitle: 'توزيع الفواتير على شرائح الخصم',
-    tierSubtitle: 'عدد الفواتير التي بلغت كل شريحة خلال الفترة المختارة',
-    tierEmpty: 'لم تُحدَّد شرائح خصم بعد',
+    tierTitle: 'توزيع الفواتير على مستويات الخصم',
+    tierSubtitle: 'عدد الفواتير التي بلغت كل مستوى خلال الفترة المختارة',
+    tierEmpty: 'لم تُحدَّد مستويات خصم بعد',
     /** Customers-per-tier in v3; invoices-per-bracket in v4 (§10.6). */
     tierReached: (count: number) => `${group(count)} زبون`,
     bracketInvoices: (count: number) => `${group(count)} فاتورة`,
@@ -602,7 +931,17 @@ export const locale = {
     categoryColCount: 'عدد الزبائن',
 
     tierColTier: 'المستوى',
-    tierColReached: 'بلغوه',
+    /**
+     * **Was «بلغوه» — a v3 word over v4 numbers.**
+     *
+     * Under v3 this column counted CUSTOMERS who had climbed to each tier, and
+     * "they reached it" was the right heading. v4 counts INVOICES that landed in
+     * each level (§10.6, `bracketPerformance.invoiceCount`), and the cells beside
+     * this heading already read «N فاتورة». A column head naming people over a
+     * column of invoices is not a wording preference, it is the table stating the
+     * wrong unit.
+     */
+    tierColReached: 'عدد الفواتير',
 
     /* ── The cap, reported (§12.37) ───────────────────────────────────────── */
 

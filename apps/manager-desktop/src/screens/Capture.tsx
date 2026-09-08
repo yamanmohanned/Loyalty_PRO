@@ -16,6 +16,8 @@ import {
   PageHeader,
   Select,
 } from '../components/ui';
+import { DemoHardwareNotice } from '../components/DemoSurfaces';
+import { IS_DEMO } from '../lib/demo';
 
 /**
  * Print capture settings (CLAUDE_v3.md §4, PROMPT_v3 V3-3).
@@ -85,11 +87,23 @@ export function CaptureScreen() {
         subtitle={locale.capture.subtitle}
       />
 
-      <div className="mb-6">
-        <Notice tone="warning" title={locale.capture.agentStatus}>
-          {locale.capture.agentNotInstalledHint}
-        </Notice>
-      </div>
+      {/*
+        Two different sentences for the same absent agent.
+
+        On a real till «الوكيل غير مثبَّت» is a warning and belongs in amber: the shop
+        believes it is capturing sales and is not. On a demo laptop there is no till to
+        capture from, and the same amber notice tells a merchant evaluating the product
+        that it arrived broken. The condition is identical; what it MEANS is not.
+      */}
+      {IS_DEMO ? (
+        <DemoHardwareNotice className="mb-6" />
+      ) : (
+        <div className="mb-6">
+          <Notice tone="warning" title={locale.capture.agentStatus}>
+            {locale.capture.agentNotInstalledHint}
+          </Notice>
+        </div>
+      )}
 
       <Card className="mb-6">
         <CardHeader title={locale.capture.modeTitle} />
