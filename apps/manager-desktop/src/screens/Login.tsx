@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
-import { getApiUrl } from '../lib/config';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
 import { Eye, EyeOff, LogIn, Lock, User } from 'lucide-react';
-import { Button, Divider, Field, Input, Notice } from '../components/ui';
+import { Button, Field, Input, Notice } from '../components/ui';
 
 /**
  * The signed-in user, as the API defines them.
@@ -23,14 +22,24 @@ export type SessionUser = AuthUser;
  * A STATION account is refused here rather than admitted to an empty dashboard:
  * the API would deny every manager screen anyway, and a session that can see
  * nothing is more confusing than a clear refusal.
+ *
+ * ── Two fields, and nothing else ─────────────────────────────────────────────
+ *
+ * This screen used to carry the server address in the panel beside it and a
+ * «تغيير الخادم» button beneath the form. Both are gone, and their removal is the
+ * point rather than a tidy-up.
+ *
+ * A shop owner signing in has no use for an address or a port; what he does with a
+ * control offering to change a server that is working is change it, at which point
+ * the product genuinely is broken and he has no way back. The manager PC resolves its
+ * own backend now (see `lib/config.ts`), so the question the button existed to answer
+ * is one the machine answers for itself. Where an address IS genuinely configured —
+ * a second machine pointing at the manager — it is configured once, in Settings.
+ *
+ * A failure here says what to do and never names a machine, a port or a URL. The
+ * technical detail goes to the log.
  */
-export function LoginScreen({
-  onAuthenticated,
-  onChangeServer,
-}: {
-  onAuthenticated: (user: SessionUser) => void;
-  onChangeServer: () => void;
-}) {
+export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -65,20 +74,36 @@ export function LoginScreen({
       setTokens(response.tokens);
       onAuthenticated(response.user);
     } catch (caught) {
-      setError(
-        caught instanceof ApiRequestError ? caught.message : locale.common.errorBody,
-      );
+      /*
+        ── What the merchant is told, and what only the log gets ───────────────
+
+        Only the API's own answer to "were these credentials right" reaches the
+        screen. Everything else — a backend that is not there, a request that was
+        rejected before it was authenticated, a parse failure — becomes one sentence
+        about trying again.
+
+        The reason is that every other message in that set names something the person
+        signing in cannot act on: `NOT_CONFIGURED` says «لم يتم إعداد عنوان الخادم»,
+        which is an instruction to go and configure an address on a machine that
+        configures itself, and a transport failure produces a sentence about the
+        server that is indistinguishable, to him, from having typed his password
+        wrong. Both send him to the one control that can genuinely break things.
+
+        The detail is not lost; it goes to the console, which is where it was useful
+        in the first place.
+      */
+      const authentic =
+        caught instanceof ApiRequestError &&
+        (caught.status === 401 || caught.status === 400 || caught.status === 403);
+
+      if (!authentic) console.error('[login] request failed', caught);
+      setError(authentic ? (caught as ApiRequestError).message : locale.login.failed);
       setSubmitting(false);
     }
   }
 
-  const [serverUrl, setServerUrl] = useState<string | null>(null);
-  useEffect(() => {
-    void getApiUrl().then(setServerUrl);
-  }, []);
-
   return (
-    <AuthLayout tagline={locale.login.tagline} serverUrl={serverUrl}>
+    <AuthLayout tagline={locale.login.tagline}>
       {/* Centred, as the reference's card is. A left-aligned heading over centred
           actions is the composition the previous pass had, and it is what made the
           panel read as a form rather than as a welcome. */}
@@ -91,8 +116,10 @@ export function LoginScreen({
           input    → next label        27 px  →  28
           input    → primary button    43 px  →  40   (the reference's 27 + a 16 px
                                                        "forgot password" line we refuse)
-          button   → divider           29 px  →  28
-          divider  → secondary         23 px  →  24
+
+        The reference's divider and second full-width button used to follow. They
+        carried «تغيير الخادم», which this screen no longer offers, and the form now
+        ends at its primary action — which is what a two-field sign-in should do.
       */}
       <div className="text-center">
         <h2 className="font-display text-2xl font-bold text-ink">{locale.login.greeting}</h2>
@@ -106,7 +133,11 @@ export function LoginScreen({
           <Input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
+            /* `off`, not `username`. The WebView2 profile's form-history store was
+               remembering what was typed here across reinstalls — see
+               `purge_webview_credential_stores` in `lib.rs`. Deleting the store is
+               the cure; not feeding it is the prevention. */
+            autoComplete="off"
             dir="ltr"
             className="text-start"
             icon={<User size={19} />}
@@ -119,7 +150,9 @@ export function LoginScreen({
             type={reveal ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
+            /* Chromium honours this inconsistently for passwords, which is why the
+               store is also deleted outright at startup. Both, deliberately. */
+            autoComplete="new-password"
             dir="ltr"
             className="text-start"
             icon={<Lock size={19} />}
@@ -148,14 +181,6 @@ export function LoginScreen({
         </Button>
       </form>
 
-      {/* The reference puts a divider and a secondary action here. Ours is the one
-          real secondary path this screen has — pointing the app at a different shop. */}
-      <div className="mt-7 space-y-6">
-        <Divider label={locale.login.or} />
-        <Button variant="secondary" onClick={onChangeServer} className="h-field w-full text-base">
-          {locale.login.changeServer}
-        </Button>
-      </div>
     </AuthLayout>
   );
 }

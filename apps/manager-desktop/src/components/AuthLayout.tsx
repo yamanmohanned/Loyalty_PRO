@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { BarChart3, ShieldCheck, Server } from 'lucide-react';
+import { BarChart3, ShieldCheck, WifiOff } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { locale } from '../lib/locale';
 
 /**
- * The shell every pre-session screen sits in: login and first-run setup.
+ * The shell the pre-session screen sits in: login, and the recovery screen shown
+ * when no backend can be found at all.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  *  V4-4 — converted to `login.png`'s visual language
@@ -47,8 +48,16 @@ import { locale } from '../lib/locale';
  * - **The star rating and "تواصل معنا"** — no feedback channel, no support desk.
  * - **The marketing strip** («مكافآت حصرية · تقارير ذكية · أمان وموثوقية»). Copy about
  *   a product, not information for the person signing in. **The strip's treatment is
- *   kept and filled with what is true**: what this console is for, and which server it
- *   is pointed at — the one question a manager on a new machine actually has.
+ *   kept and filled with what is true**: three standing facts about what this console
+ *   is and does.
+ *
+ *   The third cell used to print the SERVER ADDRESS, on the argument that it was "the
+ *   one question a manager on a new machine actually has". That was wrong twice over.
+ *   The manager PC now works its own address out, so the question has no asker; and
+ *   printing a host and a port on the sign-in screen is precisely the technical detail
+ *   that teaches a shop owner there is something here he is supposed to be managing.
+ *   Where an address is genuinely configured — a second machine — it is shown in
+ *   Settings, next to the control that sets it.
  * - **The © footer bar.** Dated, and it earns none of the space it takes.
  * - **The glow under the primary button** — §6.4 "flat, no glow", §11 bans it by name.
  *   The button keeps the reference's gradient, which is depth rather than neon.
@@ -63,12 +72,9 @@ import { locale } from '../lib/locale';
 export function AuthLayout({
   /** Sits under the wordmark on the art side — what this app is. */
   tagline,
-  /** The server address, when it is known. Absent during first-run setup. */
-  serverUrl,
   children,
 }: {
   tagline: string;
-  serverUrl?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -97,7 +103,24 @@ export function AuthLayout({
           the DOM order without swapping the tracks put the card in the `1fr` column
           and handed its 42rem to the art — caught by measuring the rendered box
           (480 px where 672 was intended) rather than by reading the class. */}
-      <div className="mx-auto grid min-h-[100dvh] max-w-[82rem] items-center gap-12 px-6 py-10 lg:grid-cols-[42rem_1fr]">
+      {/*
+        The split engages at `xl` (1280), not `lg` (1024).
+
+        The card track is a fixed 42rem, measured from a 1448 px reference. At `lg` the
+        arithmetic leaves the art column 1024 − 48 (padding) − 672 (card) − 48 (gap) =
+        256 px, and the three-cell strip below has a min-content width larger than that.
+        Flex items do not shrink below min-content, so the track was forced wider and the
+        page scrolled 60 px sideways — at exactly the window size `tauri.conf.json` sets
+        as the MINIMUM, which is to say on the narrowest window a merchant can make and
+        therefore the one most likely to be seen.
+
+        Stacking between 1024 and 1279 is not a fallback: it is the same single-column
+        layout already designed for everything below `lg`, and it reads better than a
+        672 px card wedged beside a 256 px column. `min-w-0` on the art column is the
+        structural half of the fix — it lets the track shrink instead of pushing, so new
+        content in that column cannot silently reintroduce the overflow.
+      */}
+      <div className="mx-auto grid min-h-[100dvh] max-w-[82rem] items-center gap-12 px-6 py-10 xl:grid-cols-[42rem_1fr]">
         {/*
           THE FORM COMES FIRST, and that is a correction.
 
@@ -114,7 +137,7 @@ export function AuthLayout({
           It is also simply better: the form is the thing you act on, and it now sits
           where an RTL reader starts (§6.7 #4).
         */}
-        <div className="order-1 w-full justify-self-center lg:justify-self-start">
+        <div className="order-1 w-full justify-self-center xl:justify-self-start">
           {/* Solid near-white with a barely-there vertical gradient — the reference's
               card samples 254–255 at the top and 249–251 through the body, which is a
               gradient of about 5 levels. Invisible as an effect, and the reason the
@@ -155,7 +178,7 @@ export function AuthLayout({
           wash behind the headline, which is the one part of that illustration we can
           honestly keep, because light is not a picture of anything.
         */}
-        <div className="relative order-2 flex flex-col items-center text-center lg:items-start lg:text-start">
+        <div className="relative order-2 flex min-w-0 flex-col items-center text-center xl:items-start xl:text-start">
           <span
             className="pointer-events-none absolute -start-24 -top-24 -z-10 h-[26rem] w-[26rem] rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.14)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
             aria-hidden
@@ -190,13 +213,7 @@ export function AuthLayout({
           <ul className="mt-9 flex items-stretch gap-0 divide-x divide-x-reverse divide-border">
             <StripItem icon={<BarChart3 size={20} aria-hidden />} label={locale.login.stripReports} />
             <StripItem icon={<ShieldCheck size={20} aria-hidden />} label={locale.login.stripSecure} />
-            {serverUrl ? (
-              <StripItem
-                icon={<Server size={20} aria-hidden />}
-                label={locale.login.stripServer}
-                value={serverUrl}
-              />
-            ) : null}
+            <StripItem icon={<WifiOff size={20} aria-hidden />} label={locale.login.stripOffline} />
           </ul>
         </div>
 
@@ -212,15 +229,7 @@ export function AuthLayout({
  * every KPI tile, and at the head of every page — so it lives in as many places as it
  * can rather than being redrawn per screen.
  */
-function StripItem({
-  icon,
-  label,
-  value,
-}: {
-  icon: ReactNode;
-  label: string;
-  value?: string;
-}) {
+function StripItem({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <li className="flex flex-col items-center gap-2 px-5 first:ps-0 last:pe-0">
       <span
@@ -231,13 +240,6 @@ function StripItem({
       </span>
       {/* Ink for the same measured reason as the tagline above. */}
       <span className="text-xs font-medium leading-tight text-ink">{label}</span>
-      {value ? (
-        // A URL is Latin text inside an RTL page: isolated, or the scheme and the
-        // port change places (§12.27, §12.30).
-        <bdi dir="ltr" className="amount block text-xs text-ink">
-          {value}
-        </bdi>
-      ) : null}
     </li>
   );
 }
