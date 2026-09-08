@@ -23,7 +23,7 @@
 //! it just costs the in-flight request.
 
 use std::ffi::OsString;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -62,9 +62,42 @@ const DESCRIPTION: &str =
     "خدمة Customer loyalty — واجهة البرمجة وقاعدة البيانات المحلية. Local API and SQLite datastore for the Customer loyalty system.";
 
 /// How long a stopping child gets to finish in-flight work before it is terminated.
+/// The database filename each build kind opens. They differ on purpose — see
+/// `Paths::database`. Changing either without changing `apps/api/src/lib/demo-guard.ts`
+/// breaks the runtime guard that checks them.
+const PRODUCTION_DATABASE_NAME: &str = "walaa.db";
+const DEMO_DATABASE_NAME: &str = "walaa-demo.db";
+
+/// What `install_demo_seed_if_absent` did, so the caller can say so in the log.
+enum SeedPlacement {
+    /// The seed was copied into the data directory.
+    Placed(PathBuf),
+    /// A database was already there and was left alone.
+    KeptExisting(PathBuf),
+    /// No seed ships with this build.
+    NotADemoBuild,
+}
+
 const STOP_GRACE: Duration = Duration::from_secs(15);
 /// A child that stayed up this long is considered healthy; the restart backoff resets.
+/// How long a child must survive before a PREVIOUS failure is considered forgiven.
+///
+/// A minute, because the failures worth forgetting are the ones that killed the child
+/// within seconds; something that ran for a minute and then died is a new event, not a
+/// repeat of the old one.
 const HEALTHY_AFTER: Duration = Duration::from_secs(60);
+
+/// How long a child must survive before it is REPORTED as running.
+///
+/// Deliberately not the same number. These answer different questions — "is it up?" and
+/// "has it been up long enough that the last failure no longer counts?" — and sharing
+/// one constant meant `status.json` said "starting" for a full minute after a start
+/// that had already succeeded. Anything reading that file in the meantime, including
+/// the dashboard's own failure screen, saw a product that had not come up yet.
+///
+/// Five seconds is the settle: long enough that a child which dies immediately is not
+/// announced as running, short enough that nobody watches a stale word.
+const RUNNING_AFTER: Duration = Duration::from_secs(5);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// Rotate the API log at this size. A shop runs for years; an unbounded log is a
 /// disk-full outage waiting for a quiet Tuesday.
@@ -127,11 +160,227 @@ impl Paths {
         fs::create_dir_all(&self.logs).map_err(|e| format!("create {}: {e}", self.logs.display()))?;
         Ok(())
     }
+
+    /// The pre-seeded demo database, if this is a demo build.
+    fn demo_seed(&self) -> PathBuf {
+        self.program.join(DEMO_DATABASE_NAME)
+    }
+
+    /// Whether this installation is a demo build.
+    ///
+    /// The shipped seed's presence IS the signal, here and in `spawn_api`. There is no
+    /// separate flag file that could fall out of step with the thing it describes.
+    fn is_demo(&self) -> bool {
+        self.demo_seed().exists()
+    }
+
+    /// The live database the API opens.
+    ///
+    /// ── Why the two builds use different names ───────────────────────────────
+    ///
+    /// They used to share one. The demo shipped its shop as `walaa-demo.db` and then
+    /// configured the API to open `walaa.db`, and `install_demo_seed_if_absent` — which
+    /// declines to overwrite an existing database, correctly — found a `walaa.db` left
+    /// by an earlier install and silently handed it over. The demo spent its whole life
+    /// attached to a database nobody had placed. On the machine where this was caught
+    /// the file was empty; on a merchant's machine it would have been his customers.
+    ///
+    /// Giving each build its own name makes that adoption impossible rather than
+    /// unlikely: a demo build has no code path that opens `walaa.db`, and a production
+    /// build has none that opens `walaa-demo.db`. It also repairs a second bug for
+    /// free — `assertDemoDatabase()` in the API gates the destructive reset on the open
+    /// file's name containing `demo`, which under the old scheme was never true in a
+    /// shipped demo, so the reset control was rendered and could not work.
+    fn database(&self) -> PathBuf {
+        self.data.join(if self.is_demo() {
+            DEMO_DATABASE_NAME
+        } else {
+            PRODUCTION_DATABASE_NAME
+        })
+    }
+
+    /// Places the demo shop on a machine that has never run this before.
+    ///
+    /// **A file copy, not a seed run.** Building the demo shop replays six months of
+    /// trading through the real services and takes about half a minute; doing that on
+    /// first launch would mean the merchant double-clicks the installer's shortcut and
+    /// watches a blank window while it happens. The build already paid that cost, so
+    /// the installer ships the finished `.db` and this copies it into place.
+    ///
+    /// Only ever writes when there is no database at all, so a merchant who has been
+    /// clicking around for a week does not lose it to a service restart. Rebuilding on
+    /// demand is a separate, explicit action — the reset control in the app.
+    fn install_demo_seed_if_absent(&self) -> Result<SeedPlacement, String> {
+        let seed = self.demo_seed();
+        let live = self.database();
+        if !seed.exists() {
+            return Ok(SeedPlacement::NotADemoBuild);
+        }
+        if live.exists() {
+            return Ok(SeedPlacement::KeptExisting(live));
+        }
+        fs::copy(&seed, &live)
+            .map_err(|e| format!("copy demo seed {} -> {}: {e}", seed.display(), live.display()))?;
+        Ok(SeedPlacement::Placed(live))
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────
 //  Logging
 // ─────────────────────────────────────────────────────────────────────────────────
+
+/// How many times an IDENTICAL failure is retried before the supervisor gives up.
+///
+/// Not a generic retry cap — a cap on repeating the *same* failure. A child that dies
+/// with a new reason each time is a machine in trouble and worth retrying; a child that
+/// dies with the identical exit code and the identical sentence five times running is a
+/// configuration or environment fault, and the sixth attempt will fail too.
+///
+/// **The number exists because the alternative did real damage.** With unbounded retry,
+/// a disk-space refusal became a service that reported `Running` to the SCM and
+/// relaunched a doomed child every thirty seconds, indefinitely, while every surface a
+/// person looks at — the service state, the port, the dashboard — showed nothing that
+/// pointed at the cause. A shop machine can sit like that all morning.
+const IDENTICAL_FAILURES_BEFORE_GIVING_UP: u32 = 5;
+
+/// Escapes a sentence for embedding in a JSON string literal.
+fn json_escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 8);
+    for c in input.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' | '\r' | '\t' => out.push(' '),
+            c if (c as u32) < 0x20 => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Writes `status.json` beside the logs.
+///
+/// ── Why a file, and why in the log directory ─────────────────────────────────
+///
+/// The desktop app cannot ask the API why the API is down. Anything served by the API
+/// is unavailable in exactly the situation where the answer is needed, so the answer
+/// has to live somewhere outside its lifetime. A file in the log directory is the
+/// smallest thing that works: no port, no protocol, no second listener to secure — and
+/// the log directory is already the one place the interactive user can read
+/// (`relax_log_directory`).
+///
+/// The app polls this when its health check fails, and renders `reason` verbatim.
+/// `state` is one of `starting`, `running`, `failed`, `terminal`, `stopped`.
+///
+/// ── `port` is here so the dashboard needs no configuration ───────────────────
+///
+/// The manager machine runs its own backend, so asking its owner to type an address
+/// is asking him a question the machine can already answer. The one thing the shell
+/// could not previously discover was the PORT: it is fixed at install time and lives
+/// in `walaa.env`, which `restrict_permissions` locks to SYSTEM and Administrators —
+/// deliberately, because that file holds the JWT signing keys. The interactive user
+/// cannot read it, and must not be able to.
+///
+/// So the service, which runs as SYSTEM and can read it, publishes the port alone into
+/// the one file the logged-on user is already allowed to read. A port number is not a
+/// secret: the firewall rule beside it announces the same number to the whole LAN, and
+/// it is the entirety of what the dashboard needs in order to find its own backend.
+fn write_status(paths: &Paths, state: &str, attempts: u32, reason: Option<&str>) {
+    let _ = fs::create_dir_all(&paths.logs);
+
+    // Hand-rolled JSON: four fields, and no serde in a binary whose whole job is to be
+    // small and boring.
+    let reason_field = match reason {
+        Some(r) => format!("\"{}\"", json_escape(r)),
+        None => "null".to_string(),
+    };
+
+    // The port, or `null`. Never a guess — see `configured_port_opt`.
+    let port_field = match SERVING_PORT.get() {
+        Some(port) => port.to_string(),
+        None => "null".to_string(),
+    };
+
+    let body = format!(
+        "{{\n  \"state\": \"{}\",\n  \"at\": \"{}\",\n  \"attempts\": {},\n  \"port\": {},\n  \"reason\": {}\n}}\n",
+        state,
+        utc_now(),
+        attempts,
+        port_field,
+        reason_field
+    );
+
+    if let Ok(mut file) = File::create(paths.logs.join("status.json")) {
+        let _ = file.write_all(UTF8_BOM);
+        let _ = file.write_all(body.as_bytes());
+    }
+}
+
+/// Reads the reason the API recorded for its own refusal to start.
+///
+/// The API writes `startup-error.json` before exiting (`recordStartupFailure` in
+/// `server.ts`), because it is the only party that knows *why*. The supervisor knows
+/// only that a child exited 1. Lifting that sentence into `status.json` is what puts a
+/// real explanation in front of the merchant instead of an exit code.
+///
+/// A hand-rolled field read rather than a JSON parser: the file is written by us, in a
+/// known shape, and the alternative is a dependency in a binary that deliberately has
+/// almost none.
+fn read_child_startup_error(paths: &Paths) -> Option<String> {
+    let raw = fs::read_to_string(paths.logs.join("startup-error.json")).ok()?;
+    let trimmed = raw.trim_start_matches('\u{feff}');
+
+    let key = "\"reason\"";
+    let start = trimmed.find(key)? + key.len();
+    let after_colon = trimmed[start..].find('"')? + start + 1;
+
+    let mut out = String::new();
+    let mut chars = trimmed[after_colon..].chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next() {
+                Some('n') | Some('r') | Some('t') => out.push(' '),
+                Some(other) => out.push(other),
+                None => break,
+            },
+            '"' => break,
+            other => out.push(other),
+        }
+    }
+
+    if out.trim().is_empty() {
+        None
+    } else {
+        Some(out.trim().to_string())
+    }
+}
+
+/// Clears a stale failure record so a later success cannot show yesterday's reason.
+fn clear_child_startup_error(paths: &Paths) {
+    let _ = fs::remove_file(paths.logs.join("startup-error.json"));
+}
+
+/// The UTF-8 byte-order mark.
+///
+/// Written at the head of every log file this product creates, and it is not
+/// decoration. Windows PowerShell 5.1's `Get-Content` and Notepad both fall back to
+/// the system ANSI code page for a UTF-8 file with no BOM — so the API's Arabic
+/// diagnostics came back as `ØªØ¹Ø°Ù‘Ø±` when the operator finally read them, which
+/// is a log that technically exists and practically does not. Every message this
+/// system writes for a human to read is in Arabic; the BOM is what makes them
+/// readable with the tools a person actually has to hand.
+const UTF8_BOM: &[u8] = &[0xEF, 0xBB, 0xBF];
+
+/// Opens a log file for appending, writing the BOM if the file is new or empty.
+fn open_log(path: &Path) -> Option<File> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path).ok()?;
+    // `len() == 0` covers both a fresh file and one just rotated away — the rotation
+    // renames the old file aside, so the next open lands on an empty one.
+    if file.metadata().map(|m| m.len()).unwrap_or(1) == 0 {
+        let _ = file.write_all(UTF8_BOM);
+    }
+    Some(file)
+}
 
 /// Appends one timestamped line to the host's own log.
 ///
@@ -140,11 +389,7 @@ impl Paths {
 /// never itself fail loudly is the right size of tool.
 fn log_line(logs: &Path, message: &str) {
     let _ = fs::create_dir_all(logs);
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(logs.join("service.log"))
-    {
+    if let Some(mut file) = open_log(&logs.join("service.log")) {
         let _ = writeln!(file, "{} {}", utc_now(), message);
     }
 }
@@ -234,13 +479,65 @@ fn spawn_api(paths: &Paths) -> Result<Child, String> {
         return Err(format!("node runtime missing: {}", node.display()));
     }
 
+    // Before the API opens the file: a demo build carries its shop with it, and the
+    // copy has to land before Prisma creates an empty database in its place.
+    match paths.install_demo_seed_if_absent() {
+        Ok(SeedPlacement::Placed(live)) => log_line(
+            &paths.logs,
+            &format!(
+                "demo database installed from shipped seed: {} -> {}",
+                paths.demo_seed().display(),
+                live.display()
+            ),
+        ),
+        // Named rather than silent. The whole demo-adopts-a-stranger's-database defect
+        // was one unlogged early return, so whichever branch runs, the log says which
+        // file the API is about to open and why.
+        Ok(SeedPlacement::KeptExisting(live)) => log_line(
+            &paths.logs,
+            &format!(
+                "demo database already present, keeping it: {} (seed {} not copied)",
+                live.display(),
+                paths.demo_seed().display()
+            ),
+        ),
+        Ok(SeedPlacement::NotADemoBuild) => {}
+        Err(error) => log_line(&paths.logs, &format!("demo seed copy failed: {error}")),
+    }
+
+    /*
+      A database belonging to the OTHER build kind, sitting in this build's data
+      directory.
+
+      It is never opened — `Paths::database()` cannot name it — so this is not a
+      correctness problem. It is logged because "silently inherited" is the exact
+      failure this whole area is being repaired for, and an unexplained 5 MB file in
+      the data directory is something a support call should be able to see accounted
+      for rather than discover and wonder about. Left in place, not deleted: it is not
+      this build's file, and deleting a database nobody asked us to delete is a worse
+      mistake than leaving one.
+    */
+    let stray = paths.data.join(if paths.is_demo() {
+        PRODUCTION_DATABASE_NAME
+    } else {
+        DEMO_DATABASE_NAME
+    });
+    if stray.exists() {
+        log_line(
+            &paths.logs,
+            &format!(
+                "ignoring {} — it belongs to the other build kind and is never opened",
+                stray.display()
+            ),
+        );
+    }
+
     let api_log = paths.logs.join("api.log");
     rotate_if_large(&api_log);
-    let out = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&api_log)
-        .map_err(|e| format!("open {}: {e}", api_log.display()))?;
+    // Through `open_log`, so node's Arabic stack traces are readable in PowerShell and
+    // Notepad rather than mojibake.
+    let out = open_log(&api_log)
+        .ok_or_else(|| format!("open {}", api_log.display()))?;
     let err = out.try_clone().map_err(|e| format!("clone log handle: {e}"))?;
 
     Command::new(node)
@@ -251,6 +548,13 @@ fn spawn_api(paths: &Paths) -> Result<Child, String> {
         .env("WALAA_ENV_FILE", &paths.env_file)
         .env("WALAA_MIGRATIONS_DIR", &paths.migrations)
         .env("WALAA_SUPERVISED", "1")
+        // Demo builds ship the seed database beside the service. Its presence IS the
+        // signal — there is no separate flag file to fall out of step with it, and a
+        // production install has no such file to find.
+        .env(
+            "WALAA_DEMO",
+            if paths.demo_seed().exists() { "1" } else { "0" },
+        )
         .stdin(Stdio::piped())
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(err))
@@ -287,13 +591,56 @@ fn stop_child(child: &mut Child, paths: &Paths) {
 }
 
 /// Keeps the API running until `stop` fires. Returns when the stop is complete.
+///
+/// ── Bounded retry, and a written reason ──────────────────────────────────────
+///
+/// This used to retry forever and say nothing anybody could read. When the API refused
+/// to start — correctly, with a precise Arabic explanation — the result was a service
+/// reporting `Running` to the SCM, no listener on the port, a doomed child relaunched
+/// every thirty seconds, and a dashboard saying "check the connection to the server".
+/// The explanation existed the whole time, in a file locked to SYSTEM.
+///
+/// Two changes close that:
+///
+///   1. **The reason is published.** After each death the supervisor lifts the child's
+///      own `startup-error.json` into `status.json`, in the one directory the
+///      interactive user can read. The desktop app renders it verbatim.
+///   2. **Identical failures are bounded.** Five deaths with the same signature and the
+///      supervisor stops, records `terminal`, and waits for a stop rather than churning.
+///      A *different* failure each time resets the count — that is a machine in trouble,
+///      not a fixed fault, and it is worth continuing to retry.
 fn supervise(paths: &Paths, stop: Receiver<()>) {
+    /*
+      The port, resolved once and published with every status write.
+
+      This is what lets the manager dashboard find its own backend without anybody
+      typing an address: the service account can read `walaa.env`, the logged-on user
+      cannot, and `status.json` in the log directory is the one file that crosses that
+      boundary. `console` has already recorded its `--port` by the time it gets here,
+      and `OnceLock` keeps that authoritative value rather than re-reading a file.
+    */
+    if let Some(port) = configured_port_opt(paths) {
+        remember_serving_port(port);
+    }
+
     let mut backoff = Duration::from_secs(2);
     let api_log = paths.logs.join("api.log");
     let mut last_log_check = Instant::now();
 
+    // The signature of the previous failure, and how many times it has repeated.
+    let mut last_signature: Option<String> = None;
+    let mut identical: u32 = 0;
+    // Whether THIS attempt has already been declared running. Reset per attempt below.
+    let mut announced_healthy;
+
     loop {
         let started = Instant::now();
+        announced_healthy = false;
+
+        // A fresh attempt must not inherit the previous attempt's explanation.
+        clear_child_startup_error(paths);
+        write_status(paths, "starting", identical, None);
+
         let mut child = match spawn_api(paths) {
             Ok(child) => {
                 log_line(&paths.logs, &format!("api started (pid {})", child.id()));
@@ -301,6 +648,8 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
             }
             Err(error) => {
                 log_line(&paths.logs, &format!("failed to start api: {error}"));
+                write_status(paths, "failed", identical + 1, Some(&error));
+
                 // A missing runtime will not fix itself, but a locked log file might;
                 // back off and keep trying rather than leaving the shop with a dead
                 // service and no explanation.
@@ -314,10 +663,14 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
         };
 
         // Wait for either a stop request or the child dying.
+        // Bound by the loop below, which only leaves via `break` with a value or via
+        // `return`. Declared without an initialiser so the compiler proves that.
+        let exit_status: String;
         loop {
             match stop.recv_timeout(Duration::from_millis(250)) {
                 Ok(()) | Err(RecvTimeoutError::Disconnected) => {
                     stop_child(&mut child, paths);
+                    write_status(paths, "stopped", 0, None);
                     return;
                 }
                 Err(RecvTimeoutError::Timeout) => {}
@@ -328,23 +681,86 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
                 last_log_check = Instant::now();
             }
 
+            /*
+              A child that has been up long enough to be healthy says so, once.
+
+              The `identical != 0` condition used to guard this whole block, which meant
+              a first start that simply worked never announced itself: `identical` is 0
+              on the happy path, so `status.json` sat at "starting" for as long as the
+              shop stayed open. Anyone reading that file — the dashboard's failure
+              screen, or whoever is on a support call — would conclude the API had never
+              come up, while it was serving perfectly.
+
+              The counter reset still belongs behind that condition; the announcement
+              does not.
+            */
+            if started.elapsed() >= RUNNING_AFTER && !announced_healthy {
+                announced_healthy = true;
+                write_status(paths, "running", 0, None);
+            }
+
+            // Separately, and later: a child that has stayed up this long clears the
+            // record of whatever killed the previous one.
+            if started.elapsed() >= HEALTHY_AFTER && identical != 0 {
+                identical = 0;
+                last_signature = None;
+            }
+
             match child.try_wait() {
                 Ok(Some(status)) => {
                     log_line(&paths.logs, &format!("api exited unexpectedly: {status}"));
+                    exit_status = status.to_string();
                     break;
                 }
                 Ok(None) => {}
                 Err(error) => {
                     log_line(&paths.logs, &format!("try_wait failed: {error}"));
+                    exit_status = format!("try_wait failed: {error}");
                     break;
                 }
             }
         }
 
-        if started.elapsed() >= HEALTHY_AFTER {
-            backoff = Duration::from_secs(2);
+        // The child's own explanation, if it managed to leave one. This is the whole
+        // point of the exercise: an exit code tells a merchant nothing, and the API
+        // already writes a sentence that tells him exactly what to do.
+        let reason = read_child_startup_error(paths);
+        let signature = format!("{}|{}", exit_status, reason.clone().unwrap_or_default());
+
+        if Some(&signature) == last_signature.as_ref() {
+            identical += 1;
+        } else {
+            identical = 1;
+            last_signature = Some(signature);
         }
 
+        if started.elapsed() >= HEALTHY_AFTER {
+            // It ran long enough to count as healthy before dying: treat this as a new
+            // fault rather than a repeat, and reset the backoff.
+            backoff = Duration::from_secs(2);
+            identical = 1;
+        }
+
+        if identical >= IDENTICAL_FAILURES_BEFORE_GIVING_UP {
+            let detail = reason.clone().unwrap_or_else(|| exit_status.clone());
+            log_line(
+                &paths.logs,
+                &format!(
+                    "api failed {identical} times with the same error — giving up. {detail}"
+                ),
+            );
+            write_status(paths, "terminal", identical, Some(&detail));
+
+            // Park until asked to stop. Deliberately not exiting the process: the SCM
+            // would restart the service and the loop would begin again, which is the
+            // behaviour being removed. Staying up keeps `status.json` accurate and the
+            // service controllable.
+            match stop.recv() {
+                Ok(()) | Err(_) => return,
+            }
+        }
+
+        write_status(paths, "failed", identical, reason.as_deref());
         log_line(
             &paths.logs,
             &format!("restarting api in {} seconds", backoff.as_secs()),
@@ -375,6 +791,11 @@ fn service_main(_arguments: Vec<OsString>) {
 
 fn run_service(paths: &Paths) -> Result<(), windows_service::Error> {
     paths.ensure_directories().ok();
+    // Re-applied on every start, not only at install: machines already in the field
+    // have a log directory locked by the old rule, and they are precisely the ones
+    // where somebody is about to need to read it. Cheap, idempotent, and it repairs
+    // an installation without a reinstall.
+    relax_log_directory(&paths.logs);
     log_line(&paths.logs, "service starting");
 
     let (stop_tx, stop_rx) = mpsc::channel();
@@ -440,7 +861,59 @@ fn random_secret() -> String {
 /// rotating `QR_TOKEN_SECRET` would invalidate every loyalty card already printed.
 fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
     if paths.env_file.exists() {
-        return Ok(false);
+        /*
+          ── An existing configuration this process cannot read ───────────────────
+
+          A demo build once ran the production ACL lockdown on a per-user install,
+          leaving `walaa.env` owned by SYSTEM and Administrators inside the user's own
+          profile. Every later launch then did the worst possible thing: saw the file,
+          declined to rewrite it, and handed the API a configuration it could not open.
+          The API died on env validation, the merchant saw a product that would not
+          start, and the file could not be deleted without elevation — so the machine
+          never recovered on its own.
+
+          The rule that protects the file is right and stays: `QR_TOKEN_SECRET` must
+          never be regenerated, because rotating it invalidates every loyalty card
+          already printed. But that rule protects a file we can READ. One we cannot is
+          not a configuration at all, and keeping it costs the whole product.
+
+          So: demo only, and only when it is genuinely unreadable, the file is replaced.
+          A demo has no printed cards to invalidate and its sessions are worthless. A
+          production install is never touched — there, an unreadable `walaa.env` is a
+          real operator problem and silently minting new signing keys would be a far
+          worse answer than refusing with a clear one.
+        */
+        if let Err(error) = fs::read_to_string(&paths.env_file) {
+            if !paths.is_demo() {
+                return Err(format!(
+                    "cannot read {}: {error}. The API cannot start without it.                      Fix the file's permissions, or delete it to have a new one generated                      (this rotates the QR token secret and invalidates printed cards).",
+                    paths.env_file.display()
+                ));
+            }
+
+            log_line(
+                &paths.logs,
+                &format!(
+                    "cannot read {}: {error} — replacing it (demo build)",
+                    paths.env_file.display()
+                ),
+            );
+
+            // Deleting a file whose own ACL denies us still succeeds when the parent
+            // directory grants FILE_DELETE_CHILD, which it does when the app created
+            // it. If even that fails there is nothing this process can do, and saying
+            // so precisely is worth more than a generic failure downstream.
+            if let Err(remove) = fs::remove_file(&paths.env_file) {
+                return Err(format!(
+                    "الملف «{}» غير قابل للقراءة ولا للحذف من هذا الحساب ({remove}).                      أغلق البرنامج، احذف هذا الملف يدوياً بصلاحيات المدير، ثم افتح البرنامج من جديد.",
+                    paths.env_file.display()
+                ));
+            }
+            // Fall through and write a fresh one.
+        } else {
+            repair_database_url(paths);
+            return Ok(false);
+        }
     }
 
     let template_path = paths.program.join("walaa.env.template");
@@ -448,6 +921,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         .map_err(|e| format!("read {}: {e}", template_path.display()))?;
 
     let mut contents = template
+        .replace("{{DATABASE_FILE}}", &forward_slashes(&paths.database()))
         .replace("{{DATA_DIR}}", &paths.data.display().to_string().replace('\\', "/"))
         .replace("{{JWT_ACCESS_SECRET}}", &random_secret())
         .replace("{{JWT_REFRESH_SECRET}}", &random_secret())
@@ -460,8 +934,135 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
     fs::write(&paths.env_file, contents)
         .map_err(|e| format!("write {}: {e}", paths.env_file.display()))?;
 
-    restrict_permissions(&paths.env_file);
+    /*
+      ── Locking the file down is right for a service and wrong for a demo ──────
+
+      `restrict_permissions` strips inheritance and grants only SYSTEM and
+      Administrators. That is correct for a production install, where the API runs as
+      LocalSystem and the file holds the JWT signing keys and the QR token secret:
+      anybody who can read them can mint a valid staff token on the shop's network.
+
+      Applied to a per-user demo it locks the application out of its own
+      configuration. The demo's API runs as the logged-on user, not SYSTEM, so after
+      this call the process could not read the file it had just written — the env
+      validator reported `DATABASE_URL: Required` against a file sitting right there,
+      1006 bytes, fully populated. A hardening step calibrated for one deployment
+      shape, applied unconditionally to another.
+
+      It is also unnecessary there: the file lives under `%LOCALAPPDATA%`, inside the
+      user's own profile, which other standard users cannot read anyway. The ACL
+      surgery bought nothing and cost the product its ability to start at all.
+    */
+    if paths.is_demo() {
+        println!("  permissions:   left to the user profile (per-user install)");
+    } else {
+        restrict_permissions(&paths.env_file);
+    }
     Ok(true)
+}
+
+/// Writes paths the way SQLite's `file:` URL wants them, on a platform that does not.
+fn forward_slashes(path: &Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
+/// Points an EXISTING `walaa.env` at the database this build actually opens.
+///
+/// ── Why an upgrade has to touch a file that is otherwise never rewritten ─────
+///
+/// `ensure_env_file` refuses to overwrite an existing configuration, and that rule is
+/// load-bearing: regenerating `QR_TOKEN_SECRET` would invalidate every loyalty card
+/// already printed. But the demo and production builds now open differently-named
+/// databases, and a machine carrying an older `walaa.env` has the old single name
+/// baked into it. Left alone, that install would come up, hit the runtime guard, and
+/// refuse to start — technically correct and useless to the merchant.
+///
+/// So exactly one line is rewritten, only when it disagrees, and the change is logged.
+/// The secrets are not touched, which is the property that mattered.
+fn repair_database_url(paths: &Paths) {
+    let text = match fs::read_to_string(&paths.env_file) {
+        Ok(text) => text,
+        Err(error) => {
+            /*
+              An existing configuration this process cannot read.
+
+              Previously a silent early return, which is the "silently inherited"
+              failure in miniature: the file is there, so `ensure_env_file` declines to
+              rewrite it, and nothing else looks at it — the API then fails validation
+              on variables that are present but unreadable, and no surface says why.
+              A machine in that state never recovers on its own.
+
+              It is reachable in practice: a per-user demo installed over a data
+              directory whose `walaa.env` was locked to SYSTEM by an earlier build.
+            */
+            log_line(
+                &paths.logs,
+                &format!(
+                    "cannot read {}: {error} — the API will not be able to read it either.                      Delete the file and restart to have it regenerated.",
+                    paths.env_file.display()
+                ),
+            );
+            return;
+        }
+    };
+    let wanted = format!("DATABASE_URL=\"file:{}\"", forward_slashes(&paths.database()));
+
+    let mut changed = false;
+    let repaired: Vec<String> = text
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("DATABASE_URL=") && line.trim() != wanted {
+                changed = true;
+                wanted.clone()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+
+    if !changed {
+        return;
+    }
+    if fs::write(&paths.env_file, repaired.join("\r\n") + "\r\n").is_ok() {
+        log_line(
+            &paths.logs,
+            &format!(
+                "configuration updated: DATABASE_URL now points at {}",
+                paths.database().display()
+            ),
+        );
+    }
+}
+
+/// Rewrites `API_PORT` in an existing configuration.
+///
+/// A service installation fixes its port once, at install time, and opens a firewall
+/// rule for it. The demo has neither: it is per-user, it cannot write a firewall rule
+/// without elevation, and the port it used yesterday may belong to something else
+/// today. So the launcher picks a free one at every start and this records it, so the
+/// API and whoever asks `configured_port` are reading the same number.
+fn set_configured_port(paths: &Paths, port: u16) {
+    let Ok(text) = fs::read_to_string(&paths.env_file) else {
+        return;
+    };
+    let wanted = format!("API_PORT={port}");
+
+    let mut changed = false;
+    let repaired: Vec<String> = text
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("API_PORT=") && line.trim() != wanted {
+                changed = true;
+                wanted.clone()
+            } else {
+                line.to_string()
+            }
+        })
+        .collect();
+
+    if changed {
+        let _ = fs::write(&paths.env_file, repaired.join("\r\n") + "\r\n");
+    }
 }
 
 /// Locks the whole data directory to SYSTEM and Administrators.
@@ -474,10 +1075,15 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
 /// it carefully.
 ///
 /// Removing inheritance on the directory re-propagates to existing children, so this
-/// covers `walaa.db`, its WAL sidecars, and the logs — which can carry a request
-/// payload in an error. The service account is SYSTEM and the dashboard reaches its
-/// data over HTTP, so no other identity needs access. Reading the logs during support
-/// therefore needs an elevated prompt, which whoever installed the software has.
+/// covers `walaa.db` and its WAL sidecars. The service account is SYSTEM and the
+/// dashboard reaches its data over HTTP, so no other identity needs access to those.
+///
+/// **The logs are deliberately exempted — see `relax_log_directory`.** They used to be
+/// swept up by this lockdown, on the argument that a log can carry a request payload.
+/// That argument protects the DATABASE; applied to the logs it produced a shop whose
+/// owner cannot read why his own software failed, and a support call that cannot
+/// either. The correct split is: the data stays locked, the logs become readable, and
+/// nothing that identifies a customer is ever written to them in the first place.
 fn restrict_directory(path: &Path) {
     let result = Command::new("icacls")
         .arg(path)
@@ -497,6 +1103,60 @@ fn restrict_directory(path: &Path) {
         }
         Ok(output) => eprintln!(
             "warning: could not restrict {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
+        Err(error) => eprintln!("warning: could not run icacls: {error}"),
+    }
+}
+
+/// Grants the interactive user read access to the log directory.
+///
+/// ── Why this is a separate, deliberate hole in the lockdown ──────────────────
+///
+/// `restrict_directory` locks `%PROGRAMDATA%\Walaa` to SYSTEM and Administrators
+/// because the database in it holds every customer's phone number. The logs inherited
+/// that, and the consequence only became visible when this software failed on the
+/// operator's own machine: the service was running, nothing was listening, and
+/// **neither he nor anyone helping him could read a single line explaining why.**
+/// Diagnosing it needed an elevated prompt on a machine whose owner may not have one,
+/// in a shop, at the till, with a queue.
+///
+/// A log nobody can read is not a safety feature. So the two concerns are separated:
+///
+///   - the database, the WAL sidecars and `walaa.env` stay SYSTEM + Administrators
+///   - `logs\` gets `INTERACTIVE` **read and execute** — no write, so a log cannot be
+///     tampered with to hide something, only read
+///
+/// `S-1-5-4` (INTERACTIVE) rather than `Users`: it grants to whoever is physically
+/// logged on at the machine, which is exactly the person who needs it, and not to a
+/// service account or a remote session.
+///
+/// **This is only safe because of what is NOT in the logs.** `service.log` carries
+/// exit statuses, PIDs and filesystem paths. `api.log` carries request lines whose
+/// query values are redacted by `REDACTED_QUERY_PARAMS` in `app.ts` — added in the
+/// same change as this one, after an audit found that every customer phone lookup was
+/// being written out verbatim. If a future change logs a name, a phone or a secret,
+/// this grant becomes a disclosure. The audit comes first; the permission second.
+fn relax_log_directory(path: &Path) {
+    let result = Command::new("icacls")
+        .arg(path)
+        .args([
+            "/grant:r",
+            "*S-1-5-4:(OI)(CI)(RX)", // INTERACTIVE — whoever is logged on at the machine
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+
+    match result {
+        Ok(output) if output.status.success() => {
+            println!(
+                "  permissions:   {} readable by the logged-on user (read only)",
+                path.display()
+            );
+        }
+        Ok(output) => eprintln!(
+            "warning: could not relax {}: {}",
             path.display(),
             String::from_utf8_lossy(&output.stderr).trim()
         ),
@@ -534,19 +1194,47 @@ fn restrict_permissions(path: &Path) {
     }
 }
 
+/// The port the API is actually being served on, once anything knows it.
+///
+/// Published by `write_status` so the manager dashboard can find its own backend with
+/// nothing configured. Deliberately a `OnceLock` rather than a recomputation: the port
+/// is fixed for the life of the process, and reading it from a file on every status
+/// write would reintroduce exactly the failure this closes — a status file that
+/// disagrees with the port the API bound.
+static SERVING_PORT: OnceLock<u16> = OnceLock::new();
+
+/// Records the port the API is being run on. First writer wins.
+fn remember_serving_port(port: u16) {
+    let _ = SERVING_PORT.set(port);
+}
+
+/// `API_PORT` from the configuration, or `None` when it cannot be read.
+///
+/// ── Why this exists separately from `configured_port` ────────────────────────
+///
+/// `configured_port` substitutes 4000 when the file cannot be read, because its caller
+/// — the firewall rule — must open *some* port and the template's default is the best
+/// available guess. Publishing that same guess to the dashboard would be strictly
+/// worse than publishing nothing: the app would connect to a port the API is not
+/// listening on and report a dead backend, which is a confident wrong answer in a
+/// place where "I do not know" is a correct one and produces the right next step.
+///
+/// The file being unreadable is not hypothetical. `restrict_permissions` locks
+/// `walaa.env` to SYSTEM and Administrators because it holds the JWT signing keys, so
+/// any caller that is not the service account reads nothing here.
+fn configured_port_opt(paths: &Paths) -> Option<u16> {
+    fs::read_to_string(&paths.env_file).ok().and_then(|text| {
+        text.lines()
+            .map(str::trim)
+            .find_map(|line| line.strip_prefix("API_PORT="))
+            .and_then(|value| value.trim().trim_matches('"').parse().ok())
+    })
+}
+
 /// Reads `API_PORT` back out of the configuration, so the firewall rule always
 /// matches what the service will actually listen on.
 fn configured_port(paths: &Paths, fallback: Option<u16>) -> u16 {
-    fs::read_to_string(&paths.env_file)
-        .ok()
-        .and_then(|text| {
-            text.lines()
-                .map(str::trim)
-                .find_map(|line| line.strip_prefix("API_PORT="))
-                .and_then(|value| value.trim().trim_matches('"').parse().ok())
-        })
-        .or(fallback)
-        .unwrap_or(4000)
+    configured_port_opt(paths).or(fallback).unwrap_or(4000)
 }
 
 /// Opens the API port for the local network.
@@ -613,9 +1301,13 @@ fn install(paths: &Paths, port: Option<u16>, delayed: bool) -> Result<(), String
     // on the caller's token for no benefit — the configuration file carries its own
     // explicit ACL from the moment it is created, so nothing is exposed by this order.
     //
-    // Everything created here afterwards inherits the lockdown: the database, its WAL
-    // sidecars, and the logs.
+    // Everything created here afterwards inherits the lockdown: the database and its
+    // WAL sidecars.
     restrict_directory(&paths.data);
+    // …except the logs, which are opened back up immediately. Order matters: the
+    // lockdown strips inheritance across the whole tree, so the grant has to follow it.
+    let _ = fs::create_dir_all(&paths.logs);
+    relax_log_directory(&paths.logs);
 
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CREATE_SERVICE)
         .map_err(|e| format!("open service manager (run as Administrator): {e}"))?;
@@ -848,9 +1540,39 @@ fn main() {
                 eprintln!("error: {error}");
                 std::process::exit(1);
             }
+
+            /*
+              ── Console mode is the demo build's launcher, not just a diagnostic ──
+
+              The demo runs the API under the app instead of under the Service Control
+              Manager, because a per-user install must not need UAC and cannot register
+              a service. What it must NOT do is run a second, simpler supervisor: the
+              whole point of exercising the demo is to exercise what the merchant's real
+              install does, and two supervisors would mean the demo proves nothing about
+              production. So both launchers converge on `supervise()` below, and this
+              arm's only extra job is the provisioning the SCM path gets from `install`.
+
+              `--port` is honoured and REWRITTEN on every launch here, unlike a service
+              installation where the port is fixed at install time. A per-user demo has
+              no reserved port and no firewall rule; it takes whatever is free when the
+              merchant opens it.
+            */
+            if let Err(error) = ensure_env_file(&paths, port) {
+                eprintln!("error: {error}");
+                std::process::exit(1);
+            }
+            if let Some(port) = port {
+                set_configured_port(&paths, port);
+                // Authoritative, and recorded before `supervise` falls back to reading
+                // the file: this launcher chose the number, so it need not re-derive it
+                // from a file it may not be able to read.
+                remember_serving_port(port);
+            }
+
             println!("  running in the foreground. Ctrl+C to stop.");
             println!("  data: {}", paths.data.display());
             println!("  logs: {}", paths.logs.display());
+            println!("  port: {}", configured_port(&paths, port));
 
             let (stop_tx, stop_rx) = mpsc::channel();
             ctrlc_handler(stop_tx);
