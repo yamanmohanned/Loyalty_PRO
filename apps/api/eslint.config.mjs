@@ -19,6 +19,8 @@ export default [
     for a service whose logging goes through pino and wrong for a command whose contract
     is what it writes to a terminal.
   */
-  { files: ['drills/**/*.mjs'], rules: { 'no-console': 'off' } },
   ...baseConfig(),
+  // AFTER `baseConfig`, deliberately: in flat config the later entry wins, and placed
+  // before it this override was silently overwritten by the base rule it exists to relax.
+  { files: ['drills/**/*.mjs'], rules: { 'no-console': 'off' } },
 ];

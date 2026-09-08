@@ -1,0 +1,152 @@
+[
+  {
+    "name": "overview-fold-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "overview-full-1440",
+    "w": 2880,
+    "h": 5408
+  },
+  {
+    "name": "overview-fold-1366",
+    "w": 2732,
+    "h": 1800
+  },
+  {
+    "name": "overview-full-1366",
+    "w": 2732,
+    "h": 5408
+  },
+  {
+    "name": "overview-fold-1280",
+    "w": 2560,
+    "h": 1800
+  },
+  {
+    "name": "overview-full-1280",
+    "w": 2560,
+    "h": 5818
+  },
+  {
+    "name": "overview-fold-1024",
+    "w": 2048,
+    "h": 1800
+  },
+  {
+    "name": "overview-full-1024",
+    "w": 2048,
+    "h": 8944
+  },
+  {
+    "name": "sidebar-expanded-1440",
+    "w": 576,
+    "h": 1800
+  },
+  {
+    "name": "sidebar-expanded-1366",
+    "w": 576,
+    "h": 1800
+  },
+  {
+    "name": "sidebar-expanded-1280",
+    "w": 576,
+    "h": 1800
+  },
+  {
+    "name": "sidebar-rail-1279",
+    "w": 152,
+    "h": 1800
+  },
+  {
+    "name": "sidebar-rail-1200",
+    "w": 152,
+    "h": 1800
+  },
+  {
+    "name": "sidebar-rail-1024",
+    "w": 152,
+    "h": 1800
+  },
+  {
+    "name": "header-1440",
+    "w": 2224,
+    "h": 198
+  },
+  {
+    "name": "kpi-row-1440",
+    "w": 2216,
+    "h": 486
+  },
+  {
+    "name": "bidi-deltas-1440",
+    "w": 2216,
+    "h": 486
+  },
+  {
+    "name": "attribution-donut-1440",
+    "w": 852,
+    "h": 862
+  },
+  {
+    "name": "sales-chart-tooltip-1440",
+    "w": 1346,
+    "h": 862
+  },
+  {
+    "name": "top-customers-1440",
+    "w": 980,
+    "h": 1282
+  },
+  {
+    "name": "activity-cards-1440",
+    "w": 2216,
+    "h": 242
+  },
+  {
+    "name": "table-hover-1440",
+    "w": 2208,
+    "h": 1572
+  },
+  {
+    "name": "state-focus-ring-1440",
+    "w": 2384,
+    "h": 186
+  },
+  {
+    "name": "state-loading-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "state-empty-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "state-error-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "reports-full-1440",
+    "w": 2880,
+    "h": 5968
+  },
+  {
+    "name": "customers-fold-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "cards-fold-1440",
+    "w": 2880,
+    "h": 1800
+  },
+  {
+    "name": "discounts-fold-1440",
+    "w": 2880,
+    "h": 1800
+  }
+]

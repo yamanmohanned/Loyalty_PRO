@@ -12,4 +12,4 @@
  * build if this and `package.json` disagree. A constant nobody verifies is how a
  * compatibility check ends up comparing a number that stopped being true.
  */
-export const API_VERSION = '0.1.1-preview';
+export const API_VERSION = '0.2.0';
