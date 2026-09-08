@@ -10,6 +10,7 @@ import {
 } from '@walaa/shared-types';
 import { forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { lookupCard } from './card.service';
 import {
@@ -396,7 +397,7 @@ export async function scanCard(
     computation.discountValue,
   );
 
-  const result = await prisma.$transaction(async (db) => {
+  const result = await writeTransaction(async (db) => {
     // Claim the invoice conditionally: `customerId: null` in the WHERE means two
     // simultaneous scans cannot both attribute the same capture. The loser sees
     // count 0 and is handled below.

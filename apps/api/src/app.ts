@@ -3,6 +3,8 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { loadEnv } from './config/env';
+import { API_VERSION } from './config/version';
+import { isDemoBuild } from './lib/demo-guard';
 import { prisma } from './lib/prisma';
 import { auth } from './plugins/auth';
 import { registerErrorHandler } from './plugins/error-handler';
@@ -11,6 +13,7 @@ import { registerRealtime } from './plugins/realtime';
 import { registerStation } from './plugins/station';
 import { authRoutes } from './routes/auth.routes';
 import { backupRoutes } from './routes/backup.routes';
+import { backupDriveRoutes } from './routes/backup-drive.routes';
 import { cardRoutes, customerCardRoutes } from './routes/cards.routes';
 import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
@@ -35,21 +38,96 @@ export const API_PREFIX = '/api/v1';
  * ends up: Fastify's request log records `req.url`, so every reconnect wrote a live
  * bearer token in cleartext into `api.log`, on the same volume as the database, readable
  * by anyone who can read the data directory. Found by reading the service's own log
- * during the free-space work.
+ * during the free-space work. The customer-phone leak below was found the same way,
+ * during the log-permissions audit — see `LOGGABLE_QUERY_PARAMS`.
  *
  * Fifteen minutes of validity is not "safe"; it is fifteen minutes during which anything
  * that can read a log file holds a session. The redaction is here, in the serializer,
  * rather than in `redact` paths, because the whole URL is worth keeping — a support call
  * needs to see which endpoint was called.
  */
+/**
+ * Query parameters whose value is safe to log. **Everything else is redacted.**
+ *
+ * ── Why this is an allowlist, and why the denylist had to go ─────────────────
+ *
+ * This was a denylist: `token`, `query`, `identifier`, `phone`, `q`. It was assembled
+ * correctly — each entry was added after finding a real leak — and that is precisely
+ * the problem with it. A denylist is a record of the leaks somebody has already
+ * noticed. It says nothing about the next route, and the next route is written by
+ * whoever is in a hurry.
+ *
+ * The failure mode is silent and permanent: add `GET /customers?mobile=07701234567`
+ * and every request writes a phone number into `api.log` forever, with no error, no
+ * test failure, and nothing on any screen. The only way anyone finds out is by reading
+ * the log — which is how all five denylist entries were found, one at a time.
+ *
+ * Inverting it changes what a mistake costs. Forgetting to allowlist a harmless
+ * parameter makes a log line slightly less useful; forgetting to denylist a sensitive
+ * one discloses a customer's phone number. The first is recoverable by reading this
+ * file; the second is not recoverable at all.
+ *
+ * **What is on the list, and why each is safe.** Paging and sorting take enumerated or
+ * numeric values. Date ranges are dates. `range` and `period` are fixed vocabularies.
+ * None can carry a phone number, a name, a card token or a bearer token — and if one
+ * ever could, it does not belong here.
+ *
+ * The PATH is always kept: a support call needs to know which endpoint was called, and
+ * the endpoint is not the secret.
+ */
+const LOGGABLE_QUERY_PARAMS = new Set([
+  // Paging.
+  'page',
+  'perPage',
+  'limit',
+  'offset',
+  'cursor',
+  // Ordering.
+  'sort',
+  'order',
+  'direction',
+  // Windows over time — dates and fixed vocabularies, never free text.
+  'from',
+  'to',
+  'range',
+  'period',
+  'periodKey',
+  'month',
+  'year',
+  // Enumerated filters. Each is a closed set defined by a Zod enum at the boundary.
+  'status',
+  'category',
+  'role',
+  'mode',
+  'state',
+  'type',
+  'format',
+]);
+
+/**
+ * Replaces every query value except the explicitly safe ones.
+ *
+ * Note it rewrites the query even when nothing looks sensitive: the old version
+ * returned the URL untouched unless it recognised a bad parameter, which is the
+ * denylist assumption expressed as a fast path. Under an allowlist there is no such
+ * thing as "nothing to do" — an unrecognised parameter is exactly the case that must
+ * not pass through.
+ */
 export function redactUrlToken(url: string): string {
   const separator = url.indexOf('?');
   if (separator === -1) return url;
 
   const query = new URLSearchParams(url.slice(separator + 1));
-  if (!query.has('token')) return url;
 
-  query.set('token', '[redacted]');
+  let touched = false;
+  for (const name of [...query.keys()]) {
+    if (!LOGGABLE_QUERY_PARAMS.has(name)) {
+      query.set(name, '[redacted]');
+      touched = true;
+    }
+  }
+  if (!touched) return url;
+
   return `${url.slice(0, separator)}?${query.toString()}`;
 }
 
@@ -108,7 +186,24 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // Trust the proxy so rate limiting keys on the real client IP behind a load
     // balancer rather than on the balancer itself.
     trustProxy: true,
-    disableRequestLogging: env.NODE_ENV === 'test',
+    /*
+      Passed ONLY in test, and that is what silences FSTDEP023 in production.
+
+      Fastify 5 warns on the top-level `disableRequestLogging` and removes it in 6, so
+      the printed advice is to move to `logController`. That is not a drop-in: the
+      `LogController` type requires all ten of its members, and hand-rolling nine of
+      them to change one is a much larger surface to get wrong than the warning is
+      worth.
+
+      The warning fires whenever the option is PRESENT, whatever its value — and the
+      only place it needs to be present is the test suite, which turns request logging
+      off so unrelated tests do not drown in it. Omitting it in production removes the
+      warning from every merchant's startup log, which was the actual complaint: three
+      lines of deprecation notice above the reason the service died.
+
+      Revisit at Fastify 6, when `logController` becomes the only option.
+    */
+    ...(env.NODE_ENV === 'test' ? { disableRequestLogging: true } : {}),
     bodyLimit: 1_048_576, // 1 MiB — a sync batch of 100 operations fits comfortably
   });
 
@@ -200,10 +295,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   // for the same reason: its routes opt out explicitly rather than by accident.
   await registerStation(app);
 
-  // Liveness/readiness. Public by necessity — a probe carries no token.
+  /*
+    Liveness/readiness. Public by necessity — a probe carries no token.
+
+    `version` and `demo` are here because «تغيير الخادم» has to tell four failures
+    apart, and two of them are only visible from this response: an address that answers
+    but is not this product (`service`), and one that is this product at a version the
+    dashboard cannot talk to (`version`). Without them the screen could only say
+    "could not connect", which is the same generic non-answer being removed everywhere
+    else. `demo` lets a merchant's real dashboard refuse a demo backend out loud rather
+    than silently showing him a fake shop.
+
+    Deliberately no build hash, hostname or path: this is the one unauthenticated
+    endpoint, and it should disclose exactly what a client needs to decide whether to
+    keep talking.
+  */
   app.get('/health', { config: { public: true } }, async () => {
     await prisma.$queryRaw`SELECT 1`;
-    return { status: 'ok', service: 'walaa-api' };
+    return {
+      status: 'ok',
+      service: 'walaa-api',
+      version: API_VERSION,
+      demo: isDemoBuild(),
+    };
   });
 
   await app.register(
@@ -218,6 +332,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(discountRoutes, { prefix: '/discount' });
       await api.register(flagRoutes, { prefix: '/flags' });
       await api.register(backupRoutes, { prefix: '/backup' });
+      // Its own file, and its own prefix: everything under `/backup` must keep working
+      // with Drive absent or broken, and a separate registration makes that boundary
+      // something you can see rather than something you have to remember.
+      await api.register(backupDriveRoutes, { prefix: '/backup/drive' });
       await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
       await api.register(systemRoutes, { prefix: '/system' });

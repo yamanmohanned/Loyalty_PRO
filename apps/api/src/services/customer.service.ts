@@ -20,6 +20,7 @@ import {
 import { customerAlreadyExists, notFound, validationFailed } from '../lib/errors';
 import { looksLikeBarcodeToken } from '../lib/barcode-token';
 import { isUniqueViolation, prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import {
   assignCardInTransaction,
@@ -80,7 +81,7 @@ export async function createCustomer(
   request: CreateCustomerRequest,
 ): Promise<CustomerDto> {
   try {
-    const { customer, cardNumber } = await prisma.$transaction(async (db) => {
+    const { customer, cardNumber } = await writeTransaction(async (db) => {
       // The card is located BEFORE the customer is written. If the operator scanned
       // something unusable — a card already in somebody else's pocket, a voided
       // misprint — the refusal must happen before a half-registered person exists.
@@ -215,7 +216,7 @@ export async function updateCustomer(
   if (!before) throw notFound('الزبون غير موجود');
 
   try {
-    const updated = await prisma.$transaction(async (db) => {
+    const updated = await writeTransaction(async (db) => {
       const next = await db.customer.update({
         where: { id: params.customerId },
         data: {

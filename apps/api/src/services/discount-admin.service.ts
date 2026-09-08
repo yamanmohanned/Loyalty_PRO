@@ -8,6 +8,7 @@ import {
 } from '@walaa/shared-types';
 import { notFound, validationFailed } from '../lib/errors';
 import { prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 
 /**
@@ -115,7 +116,7 @@ export async function updateDiscountSettings(
     ]);
   }
 
-  const updated = await prisma.$transaction(async (db) => {
+  const updated = await writeTransaction(async (db) => {
     const next = await db.discountSettings.update({
       where: { merchantId: params.merchantId },
       data: {
@@ -180,7 +181,7 @@ export async function updateDiscountRules(
     orderBy: { thresholdAmount: 'asc' },
   });
 
-  await prisma.$transaction(async (db) => {
+  await writeTransaction(async (db) => {
     // Replace rather than diff: the ladder is small, and a wholesale swap avoids a
     // half-applied edit leaving an incoherent set of thresholds live at the till.
     await db.discountRule.deleteMany({ where: { merchantId: params.merchantId } });

@@ -93,12 +93,76 @@ function contractImports(source: string): Set<string> {
 }
 
 /**
+ * Blanks out comments, preserving offsets and line structure.
+ *
+ * ── Why the guard needed this ────────────────────────────────────────────────
+ *
+ * It scanned raw file text, so `api.get<` written inside a comment counted as an API
+ * call. `Customers.tsx` carries a comment explaining a bug that was fixed — it quotes
+ * the old, wrong call `api.get<{ customer: Customer; balance: CustomerLifetime }>` —
+ * and the guard read the explanation as a fresh offence. Worse, the bracket matching
+ * then ran off the end of the quoted snippet and into real code below, inventing a
+ * third offence (`T`) that appears nowhere near an API call.
+ *
+ * So the guard failed on a file whose actual API call is correct, and the only ways to
+ * make it pass were to delete the comment or to weaken the rule — a check that
+ * punishes writing down why something was fixed is a check that will be deleted.
+ *
+ * Characters are replaced with spaces rather than removed, so every offset and line
+ * number downstream still refers to the same place. String literals are tracked
+ * because `'http://…'` contains `//` and would otherwise swallow the rest of its line.
+ */
+function stripComments(source: string): string {
+  const out = source.split('');
+  let i = 0;
+  let quote: string | null = null;
+
+  while (i < source.length) {
+    const ch = source[i]!;
+    const next = source[i + 1];
+
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') out[i++] = ' ';
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      const stop = end === -1 ? source.length : end + 2;
+      while (i < stop) {
+        if (source[i] !== '\n') out[i] = ' ';
+        i += 1;
+      }
+      continue;
+    }
+
+    i += 1;
+  }
+  return out.join('');
+}
+
+/**
  * The type argument of every `api.get<…>` in a file.
  *
  * Bracket-matched rather than regex-terminated, because the arguments nest:
  * `api.get<{ cards: Card[] }>` closes on its second `>`, not its first.
  */
-function apiTypeArguments(source: string): string[] {
+function apiTypeArguments(rawSource: string): string[] {
+  // Comments are not code: see `stripComments`.
+  const source = stripComments(rawSource);
   const found: string[] = [];
   const pattern = /\bapi\.(?:get|post|put|patch)</g;
   for (const match of source.matchAll(pattern)) {

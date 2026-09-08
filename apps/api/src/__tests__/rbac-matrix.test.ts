@@ -178,6 +178,26 @@ const CASES: Case[] = [
   { method: 'POST', path: '/backup/run', allowed: DASHBOARD },
   { method: 'POST', path: '/backup/verify', allowed: DASHBOARD },
 
+  /*
+    ── Google Drive, and why connecting is OWNER-only ────────────────────────
+
+    Reading the state of the link, adjusting how many copies are kept, and pressing
+    "test" are operational: a manager doing the daily work needs them, and none of
+    them can give anything away.
+
+    **Connecting and disconnecting bind or unbind a Google account**, which is a
+    decision about where this shop's encrypted customer data is allowed to go. That is
+    the owner's to make, on the same reasoning that reserves the backup key ceremony to
+    him — and disconnecting is listed beside connecting deliberately, because silently
+    ending off-site backup is the more dangerous half of the pair.
+  */
+  { method: 'GET', path: '/backup/drive', allowed: DASHBOARD },
+  { method: 'GET', path: '/backup/drive/connect/status', allowed: DASHBOARD },
+  { method: 'POST', path: '/backup/drive/connect', allowed: ['OWNER'] },
+  { method: 'POST', path: '/backup/drive/disconnect', allowed: ['OWNER'] },
+  { method: 'PATCH', path: '/backup/drive/settings', allowed: DASHBOARD },
+  { method: 'POST', path: '/backup/drive/test', allowed: DASHBOARD },
+
   /* Reports and host telemetry. */
   { method: 'GET', path: '/reports/overview', allowed: DASHBOARD },
   { method: 'GET', path: '/reports/programme', allowed: DASHBOARD },
@@ -338,6 +358,9 @@ describe('the route inventory', () => {
         // trailing slash, which is why several appear twice.
         'GET, HEAD /api/v1/backup',
         'GET, HEAD /api/v1/backup/',
+        'GET, HEAD /api/v1/backup/drive',
+        'GET, HEAD /api/v1/backup/drive/',
+        'GET, HEAD /api/v1/backup/drive/connect/status',
         'GET, HEAD /api/v1/backup/key',
         'GET, HEAD /api/v1/cards/:id',
         'GET, HEAD /api/v1/customers/:id/card',
@@ -356,6 +379,10 @@ describe('the route inventory', () => {
         'GET, HEAD /api/v1/vouchers/reconciliation',
         'GET, HEAD, POST /api/v1/cards/batches',
         'GET, HEAD, PATCH /api/v1/customers/:id',
+        'PATCH /api/v1/backup/drive/settings',
+        'POST /api/v1/backup/drive/connect',
+        'POST /api/v1/backup/drive/disconnect',
+        'POST /api/v1/backup/drive/test',
         'POST /api/v1/backup/key/confirm',
         'POST /api/v1/backup/key/generate',
         'POST /api/v1/backup/key/reveal',

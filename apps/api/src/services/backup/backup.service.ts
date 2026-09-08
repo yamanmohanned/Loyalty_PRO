@@ -1,8 +1,10 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from '../../config/env';
 import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
+import { EXPECTED_SCHEMA_HASH } from '../../config/schema-fingerprint';
+import { computeSchemaHash } from '../../lib/db-identity';
 import { AppError, backupBlocked } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { readArchive, writeArchive, type ArchiveHeader } from './archive';
@@ -170,7 +172,7 @@ function stagingDirectory(): string {
 }
 
 /**
- * Creates the staging directory, or fails with something a manager can act on.
+ * Creates the staging directory and clears whatever an interrupted run left in it.
  *
  * Found by running this against the live API: a dev process is unelevated, and the
  * directory it defaulted to under `%PROGRAMDATA%\Walaa` is locked by the installer to
@@ -183,12 +185,42 @@ function stagingDirectory(): string {
  * A backup that cannot start is not a bug the manager should be asked to shrug at. It is
  * §7.3's mandatory safeguard not running, and it names the directory so somebody can fix
  * it.
+ *
+ * ── The sweep, and the leak it closes ────────────────────────────────────────
+ *
+ * `runBackupUnlocked` removes its snapshot and archive in a `finally`, which covers an
+ * error and does nothing at all for a **killed process** — a power cut, a Windows
+ * restart, a `Stop-Process` during the nightly run. Measured on a 400 MB database:
+ * three `Stop-Process -Force` calls part-way through three backups left
+ *
+ *     snapshot.db                             420,716,544
+ *     walaa-2026-09-08T02-45-15-487Z.walaabk   35,818,710
+ *     walaa-2026-09-08T02-46-16-850Z.walaabk   62,308,623
+ *     walaa-2026-09-08T02-46-50-077Z.walaabk   52,379,919
+ *                                            ─────────────
+ *                                            571,223,796 bytes
+ *
+ * and nothing in the product would ever have removed them. `snapshot.db` is reused by
+ * name so it stops growing, but the archive carries `archiveName(now)` — a fresh name
+ * every run — so each interrupted backup adds a permanent partial file. The nightly
+ * schedule means the machine most likely to be interrupted mid-backup is also the one
+ * accumulating fastest.
+ *
+ * That is §12.15's full disk being manufactured by the mechanism that exists to protect
+ * against it, in the directory a manager never opens, on the volume that stops the till
+ * when it fills. The leftovers are invisible to `LocalDirectoryDestination.list`, which
+ * reads only `*.walaabk` at the top level, so the Backup screen showed nothing wrong.
+ *
+ * The sweep is safe because `withBackupLock` guarantees no other run is in flight and
+ * this directory holds nothing but the current run's scratch. It **never throws**: a
+ * file that cannot be deleted is a fact to report in the audit row, not a reason to skip
+ * §7.3's mandatory backup — refusing there would turn a wasted gigabyte into no backups
+ * at all.
  */
-async function prepareStaging(): Promise<string> {
+async function prepareStaging(): Promise<{ path: string; reclaimedBytes: number }> {
   const staging = stagingDirectory();
   try {
     await mkdir(staging, { recursive: true });
-    return staging;
   } catch (error) {
     const code = (error as { code?: string }).code;
     throw new AppError(
@@ -197,6 +229,24 @@ async function prepareStaging(): Promise<string> {
       { cause: error },
     );
   }
+
+  let reclaimedBytes = 0;
+  try {
+    for (const name of await readdir(staging)) {
+      const path = join(staging, name);
+      try {
+        const { size } = await stat(path);
+        await rm(path, { recursive: true, force: true });
+        reclaimedBytes += size;
+      } catch {
+        /* Locked or vanished. The next run tries again; neither is worth failing over. */
+      }
+    }
+  } catch {
+    /* The directory was readable enough to create and is not now. Carry on. */
+  }
+
+  return { path: staging, reclaimedBytes };
 }
 
 /**
@@ -234,8 +284,8 @@ async function runBackupUnlocked(
   const staging = await prepareStaging();
 
   const name = archiveName(now);
-  const snapshotPath = join(staging, 'snapshot.db');
-  const archivePath = join(staging, name);
+  const snapshotPath = join(staging.path, 'snapshot.db');
+  const archivePath = join(staging.path, name);
 
   try {
     const snapshot = await takeSnapshot(env.DATABASE_URL, snapshotPath);
@@ -300,6 +350,10 @@ async function runBackupUnlocked(
         snapshotBytes: snapshot.bytes,
         keyFingerprint: header.keyFingerprint,
         destinations: outcomes.map((o) => ({ kind: o.kind, ok: o.ok, error: o.error })),
+        // Only when there was something to reclaim. A nonzero value here is the
+        // fingerprint of a previous run that was killed rather than failed, and it is
+        // the only place that fact is ever recorded.
+        ...(staging.reclaimedBytes > 0 ? { staleStagingReclaimedBytes: staging.reclaimedBytes } : {}),
       },
     });
 
@@ -317,6 +371,7 @@ async function runBackupUnlocked(
         error: error instanceof Error ? error.message : 'فشل غير معروف',
         outOfSpace: error instanceof InsufficientSpaceError,
         ...(error instanceof InsufficientSpaceError ? { space: error.space } : {}),
+        ...(staging.reclaimedBytes > 0 ? { staleStagingReclaimedBytes: staging.reclaimedBytes } : {}),
       },
     });
     throw error;
@@ -332,6 +387,25 @@ export interface RestoreResult {
   path: string;
   /** SQLite's own verdict on the restored file. */
   integrity: string;
+  /**
+   * Rows pointing at parents that are not there, as `table -> parent` pairs.
+   *
+   * Separate from `integrity` because it answers a different question and deserves a
+   * different reaction: the pages can be perfectly sound while a row is orphaned.
+   * `lib/db-integrity.ts` makes the same split at boot, for the same reason — one is a
+   * refusal, the other is something to know about.
+   */
+  foreignKeyViolations: number;
+  /**
+   * The schema hash of the restored file, and whether it is the one this build expects.
+   *
+   * An archive taken before a schema change restores perfectly and then cannot be
+   * served: the binary would query columns the file does not have. Whoever is
+   * recovering needs to learn that here, holding a file they can still keep, rather
+   * than from a service that refuses to start after they have overwritten the original.
+   */
+  schemaHash: string;
+  schemaMatchesBuild: boolean;
   counts: { customers: number; transactions: number; vouchers: number; auditEntries: number };
   /** The newest audit row in the restored copy — how recent this backup actually is. */
   latestAuditAt: string | null;
@@ -343,10 +417,41 @@ export interface RestoreResult {
  * Restoring *over* the live database is deliberately not offered here. It is a decision
  * with a human and a stopped service behind it, not an API call one click away from a
  * dashboard — and every path in this module that a scheduler can reach must be incapable
- * of destroying the thing it exists to protect.
+ * of destroying the thing it exists to protect. `tools/restore.ts` is the human's end of
+ * that: an offline command that produces the replacement file and reports on it, leaving
+ * the operator to put it in place with the service stopped.
+ *
+ * `key` is optional and overrides the configured one. It exists for the recovery this
+ * whole subsystem is for: the shop's machine is gone, a fresh install has generated its
+ * own new `BACKUP_KEY`, and the only key that opens last week's archive is the one the
+ * merchant wrote down during the ceremony (§12.19). Without a way to supply it, the
+ * ceremony would produce a key with nowhere to be typed.
+ *
+ * ── The destination appears only when it is finished ─────────────────────────
+ *
+ * Everything is written to `<destination>.partial` and renamed at the very end, after
+ * the checksum, the integrity check and the schema hash have all passed. `destinationPath`
+ * therefore never exists in a half-made state.
+ *
+ * That is not tidiness, it is the only defence against a **killed** restore — the case
+ * no `try/catch` can reach. Measured against a 420 MB archive:
+ *
+ *   - `Stop-Process -Force` at t+2s left a 267,908,956-byte truncated `walaa.db`;
+ *   - at t+3.5s it left a **full-length 420,716,544-byte file that opens cleanly,
+ *     passes `PRAGMA quick_check` and reports the correct 28 transactions** — because
+ *     decryption had finished and only the SHA-256 verification had not.
+ *
+ * The second is the dangerous one. It is indistinguishable from a completed restore by
+ * every check an operator would think to run, and the runbook's next instruction is to
+ * copy that file over the shop's database. With the rename, the same kill leaves
+ * `walaa.db.partial`, which nobody puts into place, and no `walaa.db` at all.
  */
-export async function restoreArchive(archivePath: string, destinationPath: string): Promise<RestoreResult> {
-  const key = requireKey();
+export async function restoreArchive(
+  archivePath: string,
+  destinationPath: string,
+  key: Buffer = requireKey(),
+): Promise<RestoreResult> {
+  const workingPath = `${destinationPath}.partial`;
 
   // ═══ THE SIDECARS MUST GO FIRST, AND THIS IS NOT HOUSEKEEPING ═══
   //
@@ -364,24 +469,33 @@ export async function restoreArchive(archivePath: string, destinationPath: strin
   // So the guard below is hygiene against a real mechanism whose trigger conditions
   // are narrower than they look, and it costs two `rm` calls.
   //
-  // Removing them is safe **here specifically** and nowhere else: `destinationPath` is
-  // a file this function is about to overwrite wholesale, so anything those sidecars
-  // describe is already being discarded. Never do this beside a live database — a WAL
-  // holds committed transactions, and deleting one loses sales.
-  await rm(`${destinationPath}-wal`, { force: true });
-  await rm(`${destinationPath}-shm`, { force: true });
+  // Removing them is safe **here specifically** and nowhere else: both paths are files
+  // this function is about to overwrite wholesale, so anything those sidecars describe
+  // is already being discarded. Never do this beside a live database — a WAL holds
+  // committed transactions, and deleting one loses sales.
+  for (const path of [workingPath, destinationPath]) {
+    await rm(`${path}-wal`, { force: true });
+    await rm(`${path}-shm`, { force: true });
+  }
+  await rm(workingPath, { force: true });
 
-  const header = await readArchive(archivePath, destinationPath, key);
+  const header = await readArchive(archivePath, workingPath, key);
 
   // Prisma wants a URL; on Windows the path separators have to be forward slashes for
   // it, though SQLite itself is happy either way.
-  const url = `file:${destinationPath.split('\\').join('/')}`;
+  const url = `file:${workingPath.split('\\').join('/')}`;
   const client = new PrismaClient({ datasources: { db: { url } } });
 
   try {
     const integrityRows =
       await client.$queryRawUnsafe<Array<Record<string, string>>>('PRAGMA integrity_check');
     const integrity = Object.values(integrityRows[0] ?? {})[0] ?? 'unknown';
+
+    const fkRows = await client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      'PRAGMA foreign_key_check',
+    );
+
+    const schemaHash = await computeSchemaHash(client);
 
     const [customers, transactions, vouchers, auditEntries] = await Promise.all([
       client.customer.count(),
@@ -395,15 +509,35 @@ export async function restoreArchive(archivePath: string, destinationPath: strin
       select: { createdAt: true },
     });
 
+    // Closed before the rename, not in the `finally`. On Windows a rename of a file a
+    // process still holds open fails with EBUSY, and the sidecars SQLite created while
+    // inspecting belong to the working file rather than to the finished one.
+    await client.$disconnect();
+    await rm(`${workingPath}-wal`, { force: true });
+    await rm(`${workingPath}-shm`, { force: true });
+
+    await rm(destinationPath, { force: true });
+    await rename(workingPath, destinationPath);
+
     return {
       header,
       path: destinationPath,
       integrity,
+      foreignKeyViolations: fkRows.length,
+      schemaHash,
+      schemaMatchesBuild: schemaHash === EXPECTED_SCHEMA_HASH,
       counts: { customers, transactions, vouchers, auditEntries },
       latestAuditAt: latest?.createdAt.toISOString() ?? null,
     };
   } finally {
+    // Idempotent: a second disconnect on an already-closed client is a no-op, and this
+    // is the only path that closes it when an inspection query throws.
     await client.$disconnect();
+    // Whatever failed, the half-made file does not survive to be mistaken for a restore.
+    // A no-op on the success path, where the rename has already consumed it.
+    await rm(workingPath, { force: true });
+    await rm(`${workingPath}-wal`, { force: true });
+    await rm(`${workingPath}-shm`, { force: true });
   }
 }
 
@@ -485,8 +619,8 @@ async function verifyRestoreUnlocked(
     throw new Error('لم تصل النسخة الاحتياطية إلى أي وجهة — لا يمكن التحقق منها');
   }
 
-  const fetchedPath = join(staging, `verify-${run.name}`);
-  const restoredPath = join(staging, `verify-${run.name}.db`);
+  const fetchedPath = join(staging.path, `verify-${run.name}`);
+  const restoredPath = join(staging.path, `verify-${run.name}.db`);
 
   try {
     // (3) Back down from a destination, so the transport is part of what is proven.

@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { open, stat } from 'node:fs/promises';
+import { open, rm, stat } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { createGunzip, createGzip } from 'node:zlib';
 import { fingerprintMatches, keyFingerprint } from './key';
@@ -183,20 +184,76 @@ export async function readArchiveHeader(archivePath: string): Promise<ArchiveHea
     const prefix = Buffer.alloc(MAGIC.byteLength + HEADER_LENGTH_BYTES);
     const { bytesRead } = await handle.read(prefix, 0, prefix.byteLength, 0);
     if (bytesRead < prefix.byteLength || !prefix.subarray(0, MAGIC.byteLength).equals(MAGIC)) {
-      throw new Error('هذا الملف ليس نسخة احتياطية من ولاء');
+      const { size } = await handle.stat();
+      // The size is in the sentence because it separates the two things that land here
+      // and have completely different remedies: a zero-or-tiny file is a copy that never
+      // finished, and a full-sized one is the wrong file entirely.
+      throw new Error(
+        `«${basename(archivePath)}» ليس ملف نسخة احتياطية من ولاء (حجمه ${size} بايت). ` +
+          'المطلوب ملف بامتداد ‎.walaabk أنشأه هذا البرنامج. ' +
+          'إن كان الملف منسوخاً من قرص خارجي أو من Google Drive فربما لم يكتمل النسخ — أعد نسخه.',
+      );
     }
 
     const headerLength = prefix.readUInt32BE(MAGIC.byteLength);
     if (headerLength === 0 || headerLength > MAX_HEADER_BYTES) {
-      throw new Error('ترويسة النسخة الاحتياطية تالفة');
+      throw new Error(
+        `ترويسة «${basename(archivePath)}» تالفة (طول معلن ${headerLength} بايت، والحدّ ${MAX_HEADER_BYTES}). ` +
+          'جرّب النسخة نفسها من وجهة أخرى، أو استخدم نسخة أقدم.',
+      );
     }
 
     const headerBuffer = Buffer.alloc(headerLength);
     await handle.read(headerBuffer, 0, headerLength, prefix.byteLength);
-    return JSON.parse(headerBuffer.toString('utf8')) as ArchiveHeader;
+    try {
+      return JSON.parse(headerBuffer.toString('utf8')) as ArchiveHeader;
+    } catch {
+      // A `SyntaxError: Unexpected token` reaching a merchant is the same failure as
+      // the crypto message below: English, causeless, and answering a question nobody
+      // asked. Reached when the header bytes themselves are damaged.
+      throw new Error(
+        `ترويسة «${basename(archivePath)}» تالفة ولا يمكن قراءتها. ` +
+          'جرّب النسخة نفسها من وجهة أخرى، أو استخدم نسخة أقدم.',
+      );
+    }
   } finally {
     await handle.close();
   }
+}
+
+/**
+ * Turns a failed decryption into a sentence the person recovering a shop can act on.
+ *
+ * ── Why this exists ──────────────────────────────────────────────────────────
+ *
+ * Flipping one bit in the middle of a real archive and restoring it produced, verbatim:
+ *
+ *     فشلت الاستعادة: Unsupported state or unable to authenticate data
+ *
+ * That is Node's `crypto` module talking, in English, to a shopkeeper in Baghdad whose
+ * database has just died. It names no file, states no cause and offers no next step —
+ * and it is the message for the case §12.17 is entirely about, where the recovery
+ * itself has gone wrong and the only remaining question is *which archive do I try
+ * instead*.
+ *
+ * The wrong-key case is already caught above by the fingerprint, so reaching a GCM
+ * authentication failure means the bytes changed after they were written: a bad sector,
+ * a half-finished copy off a USB stick, an interrupted download from Drive. All three
+ * have the same remedy — this file is not usable, try another copy of it or an older
+ * archive — and none of them is fixed by knowing the phrase "unsupported state".
+ */
+function explainDecryptionFailure(error: unknown, archivePath: string): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!/unable to authenticate|unsupported state|bad decrypt/i.test(message)) {
+    return error instanceof Error ? error : new Error(message);
+  }
+
+  return new Error(
+    `النسخة الاحتياطية «${basename(archivePath)}» تالفة — تغيّرت بياناتها بعد إنشائها ` +
+      'ولا يمكن فك تشفيرها. المطلوب ملف نسخة احتياطية سليم. ' +
+      'جرّب النسخة نفسها من وجهة أخرى (القرص الخارجي أو Google Drive)، أو استخدم نسخة أقدم. ' +
+      `لم يُكتب أي ملف صالح، ولم تتغيّر قاعدة البيانات العاملة. (${message})`,
+  );
 }
 
 /**
@@ -206,6 +263,25 @@ export async function readArchiveHeader(archivePath: string): Promise<ArchiveHea
  * A failure here throws rather than producing a partial file the caller might mistake
  * for a restore. That is the whole point of §12.17: a backup that appears to work and
  * is silently wrong is worse than one that plainly does not.
+ *
+ * ── "Throws rather than producing a partial file" was only half true ─────────
+ *
+ * It threw, and it left the partial file. The decrypt pipeline writes plaintext to the
+ * destination as it goes, and GCM cannot detect tampering until `final()` — so a
+ * single flipped bit in a 69 KB archive produced a **16,384-byte `walaa.db`** sitting
+ * exactly where the operator had aimed the restore, beside an error they may or may not
+ * have read.
+ *
+ * That file cannot be mistaken for a database by SQLite: opening it answers
+ * `database disk image is malformed`. It can very easily be mistaken by a person —
+ * and the runbook's troubleshooting section attributes that same phrase, first, to
+ * orphaned `-wal`/`-shm` sidecars. So the leftover sends whoever is recovering to
+ * investigate a cause that is not theirs, on the worst day their shop has had.
+ *
+ * The destination is therefore removed on every failure path. It is safe to do here
+ * and only here, for the reason `backup.service.restoreArchive` states about the
+ * sidecars: this function owns `destinationPath` outright and has already been told to
+ * overwrite it, so nothing removed was anything but this call's own half-written output.
  */
 export async function readArchive(
   archivePath: string,
@@ -237,7 +313,12 @@ export async function readArchive(
     const { size } = await handle.stat();
     ciphertextEnd = size - TAG_BYTES;
     if (ciphertextEnd <= headerEnd + IV_BYTES) {
-      throw new Error('النسخة الاحتياطية ناقصة أو تالفة');
+      throw new Error(
+        `«${basename(archivePath)}» ناقص: حجمه ${size} بايت، ` +
+          `وأصغر نسخة صالحة أكبر من ${headerEnd + IV_BYTES + TAG_BYTES} بايت. ` +
+          'على الأرجح توقّف النسخ قبل أن يكتمل. ' +
+          'أعد نسخ الملف من وجهته الأصلية، أو استخدم نسخة أقدم.',
+      );
     }
 
     iv = Buffer.alloc(IV_BYTES);
@@ -255,16 +336,28 @@ export async function readArchive(
   decipher.setAAD(encodedHeader);
   decipher.setAuthTag(tag);
 
-  await pipeline(
-    createReadStream(archivePath, { start: headerEnd + IV_BYTES, end: ciphertextEnd - 1 }),
-    decipher,
-    createGunzip(),
-    createWriteStream(destinationPath),
-  );
+  try {
+    await pipeline(
+      createReadStream(archivePath, { start: headerEnd + IV_BYTES, end: ciphertextEnd - 1 }),
+      decipher,
+      createGunzip(),
+      createWriteStream(destinationPath),
+    );
 
-  const actual = await sha256File(destinationPath);
-  if (actual !== header.plaintextSha256) {
-    throw new Error('فشل التحقق من سلامة النسخة الاحتياطية بعد فك التشفير');
+    const actual = await sha256File(destinationPath);
+    if (actual !== header.plaintextSha256) {
+      throw new Error(
+        `النسخة الاحتياطية «${basename(archivePath)}» فُكّ تشفيرها لكن محتواها لا يطابق ` +
+          'البصمة المسجّلة داخلها. المطلوب ملف نسخة احتياطية سليم. ' +
+          'جرّب النسخة نفسها من وجهة أخرى، أو استخدم نسخة أقدم. لم يُكتب أي ملف صالح.',
+      );
+    }
+  } catch (error) {
+    // Every failure leaves nothing behind — see the block comment above. `force` so a
+    // pipeline that failed before creating the file does not turn into a second,
+    // misleading error about a missing path.
+    await rm(destinationPath, { force: true });
+    throw explainDecryptionFailure(error, archivePath);
   }
 
   return header;

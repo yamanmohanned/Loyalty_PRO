@@ -292,6 +292,23 @@ describe('GET /system/storage', () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
-    expect(Object.keys(response.json())).toEqual(['status', 'service']);
+
+    /*
+      Exhaustive on purpose, and worth keeping exhaustive.
+
+      This is the only endpoint that answers without a token, so anything added to it
+      is disclosed to anybody who can reach the port. An assertion that merely checked
+      for the ABSENCE of disk keys would let the next field through unnoticed; matching
+      the whole set means every addition has to be made here, deliberately, by someone
+      who has read this comment.
+
+      `version` and `demo` were added for «تغيير الخادم», which has to tell a wrong
+      address from a wrong product from a wrong version — and cannot, from a response
+      that only says "ok". Both are properties of the build, not of the machine or its
+      data: neither names a path, a host, a size or a customer.
+    */
+    expect(Object.keys(response.json()).sort()).toEqual(
+      ['demo', 'service', 'status', 'version'].sort(),
+    );
   });
 });

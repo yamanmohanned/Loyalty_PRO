@@ -4,6 +4,7 @@ import {
   type FeatureFlagKey,
 } from '@walaa/shared-types';
 import { prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 
 /**
@@ -51,7 +52,7 @@ export async function setFlag(params: {
     where: { merchantId_key: { merchantId: params.merchantId, key } },
   });
 
-  await prisma.$transaction(async (db) => {
+  await writeTransaction(async (db) => {
     await db.featureFlag.upsert({
       where: { merchantId_key: { merchantId: params.merchantId, key } },
       update: { isEnabled: params.isEnabled, updatedByUserId: params.actorUserId },

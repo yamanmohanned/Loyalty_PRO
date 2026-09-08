@@ -5,6 +5,7 @@ import { requireDashboardRole } from '../plugins/auth';
 import { AUDIT_ACTIONS, recordAudit } from '../services/audit.service';
 import { prisma } from '../lib/prisma';
 import { currentStorageStatus } from '../services/storage.service';
+import { buildDemoShop, isDemoBuild } from '../services/demo.service';
 
 const UpdatePrintingRequestSchema = z.object({ paperWidth: PaperWidthSchema }).strict();
 
@@ -95,4 +96,38 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
       return { paperWidth: updated.paperWidth as PaperWidth };
     },
   );
+  /*
+    ── The demo reset ────────────────────────────────────────────────────────
+
+    **Registered only in a demo build.** `isDemoBuild()` reads `WALAA_DEMO`, which the
+    demo launcher sets and a production install never does, so in a real deployment
+    this route does not exist — a request to it 404s the same as any unknown path,
+    rather than existing and refusing. An endpoint that can erase a shop's history is
+    not one to leave present-but-guarded when it can be absent.
+
+    `buildDemoShop` gates itself again on the open database file (§`assertDemoDatabase`),
+    so even a production install started with the flag set by mistake cannot wipe
+    `walaa.db`.
+
+    OWNER only, and slow: roughly half a minute to replay six months through the real
+    services. The client says so before it starts, because a button that appears to
+    hang is worse than one that warns.
+  */
+  if (isDemoBuild()) {
+    app.post('/demo/reset', { config: { roles: ['OWNER', 'MANAGER'] } }, async (request) => {
+      requireDashboardRole(request);
+      const result = await buildDemoShop((line) => request.log.info({ demo: line }, 'demo reset'));
+      await recordAudit({
+        merchantId: request.auth!.merchantId,
+        actorUserId: request.auth!.sub,
+        action: AUDIT_ACTIONS.DEMO_RESET,
+        entityType: 'merchant',
+        entityId: request.auth!.merchantId,
+        before: null,
+        after: result,
+      });
+      return result;
+    });
+  }
+
 }

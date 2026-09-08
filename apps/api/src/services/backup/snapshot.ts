@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { liveDatabasePath } from '../../config/paths';
-import { CRITICAL_FREE_BYTES, readFreeSpace } from '../storage.service';
+import { readFreeSpace } from '../storage.service';
 
 /**
  * Taking a consistent copy of a live SQLite database (CLAUDE_v3.md §12.17).
@@ -53,14 +53,39 @@ const REQUIRED_FREE_MULTIPLE = 3;
 /**
  * Floor beneath which no backup runs regardless of database size.
  *
+ * ── Recalibrated after it took a shop down (2026-09-06) ─────────────────────
+ *
+ * This used to be `CRITICAL_FREE_BYTES` — 2 GiB — on the argument below that the
+ * number raising the manager's banner and the number refusing a backup should be one
+ * number. That argument is about **coherent reporting**. It is not a statement about
+ * how much room copying a database needs, and using it as one turned a guard into an
+ * outage:
+ *
+ *   a 5.4 MB database, 1.09 GB free, and the API refused to start — forever, on a
+ *   30-second retry loop — because a pre-migration snapshot of 5.4 MB was judged to
+ *   need 2 GB. The disk had two hundred times the room the copy required.
+ *
+ * Worse, this ran at BOOT: `ensureDatabaseReady` snapshots before migrating, so the
+ * refusal was not "your scheduled backup was skipped", it was "the product does not
+ * start". A guard whose failure mode is a dead till is not protecting the till.
+ *
+ * So the two numbers are now separate, and each says what it is for:
+ *
+ *   - `CRITICAL_FREE_BYTES` (2 GiB) still raises the banner. It answers "is this
+ *     machine in trouble?", and that question has nothing to do with file sizes.
+ *   - `MINIMUM_FREE_BYTES` (256 MiB) answers "is there room to write this copy?".
+ *     Above the proportional requirement for any database under ~85 MB, and enough
+ *     that the copy cannot itself be what fills the volume.
+ *
+ * The proportional part is unchanged and still does the real work: a large database
+ * is still required to have three times its own size free.
+ *
  * A 20 MB database on a volume with 200 MB left passes a purely proportional check and
- * still leaves the machine one Windows update away from the outage §12.15 describes.
- * This is the CRITICAL threshold from §12.15, imported from the module that samples it
- * rather than restated here: the number that raises the manager's banner and the number
- * that refuses a backup have to be the same number, or the banner is a warning about a
- * limit that is not the limit.
+ * still leaves the machine close to the outage §12.15 describes — which is why a floor
+ * exists at all. It is a floor for *this operation*, not a verdict on the machine; the
+ * verdict is the banner, and it fires independently at 2 GiB.
  */
-const MINIMUM_FREE_BYTES = CRITICAL_FREE_BYTES;
+const MINIMUM_FREE_BYTES = 256 * 1024 * 1024;
 
 export interface FreeSpace {
   freeBytes: number;
@@ -72,7 +97,12 @@ export class InsufficientSpaceError extends Error {
   constructor(readonly space: FreeSpace) {
     super(
       `لا توجد مساحة كافية لأخذ نسخة احتياطية: ${gib(space.freeBytes)} متاحة، ` +
-        `والمطلوب ${gib(space.requiredBytes)}`,
+        `والمطلوب ${gib(space.requiredBytes)} ` +
+        // The database size and the multiple, in the message itself. The original said
+        // only "2.00 GB required" against a 5 MB database, and the number looked
+        // arbitrary because nothing on screen connected it to anything.
+        `(حجم قاعدة البيانات ${gib(space.databaseBytes)} × ${REQUIRED_FREE_MULTIPLE}، ` +
+        `بحدٍّ أدنى ${gib(MINIMUM_FREE_BYTES)})`,
     );
     this.name = 'InsufficientSpaceError';
   }

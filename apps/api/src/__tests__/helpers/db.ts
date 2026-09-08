@@ -84,6 +84,23 @@ export function prepareTestDatabase(): void {
  * SQLite has no `TRUNCATE ... CASCADE`, so this deletes in dependency order with
  * foreign keys momentarily off — faster than ordering perfectly, and the tables
  * are all repopulated by the next fixture anyway.
+ *
+ * ── The list must be complete, and it was not ────────────────────────────────
+ *
+ * `card` and `card_batch` were missing. With foreign keys turned off for the delete
+ * the cascade from `customer` never fires, so every card ever created by a test
+ * survived into the next one, pointing at a customer that no longer existed. A restore
+ * taken part-way through the suite reported **16 `foreign_key_check` violations** in a
+ * database that had just been "reset" — which is how this was found.
+ *
+ * Two costs, and neither is cosmetic. Any assertion about referential integrity is
+ * unmakeable against a database that is quietly accumulating orphans; and stale rows in
+ * `card` are live lookup material, so one suite's card numbers are visible to the next.
+ *
+ * The rule the list has to satisfy: **every table a migration creates, except the ones
+ * the runtime owns.** `db_identity` and `demo_provenance` are deliberately absent —
+ * they identify the file rather than hold a merchant's data, and deleting them would
+ * make each test re-adopt the database it is already running on.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
@@ -92,6 +109,8 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
     'notification_log',
     'voucher',
     'transaction',
+    'card',
+    'card_batch',
     'feature_flag',
     'discount_rule',
     'discount_settings',

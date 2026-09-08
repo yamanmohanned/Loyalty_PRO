@@ -10,6 +10,7 @@
 
 export * from './auth';
 export * from './backup';
+export * from './backup-drive';
 export * from './barcode';
 export * from './card';
 export * from './card-stock';

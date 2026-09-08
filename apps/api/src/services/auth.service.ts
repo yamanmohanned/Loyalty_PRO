@@ -15,6 +15,7 @@ import {
   signAccessToken,
 } from '../lib/jwt';
 import { verifyPassword } from '../lib/password';
+import { demoSeedHasPublishedAccount } from '../lib/demo-guard';
 import { prisma } from '../lib/prisma';
 
 /**
@@ -25,8 +26,34 @@ import { prisma } from '../lib/prisma';
  * see `detectReuse` below.
  */
 
-/** One deliberately vague message for every login failure. */
+/**
+ * One deliberately vague message for every login failure.
+ *
+ * Vague on purpose in production: distinguishing "no such user" from "wrong password"
+ * turns login into a username oracle for anyone on the shop's network.
+ */
 const LOGIN_FAILED = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+
+/**
+ * The demo's version of the same failure, when the cause is the database.
+ *
+ * ── The message that was true three different ways ───────────────────────────
+ *
+ * «اسم المستخدم أو كلمة المرور غير صحيحة» was the visible symptom of at least three
+ * causes: genuinely wrong credentials, a stale or foreign database, and a backend
+ * attached to a data directory nobody was looking at. A merchant reading it re-types
+ * the credentials — which is the correct response to one cause and useless for the
+ * other two — and concludes the software is broken when they fail again.
+ *
+ * In a demo build there is nothing to protect: the accounts are printed in the
+ * merchant's own instructions, so naming the real cause leaks nothing. In production
+ * the vague message stays exactly as it was, because there the account list is not
+ * public and the oracle is real.
+ */
+const DEMO_WRONG_DATABASE =
+  'قاعدة البيانات التجريبية على هذا الجهاز ليست النسخة التي وصلت مع البرنامج، ' +
+  'ولا تحتوي على الحساب المذكور في تعليمات التشغيل. ' +
+  'أغلق البرنامج، احذف مجلد Walaa من %LOCALAPPDATA%، ثم افتح البرنامج من جديد.';
 
 /**
  * SQLite stores `role` as a plain string — the database will accept anything.
@@ -81,11 +108,48 @@ async function issueTokens(user: {
   return { accessToken, refreshToken: token, expiresIn: ACCESS_TTL_SECONDS };
 }
 
+/**
+ * Finds the account to authenticate, tolerating the case the merchant typed.
+ *
+ * ── Why case-insensitively, and why that is safe ─────────────────────────────
+ *
+ * `username` is an internal handle — `owner`, `manager`, `station`, `agent` — not an
+ * email and not PII. Matching it case-sensitively buys nothing and costs a login: a
+ * shop owner who types `Owner`, or whose keyboard capitalises the first letter of a
+ * field, gets «اسم المستخدم أو كلمة المرور غير صحيحة» for credentials that are
+ * correct in every way he can see. Measured against the shipped demo seed: `owner`
+ * authenticates, `Owner` and `OWNER` are rejected — same password, same database.
+ *
+ * The exact match is tried first, so an installation that deliberately holds both
+ * `Sara` and `sara` keeps whatever behaviour it has today. The fallback only runs when
+ * nothing matched exactly, and only accepts an unambiguous single row — two accounts
+ * differing only in case are not silently collapsed into one.
+ *
+ * The password remains byte-exact. Trimming or folding a password would be a real
+ * weakening; this is only about which row to compare it against.
+ */
+async function findAccount(username: string) {
+  const include = {
+    branch: { select: { code: true } },
+    merchant: { select: { name: true, paperWidth: true } },
+  } as const;
+
+  const exact = await prisma.user.findFirst({ where: { username }, include });
+  if (exact) return exact;
+
+  // SQLite's `=` is case-sensitive and Prisma's `mode: 'insensitive'` is unsupported on
+  // this provider, so the fold is done in SQL. Parameterised — §7.7 forbids building
+  // this string by interpolation.
+  const matches = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "user" WHERE username = ${username} COLLATE NOCASE
+  `;
+  if (matches.length !== 1) return null;
+
+  return prisma.user.findUnique({ where: { id: matches[0]!.id }, include });
+}
+
 export async function login(username: string, password: string): Promise<LoginResponse> {
-  const user = await prisma.user.findFirst({
-    where: { username },
-    include: { branch: { select: { code: true } }, merchant: { select: { name: true, paperWidth: true } } },
-  });
+  const user = await findAccount(username);
 
   // Verify a dummy hash when the user does not exist, so a missing username and a
   // wrong password take the same time. Skipping the hash on the miss turns login
@@ -95,6 +159,11 @@ export async function login(username: string, password: string): Promise<LoginRe
       '$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2E$0000000000000000000000000000000000000000000',
       password,
     );
+    // A demo whose database has lost the published account is not a credentials
+    // problem, and saying so costs nothing here — see `DEMO_WRONG_DATABASE`.
+    if (!(await demoSeedHasPublishedAccount())) {
+      throw unauthenticated(DEMO_WRONG_DATABASE);
+    }
     throw unauthenticated(LOGIN_FAILED);
   }
 

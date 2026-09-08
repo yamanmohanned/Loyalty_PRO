@@ -251,12 +251,31 @@ describe('taking a snapshot', () => {
   it('demands headroom proportional to the database, with an absolute floor', () => {
     const dir = tempDir('walaa-space-');
 
-    // A tiny database still requires the §12.15 CRITICAL floor: proportional-only would
-    // let a 20 MB database back itself up onto a volume with 200 MB left.
-    expect(checkFreeSpace(20 * 1024 * 1024, dir).requiredBytes).toBe(2 * 1024 ** 3);
+    // A tiny database still requires a floor — proportional-only would let a 20 MB
+    // database back itself up onto a volume with 60 MB left. But it is the OPERATION's
+    // floor (256 MB), not the §12.15 CRITICAL banner threshold, which this used to
+    // borrow and which turned the guard into a boot failure.
+    expect(checkFreeSpace(20 * 1024 * 1024, dir).requiredBytes).toBe(256 * 1024 * 1024);
 
     // A large one scales past the floor.
     expect(checkFreeSpace(4 * 1024 ** 3, dir).requiredBytes).toBe(12 * 1024 ** 3);
+  });
+
+  it('does not refuse a small database on a disk with room — the boot outage', () => {
+    /*
+      The exact combination that took the demo install down: a 5.4 MB database and
+      1.09 GB free. `ensureDatabaseReady` snapshots before migrating, so the refusal
+      was not a skipped backup — the API exited 1 and the supervisor retried it every
+      30 seconds forever, while the dashboard said "check the connection to the server".
+
+      Regression-guarded here because the failure was invisible from every surface a
+      person looks at: the service reported Running, the port was free, and the reason
+      was in a file locked to SYSTEM.
+    */
+    const dir = tempDir('walaa-space-');
+    const space = checkFreeSpace(5.4 * 1024 * 1024, dir);
+    expect(space.requiredBytes).toBe(256 * 1024 * 1024);
+    expect(1.09 * 1024 ** 3).toBeGreaterThan(space.requiredBytes);
   });
 
   it('would refuse to run when the requirement exceeds what is free', () => {

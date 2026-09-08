@@ -27,6 +27,7 @@ import {
 } from '../lib/card-number';
 import { cardNotIssuable, notFound, validationFailed } from '../lib/errors';
 import { isUniqueViolation, prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 
 const env = loadEnv();
@@ -218,7 +219,7 @@ export async function generateCardBatch(
   params: { merchantId: string; actorUserId: string },
   request: GenerateCardBatchRequest,
 ): Promise<CardBatchDto> {
-  const created = await prisma.$transaction(async (db) => {
+  const created = await writeTransaction(async (db) => {
     const highest = await db.card.aggregate({
       where: { merchantId: params.merchantId },
       _max: { serial: true },
@@ -440,7 +441,7 @@ export async function exportCardBatch(
     .filter((line): line is string => line !== null)
     .join('\n');
 
-  const updated = await prisma.$transaction(async (db) => {
+  const updated = await writeTransaction(async (db) => {
     const next = await db.cardBatch.update({
       where: { id: batch.id },
       // GENERATED → EXPORTED only. A batch already marked RECEIVED must not fall
@@ -531,7 +532,7 @@ export async function voidCardBatch(
   });
   if (!batch) throw notFound('الدفعة غير موجودة');
 
-  const result = await prisma.$transaction(async (db) => {
+  const result = await writeTransaction(async (db) => {
     const voided = await db.card.updateMany({
       where: { batchId: batch.id, merchantId: params.merchantId, status: 'PRINTED' },
       data: { status: 'VOID', voidedAt: new Date(), voidReason: reason },
@@ -800,7 +801,7 @@ export async function reportCardLost(
     );
   }
 
-  await prisma.$transaction(async (db) => {
+  await writeTransaction(async (db) => {
     const updated = await db.card.updateMany({
       where: { id: cardId, merchantId: params.merchantId, status: 'ASSIGNED' },
       data: { status: 'LOST', lostAt: new Date() },
@@ -855,7 +856,7 @@ export async function restoreCard(
   }
 
   try {
-    await prisma.$transaction(async (db) => {
+    await writeTransaction(async (db) => {
       await db.card.update({
         where: { id: cardId },
         data: { status: 'ASSIGNED', lostAt: null },
@@ -918,7 +919,7 @@ export async function replaceCard(
   const customerId = existing.customerId;
   const previousStatus = existing.status;
 
-  const newCardId = await prisma.$transaction(async (db) => {
+  const newCardId = await writeTransaction(async (db) => {
     const replacement = await findAssignableCard(db, params.merchantId, scannedNewCard);
 
     // Retire first. The index would refuse the other order, so doing it this way
@@ -983,7 +984,7 @@ export async function replaceCardWithThermal(
   const customerId = existing.customerId;
   const previousStatus = existing.status;
 
-  const newCardId = await prisma.$transaction(async (db) => {
+  const newCardId = await writeTransaction(async (db) => {
     const retired = await db.card.updateMany({
       where: { id: cardId, merchantId: params.merchantId, status: previousStatus },
       data: { status: 'REPLACED' },
@@ -1042,7 +1043,7 @@ export async function voidCard(
     );
   }
 
-  await prisma.$transaction(async (db) => {
+  await writeTransaction(async (db) => {
     const voided = await db.card.updateMany({
       where: { id: cardId, merchantId: params.merchantId, status: 'PRINTED' },
       data: { status: 'VOID', voidedAt: new Date(), voidReason: reason },

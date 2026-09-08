@@ -14,6 +14,17 @@ import { prisma } from '../lib/prisma';
  */
 
 export const AUDIT_ACTIONS = {
+  /**
+   * The demo dataset was rebuilt from scratch.
+   *
+   * Audited even though it only ever happens in a demo build, and precisely because
+   * of what it does: it deletes every transaction, voucher, card and customer the
+   * merchant has clicked into existence, and restores the shipped discount ladder over
+   * whatever he had configured. That is the most destructive single action in the
+   * product, and an append-only trail that omitted it would be a trail with a hole
+   * exactly where somebody asks "where did my data go".
+   */
+  DEMO_RESET: 'demo.reset',
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
   CARD_REPRINTED: 'customer.card_reprinted',
@@ -76,6 +87,23 @@ export const AUDIT_ACTIONS = {
    */
   BACKUP_VERIFICATION_STARTED: 'backup.verification_started',
   BACKUP_VERIFIED: 'backup.verified',
+
+  /* ── The off-machine copy: Google Drive (§7.3) ────────────────────────── */
+
+  /**
+   * A Google account granted this installation the right to write backups into it.
+   *
+   * §7.10 audits changes that alter what the system can do, and this is the largest of
+   * them in the other direction: it creates a standing credential that lets the shop's
+   * data leave the machine, on purpose, until somebody withdraws it. "Who connected
+   * which account, and when" is the first question after a disputed upload, and there is
+   * no other record of it — the credential itself is encrypted and unreadable by design.
+   */
+  BACKUP_DRIVE_CONNECTED: 'backup.drive_connected',
+  /** The grant was withdrawn from this end. Recorded so a silent gap has an author. */
+  BACKUP_DRIVE_DISCONNECTED: 'backup.drive_disconnected',
+  /** Drive was paused/resumed, or its retention changed — how many copies survive. */
+  BACKUP_DRIVE_SETTINGS_UPDATED: 'backup.drive_settings_updated',
 
   /* ── The key ceremony (§12.19) ────────────────────────────────────────── */
 
