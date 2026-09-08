@@ -77,7 +77,10 @@ export async function registerStation(app: FastifyInstance): Promise<void> {
     return;
   }
 
-  app.log.info({ root }, 'serving the loyalty station');
+  // "registered", not "serving": this runs while routes are being built, and nothing
+  // is served until `listen()`. The difference is invisible on a healthy boot and the
+  // whole story on a failed one.
+  app.log.info({ root }, 'loyalty station route registered');
 
   await app.register(fastifyStatic, { root, serve: false });
 

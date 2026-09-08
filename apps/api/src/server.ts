@@ -1,98 +1,39 @@
-import { buildApp } from './app';
-import { configSource, loadEnv } from './config/env';
-import { ensureDatabaseReady } from './lib/migrate';
-import { prisma } from './lib/prisma';
-import { startBackupScheduler } from './services/backup/schedule.service';
-import { startStorageSampler } from './services/storage.service';
+import { recordStartupFailure } from './lib/startup-error';
 
 /**
- * Process entry point.
+ * Process entry point — deliberately almost empty.
  *
- * Shutdown is graceful and bounded: stop accepting connections, let in-flight
- * requests finish, close the database pool. A link that is mid-commit when a
- * deploy rolls must not be torn out from under the customer standing at the till.
+ * ── Why the real work is behind a dynamic import ─────────────────────────────
+ *
+ * Everything this service does used to live here, with `main().catch(...)` at the
+ * bottom recording why a start had failed. That covered every failure inside `main`
+ * and missed the whole class in front of it: **configuration is read at module scope**,
+ * by `config/env` and by every module that calls `loadEnv()` while being evaluated. A
+ * missing or malformed `walaa.env` therefore throws during module loading, before
+ * `main` exists and before any handler is attached to it.
+ *
+ * It is not a theoretical gap. A demo install whose environment file had not been
+ * written died precisely there, with a perfectly clear Arabic sentence —
+ * «WALAA_ENV_FILE يشير إلى ملف غير موجود» — going only to stderr, while the supervisor
+ * recorded `exit code: 1` and the dashboard had nothing to show but a generic failure.
+ * The mechanism built to stop exactly that had been installed one layer too far in.
+ *
+ * So the entry point imports one thing that reads no configuration, and pulls the
+ * application in afterwards. The import is awaited inside `boot`, so a throw during
+ * that module graph's evaluation is a rejected promise this file catches like any
+ * other startup failure. The bundler preserves the deferral — esbuild wraps a
+ * dynamically imported module in a lazily-invoked initialiser rather than hoisting it —
+ * and `packaging/scripts/verify-runtime.mjs` checks that against the built artefact,
+ * because "the bundler currently does X" is exactly the kind of claim that stops being
+ * true without anyone noticing.
  */
-const env = loadEnv();
-
-async function main(): Promise<void> {
-  // Built before the database work so the bootstrap has a real logger: nothing is
-  // served until `listen()` below, and Prisma connects lazily on its first query.
-  const app = await buildApp();
-  app.log.info({ configFile: configSource ?? '(environment only)' }, 'configuration loaded');
-
-  // Everything the database needs before the first request, in one step: create the
-  // data directory, open the connection with WAL and the other pragmas the v3
-  // concurrency decision depends on (§12.5), then apply any migration the installed
-  // binary is newer than. On a merchant's machine this IS the provisioning step —
-  // there is no separate migration command for anyone to forget (§12.11).
-  const migrations = await ensureDatabaseReady({
-    log: (message) => app.log.info(message),
-  });
-  if (migrations.applied.length > 0) {
-    app.log.info(
-      { migrations: migrations.applied, directory: migrations.directory },
-      'database migrations applied',
-    );
-  }
-
-  // Scheduled backups (§7.3, §12.21). Started HERE rather than in `buildApp` on
-  // purpose: `buildApp` is what the test suite constructs, and a scheduler firing
-  // mid-suite would take real backups of the test database. It also belongs to the
-  // process rather than to the HTTP app — the point of putting it in the service is
-  // that it survives a closed manager window.
-  const stopScheduler = startBackupScheduler(app.log);
-
-  // Free-space sampling (§12.15). In the process for the same two reasons as the
-  // scheduler: `buildApp` is what the test suite constructs, and this belongs to the
-  // machine rather than to the HTTP app — the disk keeps filling whether or not anybody
-  // has the manager window open.
-  const stopSampler = startStorageSampler(app.log);
-
-  // Both stdin events below can fire for the same close, and a signal can arrive
-  // while a shutdown is already unwinding. Closing twice is not harmful so much as
-  // confusing in a log a support call is reading.
-  let shuttingDown = false;
-  const shutdown = async (signal: string): Promise<void> => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    app.log.info({ signal }, 'shutting down');
-    try {
-      stopScheduler();
-      stopSampler();
-      await app.close();
-      await prisma.$disconnect();
-      process.exit(0);
-    } catch (error) {
-      app.log.error({ err: error }, 'shutdown failed');
-      process.exit(1);
-    }
-  };
-
-  for (const signal of ['SIGINT', 'SIGTERM', 'SIGBREAK'] as const) {
-    process.once(signal, () => {
-      void shutdown(signal);
-    });
-  }
-
-  // Supervised by the Windows Service host: shut down when its end of the pipe
-  // closes. Windows has no SIGTERM, and a service process has no console, so it
-  // cannot send the child a CTRL_BREAK either — `GenerateConsoleCtrlEvent` needs a
-  // console the service does not have. Closing stdin is the one stop signal that
-  // crosses that boundary without opening a control port on the network.
-  if (process.env.WALAA_SUPERVISED === '1') {
-    process.stdin.on('end', () => {
-      void shutdown('stdin-closed');
-    });
-    process.stdin.on('close', () => {
-      void shutdown('stdin-closed');
-    });
-    process.stdin.resume();
-  }
-
-  await app.listen({ port: env.API_PORT, host: env.API_HOST });
+async function boot(): Promise<void> {
+  const { main } = await import('./main');
+  await main();
 }
 
-main().catch((error: unknown) => {
+boot().catch((error: unknown) => {
+  recordStartupFailure(error);
   console.error('failed to start:', error);
   process.exit(1);
 });

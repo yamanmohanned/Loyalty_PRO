@@ -377,6 +377,35 @@ database is `walaa.db` plus `walaa.db-wal` and `walaa.db-shm` when they exist. T
 `-wal` holds committed transactions that have not yet been folded into the main file —
 **the most recent sales in the shop**. All three move together or none of them do.
 
+### Turning a backup archive into a `walaa.db`
+
+The files the product writes to the backups folder, to the USB stick and to Drive are
+`*.walaabk` — AES-256-GCM over gzip. **They are not database files and nothing else can
+open one.** `walaa-restore.cjs`, beside `walaa-api.cjs` in the program directory, is what
+turns one back into a database. It never writes over the live database; it produces a
+new file and reports on it, and the procedure below puts that file in place.
+
+```
+cd "C:\Program Files\Walaa"
+node.exe walaa-restore.cjs --list
+node.exe walaa-restore.cjs "C:\ProgramData\Walaa\backups\walaa-2026-09-08T02-35-11-148Z.walaabk" ^
+         --to "C:\ProgramData\Walaa\restored.db"
+```
+
+It prints the archive's date, the integrity verdict, and the customer, invoice, voucher
+and audit counts, ending with the timestamp of the newest operation in it — **read that
+date before going any further.** A restored database that opens is not yet a restored
+database that is current.
+
+Add `--key <the key from the ceremony>` when restoring onto a machine that did not take
+the backup. A fresh install generates its own `BACKUP_KEY`, which opens nothing; the key
+written down during the key ceremony is the only one that opens an older archive, and the
+command says which key fingerprint an archive needs when the wrong one is supplied.
+
+Exit code `0` means usable. `3` means the archive is sound but was taken by a different
+version of the program — keep the file, do not put it in place, and install the matching
+version. Anything else is printed in Arabic with what to try instead.
+
 ### The procedure
 
 1. **Stop the service.** `sc stop WalaaApi`, and confirm it is stopped. A file copied

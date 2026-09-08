@@ -316,7 +316,7 @@ async function seed(db: PrismaClientType): Promise<void> {
     // and no role for it, so the only way to run an agent was to hand it a Station
     // login — which is precisely what `INGEST_ROLES` now prevents. Its password lives in
     // cleartext on the cashier PC, so this account can post a capture and nothing else.
-    { username: 'agent', name: 'وكيل الالتقاط — الصندوق ١', role: 'AGENT', branchId: branch.id },
+    { username: 'agent', name: 'وكيل الالتقاط — الصندوق 1', role: 'AGENT', branchId: branch.id },
   ];
 
   for (const s of staff) {

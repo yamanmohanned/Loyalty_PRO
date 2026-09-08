@@ -12,6 +12,26 @@
 ; The installer runs elevated (installMode: perMachine), which is what the Service
 ; Control Manager and `netsh advfirewall` both require.
 
+; ---------------------------------------------------------------------------
+;  Demo builds do not register a Windows Service.
+; ---------------------------------------------------------------------------
+;
+;  A demo installs per-user and unelevated, so it CANNOT open the Service Control
+;  Manager or write a firewall rule -- those calls would simply fail. And on a
+;  machine where the user happens to be an administrator they would SUCCEED, which
+;  is worse: a demo backend left running as LocalSystem for every account on the PC,
+;  holding a port and a database, after the person who tried the demo has forgotten
+;  about it.
+;
+;  A demo supervises its own backend instead: the app launches
+;  `walaa-service.exe console`, which runs the SAME supervisor the service runs.
+;  The launcher is the fork; the supervision is shared. A demo that were babysat by
+;  different code would prove nothing about the merchant's real install.
+;
+;  Detected by the shipped seed database -- the same signal the service host and the
+;  app shell both use. One fact read in three places, with nothing to fall out of
+;  step with anything else.
+
 !macro NSIS_HOOK_PREINSTALL
   ; On a same-path upgrade the service is running and holds node.exe and the query
   ; engine open, so the file copy would fail. Deregistering first releases them. On a
@@ -56,6 +76,9 @@
   ;  that already has one. Treat it as untested until somebody upgrades a real
   ;  install with it. The no-op cases (first install, same-path upgrade) are the
   ;  only ones actually exercised.
+  ; A demo build stops here: no SCM registration, no firewall rule, no elevation.
+  IfFileExists "$INSTDIR\runtime\walaa-demo.db" demo_no_service 0
+
   DetailPrint "Removing any previously registered API service..."
   nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" uninstall'
   Pop $0
@@ -72,16 +95,23 @@
     nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" start'
     Pop $0
   ${EndIf}
+
+  demo_no_service:
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
   ; Stop and deregister before the files go. The data directory under
   ; %PROGRAMDATA%\Walaa is deliberately left behind — see `uninstall` in
   ; packaging/service-host/src/main.rs.
+  ;
+  ; A demo registered nothing, so there is nothing to deregister -- its backend is a
+  ; child of the app and went with the window.
+  IfFileExists "$INSTDIR\runtime\walaa-demo.db" demo_no_unregister 0
   IfFileExists "$INSTDIR\runtime\walaa-service.exe" 0 +4
     DetailPrint "Removing the API service..."
     nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" uninstall'
     Pop $0
+  demo_no_unregister:
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

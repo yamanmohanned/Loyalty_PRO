@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import { AppError } from '../lib/errors';
 import { isStorageFailure, isUniqueViolation } from '../lib/prisma';
+import { isContentionError } from '../lib/write-transaction';
 
 /**
  * The single exit point for every failure (CLAUDE.md §9).
@@ -114,6 +115,29 @@ export function registerErrorHandler(app: FastifyInstance): void {
         error: {
           code: 'VALIDATION_FAILED',
           message: 'الطلب غير صالح',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    /*
+      A write that could not get the writer, after `writeTransaction` had already
+      retried it. Still a 500 — the sale was not saved and §12.16 says the operator must
+      be told so plainly — but logged under its own message, because the two failures it
+      would otherwise be filed with demand completely different responses.
+
+      Before the write queue existed this was not rare: 16 simultaneous `/scan/card`
+      requests produced nine of these, and 64 produced sixty-four, all of them reading
+      «حدث خطأ غير متوقع» in a log full of genuine bugs. It should now be close to
+      unreachable, and the distinct line is how anyone finds out it is not.
+    */
+    if (isContentionError(error)) {
+      request.log.error({ err: error }, 'write contention outlasted its retries');
+      reply.status(500).send({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'حدث خطأ غير متوقع',
           requestId: request.id,
         },
       });
