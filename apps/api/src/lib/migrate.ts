@@ -215,9 +215,28 @@ export async function applyPendingMigrations(
         );
       }
       if (record.finished_at === null || record.finished_at === undefined) {
+        /*
+          ── The remedy must be safe when it is misread ─────────────────────────
+
+          This used to end «استعد من نسخة احتياطية أو احذف قاعدة البيانات الفارغة» —
+          restore a backup, or delete the empty database. The second half was written
+          for a first install, where the file really is empty and deleting it is the
+          quickest way out.
+
+          A first install cannot reach this any more: production copies a pre-migrated
+          template and never migrates. What CAN reach it is a database with a shop's
+          trading in it — and there, an instruction containing the words "delete the
+          database" is one misreading away from the worst outcome this product has.
+          The person reading it is already alarmed and looking for the short way out.
+
+          So the dangerous half is gone. Nothing here tells anybody to delete anything.
+        */
         throw new Error(
-          `الترحيل «${migration.name}» بدأ ولم يكتمل — على الأرجح توقّف التشغيل أثناء التثبيت. ` +
-            'يلزم إصلاح يدوي: استعد من نسخة احتياطية أو احذف قاعدة البيانات الفارغة وأعد التشغيل.',
+          `تعذّر تشغيل الخدمة: تحديث بنية قاعدة البيانات «${migration.name}» بدأ ولم يكتمل، ` +
+            'على الأرجح لأنّ الجهاز توقّف أثناء التحديث. ' +
+            'لم تُفتح قاعدة البيانات ولم تتغيّر الآن. ' +
+            '**لا تحذف أي ملف** — أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، ' +
+            'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
         );
       }
       outcome.skipped.push(migration.name);
