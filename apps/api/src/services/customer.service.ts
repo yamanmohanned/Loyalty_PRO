@@ -11,6 +11,7 @@ import {
   type CreateCustomerRequest,
   type Customer as CustomerDto,
   type CustomerCard,
+  type CustomerHistoryEntry,
   type CustomerSearchMatch,
   type CustomerListQuery,
   type CustomerSearchResponse,
@@ -537,4 +538,68 @@ export async function exportCustomersCsv(params: {
   });
 
   return ['name,phone,category,card_number,cumulative_amount,created_at', ...rows].join('\r\n');
+}
+
+/**
+ * A customer's own invoices, newest first, with the slip each one produced.
+ *
+ * ── Bounded, and why the bound is where it is ────────────────────────────────
+ *
+ * `HISTORY_LIMIT + 1` rows are fetched so the caller can tell "exactly the limit" from
+ * "more than the limit" without a second COUNT over the same index. A shop's busiest
+ * customer across a year is in the low hundreds of invoices; 100 answers the two
+ * questions this screen exists for — what has this person spent, and did they get the
+ * discount they were owed — and a paging control in front of a list nobody scrolls to
+ * the end of is machinery for its own sake.
+ *
+ * Scoped by `merchantId` as well as `customerId`. The customer id alone would be enough
+ * today with one merchant, and the seam §2.5 requires is only a seam if every query
+ * uses it.
+ */
+const HISTORY_LIMIT = 100;
+
+export async function getCustomerHistory(
+  merchantId: string,
+  customerId: string,
+): Promise<{ history: CustomerHistoryEntry[]; historyTruncated: boolean }> {
+  const rows = await prisma.transaction.findMany({
+    where: { merchantId, customerId },
+    orderBy: { occurredAt: 'desc' },
+    take: HISTORY_LIMIT + 1,
+    select: {
+      id: true,
+      invoiceId: true,
+      occurredAt: true,
+      amountGross: true,
+      discountValue: true,
+      amountNet: true,
+      branch: { select: { code: true } },
+      vouchers: { select: { id: true, code: true, value: true, status: true } },
+    },
+  });
+
+  const historyTruncated = rows.length > HISTORY_LIMIT;
+
+  return {
+    historyTruncated,
+    history: rows.slice(0, HISTORY_LIMIT).map((row) => ({
+      id: row.id,
+      invoiceId: row.invoiceId,
+      occurredAt: row.occurredAt.toISOString(),
+      amountGross: row.amountGross,
+      discountValue: row.discountValue,
+      amountNet: row.amountNet,
+      branchCode: row.branch?.code ?? null,
+      // At most one per sale — `@@unique([transactionId])` on `voucher` enforces it,
+      // because two slips for one invoice is the double-discount §0 rule 3 forbids.
+      voucher: row.vouchers[0]
+        ? {
+            id: row.vouchers[0].id,
+            code: row.vouchers[0].code,
+            value: row.vouchers[0].value,
+            status: row.vouchers[0].status,
+          }
+        : null,
+    })),
+  };
 }

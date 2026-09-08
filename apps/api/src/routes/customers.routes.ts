@@ -4,6 +4,7 @@ import {
   type CreateCustomerRequest,
   CreateCustomerRequestSchema,
   type CustomerDetailResponse,
+  type CustomerResolveResponse,
   type CustomerListQuery,
   CustomerListQuerySchema,
   CustomerSearchQuerySchema,
@@ -19,6 +20,7 @@ import {
   createCustomer,
   exportCustomersCsv,
   getCustomer,
+  getCustomerHistory,
   listCustomers,
   getCustomerCard,
   resolveCustomer,
@@ -43,7 +45,7 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     // The annotation is the point, not decoration: it is what makes renaming
     // `lifetime` on either side of the wire a compile error rather than a white
     // screen. See `CustomerDetailResponse`.
-    async (request): Promise<CustomerDetailResponse> => {
+    async (request): Promise<CustomerResolveResponse> => {
       const auth = requireAuth(request);
       const { identifier } = request.query as { identifier: string };
       const customer = await resolveCustomer(auth.merchantId, identifier);
@@ -152,11 +154,12 @@ export async function customerRoutes(app: FastifyInstance): Promise<void> {
     async (request): Promise<CustomerDetailResponse> => {
       const auth = requireDashboardRole(request);
       const { id } = request.params as { id: string };
-      const [customer, lifetime] = await Promise.all([
+      const [customer, lifetime, history] = await Promise.all([
         getCustomer(auth.merchantId, id),
         getCustomerLifetime(id),
+        getCustomerHistory(auth.merchantId, id),
       ]);
-      return { customer, lifetime };
+      return { customer, lifetime, ...history };
     },
   );
 

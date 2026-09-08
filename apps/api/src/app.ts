@@ -143,8 +143,58 @@ export interface BuildAppOptions {
   rateLimit?: boolean;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  RATE LIMITING CANNOT BE TURNED OFF IN PRODUCTION. NOT BY ANYTHING.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The limiter is the only thing standing between a shop's LAN and an unlimited
+ * password-guessing surface on `/auth/login`. A till, a tablet and a manager PC share
+ * that network with whatever else is plugged into it, and the API answers on it by
+ * design so the Station can reach it.
+ *
+ * The reliability drills need it off — 8 simultaneous callers a round outruns a
+ * 120-per-minute budget in seconds, and a drill that measures the limiter instead of
+ * the guard it is aiming at reports nothing useful. So there is a switch. The switch
+ * is the risk: a variable that disables throttling is one copied `.env`, one support
+ * instruction, one "try setting this" away from being set on a merchant's machine.
+ *
+ * So it is refused in production, here, rather than documented as "do not set this".
+ * `NODE_ENV=production` — the value the installer writes and the packaged service runs
+ * under — makes the switch inert and says so in the log. A build cannot opt out either:
+ * there is no compile-time flag, only this one function, and
+ * `rate-limit-production.test.ts` drives `buildApp` under a production environment with
+ * every disabling input set at once and asserts a 429 still arrives.
+ *
+ * The `options.rateLimit` parameter stays for the test suite, which constructs the app
+ * in-process. It is subject to the same refusal.
+ */
+export function rateLimitingDisabled(options: BuildAppOptions = {}): {
+  disabled: boolean;
+  refusedInProduction: boolean;
+} {
+  const asked =
+    options.rateLimit === false || process.env.WALAA_DISABLE_RATE_LIMIT === '1';
+
+  if (!asked) return { disabled: false, refusedInProduction: false };
+
+  /*
+    `loadEnv()` at call time, not the module-scope `env`.
+
+    That constant is captured when this file is first imported, which is correct at
+    runtime and untestable: a test cannot construct a production environment for a value
+    that was read before it ran. Since `loadEnv` caches, this costs a map lookup and
+    makes the refusal something that can actually be driven and proven rather than
+    asserted about.
+  */
+  if (loadEnv().NODE_ENV === 'production') return { disabled: false, refusedInProduction: true };
+
+  return { disabled: true, refusedInProduction: false };
+}
+
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
-  const rateLimitEnabled = options.rateLimit ?? true;
+  const limiter = rateLimitingDisabled(options);
+  const rateLimitEnabled = !limiter.disabled;
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
@@ -262,6 +312,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
    * is correct for a single-instance deployment and wrong the moment this scales
    * horizontally — move to the Redis store when a second instance appears.
    */
+  if (limiter.refusedInProduction) {
+    app.log.warn(
+      'rate limiting cannot be disabled in production — the request to disable it was ignored',
+    );
+  }
+
   if (rateLimitEnabled) {
     await app.register(rateLimit, {
     global: true,

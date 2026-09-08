@@ -408,6 +408,89 @@ async function mintVoucher(n) {
   );
 }
 
+// ── 5. The OTHER guard: the write queue ────────────────────────────────────
+//
+// Two guards protect two different things, and conflating them hides which is doing the
+// work.
+//
+//   The conditional UPDATE protects CORRECTNESS — no voucher redeemed twice. Proven
+//   above by removing it.
+//
+//   The write queue in `lib/write-transaction.ts` protects AVAILABILITY. SQLite admits
+//   one writer, so concurrent interactive transactions queue inside Prisma and the ones
+//   at the back burn their own wait budget and are killed before they ever run. Each is
+//   a sale that was not recorded, answered with «حدث خطأ غير متوقع» while a customer
+//   stands at the till.
+//
+// This reproduces the mechanism: the same transactions fired at once, then serialised
+// the way `writeTransaction` serialises them.
+{
+  const client = new PrismaClient({ datasourceUrl: `file:${DB}` });
+  await applyProductionPragmas(client);
+
+  const work = (n) => async () => {
+    await client.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe('SELECT 1');
+      await tx.auditLog.create({
+        data: {
+          merchantId: merchant.id,
+          action: 'DRILL_QUEUE_PROBE',
+          entityType: 'drill',
+          entityId: `q-${n}-${Date.now()}`,
+        },
+      });
+    });
+  };
+
+  const N = 40;
+
+  const unqueued = await Promise.allSettled(Array.from({ length: N }, (_, i) => work(`u${i}`)()));
+  const unqueuedFailures = unqueued.filter((r) => r.status === 'rejected').length;
+
+  let chain = Promise.resolve();
+  const queued = await Promise.allSettled(
+    Array.from({ length: N }, (_, i) => {
+      const task = chain.then(work(`q${i}`), work(`q${i}`));
+      chain = task.then(() => undefined, () => undefined);
+      return task;
+    }),
+  );
+  const queuedFailures = queued.filter((r) => r.status === 'rejected').length;
+
+  await client.$disconnect();
+
+  record(
+    'the write queue is load-bearing — without it concurrent sales are lost',
+    unqueuedFailures > 0,
+    `${N} concurrent transactions unqueued: ${unqueuedFailures} rejected`,
+  );
+  record(
+    'serialised the way the service serialises them, none are lost',
+    queuedFailures === 0,
+    `${N} through the queue: ${queuedFailures} rejected`,
+  );
+}
+
+// ── 6. Both guards are present in what ships ───────────────────────────────
+{
+  const { readFileSync } = require('node:fs');
+  const voucherService = readFileSync('E:/loyalty/apps/api/src/services/voucher.service.ts', 'utf8');
+  const queue = readFileSync('E:/loyalty/apps/api/src/lib/write-transaction.ts', 'utf8');
+
+  const conditional =
+    voucherService.includes('updateMany') &&
+    voucherService.includes("status: 'ISSUED'") &&
+    voucherService.includes('claimed.count === 0');
+
+  const serialised =
+    queue.includes('let tail: Promise<void>') && queue.includes('const task = tail.then(run, run)');
+
+  record('the shipped redemption still uses the conditional UPDATE', conditional,
+    conditional ? "updateMany(... status: 'ISSUED') guarded by claimed.count" : 'NOT FOUND in voucher.service.ts');
+  record('the shipped writes still go through the serialising queue', serialised,
+    serialised ? 'writeTransaction chains every transaction onto one tail' : 'NOT FOUND in write-transaction.ts');
+}
+
 // ── the file itself, after all that ────────────────────────────────────────
 {
   const integrity = await db.$queryRawUnsafe('PRAGMA integrity_check');

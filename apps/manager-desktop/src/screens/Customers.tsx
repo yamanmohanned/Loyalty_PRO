@@ -524,12 +524,89 @@ export function CustomerDetailScreen() {
         </div>
       </Card>
 
+      {/*
+        The customer's own invoices, and the slip each one produced.
+
+        This was an `EmptyState` reading «قيد التطوير» — the only surface in the shipped
+        product that admitted to being unfinished, with its Arabic written inline in the
+        JSX against §9. The two questions a manager opens a customer to answer are what
+        this person has spent and whether they got the discount they were owed, and a
+        lifetime total answers neither.
+
+        Newest first and bounded at 100 by the API. No paging control: a shop's busiest
+        customer over a year is in the low hundreds of invoices, and machinery in front
+        of a list nobody scrolls to the end of is machinery for its own sake. When the
+        bound is hit the table says so rather than silently ending.
+      */}
       <Card>
-        <CardHeader title={locale.customer.transactions} />
-        <EmptyState
-          title={locale.common.comingSoon}
-          body="سجل الفواتير والقسائم لهذا الزبون يُضاف مع شاشات التقارير التفصيلية."
+        <CardHeader
+          title={locale.customerHistory.title}
+          subtitle={locale.customerHistory.subtitle}
         />
+        {isLoading || !data ? (
+          <SkeletonTable rows={5} columns={6} />
+        ) : data.history.length === 0 ? (
+          <EmptyState
+            title={locale.customerHistory.empty}
+            body={locale.customerHistory.emptyBody}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-start">
+              <thead>
+                <tr className="border-b border-border text-sm text-steel">
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.date}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.invoice}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.branch}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.gross}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.discount}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.net}</th>
+                  <th className="px-6 py-3 text-start font-medium">{locale.customerHistory.voucher}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {data.history.map((entry) => (
+                  <tr key={entry.id} className="text-base">
+                    <td className="px-6 py-3 text-sm text-steel">
+                      {new Date(entry.occurredAt).toLocaleDateString('ar-IQ')}
+                    </td>
+                    {/* An invoice number is Latin text in an RTL row: isolated, or its
+                        digits and separators change places (§12.25). */}
+                    <td className="px-6 py-3">
+                      <bdi dir="ltr" className="font-mono text-sm">{entry.invoiceId}</bdi>
+                    </td>
+                    <td className="px-6 py-3 text-sm text-steel">
+                      {entry.branchCode ? <bdi dir="ltr">{entry.branchCode}</bdi> : locale.common.none}
+                    </td>
+                    <td className="px-6 py-3"><Money value={entry.amountGross} className="text-base" /></td>
+                    <td className="px-6 py-3">
+                      {entry.discountValue > 0 ? (
+                        <span className="text-accent">
+                          <Money value={entry.discountValue} className="text-base" />
+                        </span>
+                      ) : (
+                        <span className="text-steel">{locale.customerHistory.noVoucher}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-3"><Money value={entry.amountNet} className="text-base" /></td>
+                    <td className="px-6 py-3">
+                      {entry.voucher ? (
+                        <Chip tone={entry.voucher.status === 'REDEEMED' ? 'success' : entry.voucher.status === 'VOID' ? 'neutral' : 'accent'}>
+                          {locale.customerHistory.statuses[entry.voucher.status] ?? entry.voucher.status}
+                        </Chip>
+                      ) : (
+                        <span className="text-steel">{locale.customerHistory.noVoucher}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.historyTruncated ? (
+              <p className="px-6 py-3 text-sm text-steel">{locale.customerHistory.truncated}</p>
+            ) : null}
+          </div>
+        )}
       </Card>
     </>
   );

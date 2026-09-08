@@ -500,6 +500,37 @@ export const locale = {
     },
   },
 
+  /**
+   * A customer's own invoices.
+   *
+   * This panel used to be an `EmptyState` reading «قيد التطوير» with an inline Arabic
+   * sentence in the JSX — the only place in the shipped product that admitted to being
+   * unfinished, and a §9 violation besides. §5 lists customer detail as "balance,
+   * transactions, coupons", and a manager who opens a customer is nearly always asking
+   * one of two things: what has this person spent, and did they get the discount they
+   * were owed. A balance answers neither.
+   */
+  customerHistory: {
+    title: 'فواتير هذا الزبون',
+    subtitle: 'الأحدث أولاً',
+    invoice: 'رقم الفاتورة',
+    date: 'التاريخ',
+    branch: 'الفرع',
+    gross: 'قبل الخصم',
+    discount: 'الخصم',
+    net: 'المدفوع',
+    voucher: 'القسيمة',
+    noVoucher: '—',
+    empty: 'لا توجد فواتير مسجّلة لهذا الزبون بعد.',
+    emptyBody: 'تظهر هنا كل فاتورة تُربط ببطاقته، مع الخصم الذي حصل عليه.',
+    truncated: 'تُعرض أحدث 100 فاتورة فقط.',
+    statuses: {
+      ISSUED: 'صادرة',
+      REDEEMED: 'مستخدمة',
+      VOID: 'ملغاة',
+    } as Record<string, string>,
+  },
+
   overview: {
     /* ── V4-4: the four headline figures §2.4 asks for ─────────────────── */
     kpiSales: 'المبيعات الملتقطة',

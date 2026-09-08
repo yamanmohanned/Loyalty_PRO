@@ -219,7 +219,64 @@ export interface CustomerListResponse {
  * as the route handler's RETURN TYPE in `customers.routes.ts`. Renaming the field on
  * either side is now a type error in the same commit as the rename.
  */
-export interface CustomerDetailResponse {
+/**
+ * One line of a customer's history, as the detail screen renders it.
+ *
+ * Deliberately not the full `Transaction` row. The screen shows what a manager is
+ * looking at the screen to find out — when, how much, what discount, which branch —
+ * and nothing about capture modes or idempotency keys, which are the ingestion
+ * pipeline's business and would be noise here.
+ */
+export interface CustomerHistoryEntry {
+  id: string;
+  invoiceId: string;
+  occurredAt: string;
+  amountGross: number;
+  discountValue: number;
+  amountNet: number;
+  branchCode: string | null;
+  /** The slip issued for this sale, when one was. */
+  voucher: { id: string; code: string; value: number; status: string } | null;
+}
+
+/**
+ * `GET /customers/resolve` — the Station's lookup at the till.
+ *
+ * ── Split from the detail envelope, deliberately ────────────────────────────
+ *
+ * The two shared one type until the detail screen grew a history. They answer different
+ * questions for different people: this one is a cashier holding a card with a queue
+ * behind them, and it must stay the two cheap reads it is. Widening it to carry a
+ * hundred invoices nobody at a till will read would have put a join on the critical
+ * path of §1.2's core loop to satisfy a screen on another machine.
+ *
+ * Splitting also keeps the §12.27 lesson intact: the envelope is a DTO, it is named and
+ * shared, and both routes declare it as their return type — so the divergence is
+ * expressed in the types rather than discovered at runtime.
+ */
+export interface CustomerResolveResponse {
   customer: Customer;
   lifetime: CustomerLifetime;
+}
+
+export interface CustomerDetailResponse extends CustomerResolveResponse {
+  /**
+   * The customer's own invoices, newest first.
+   *
+   * ── Why this is here rather than "coming soon" ─────────────────────────────
+   *
+   * The detail screen carried an empty state reading «قيد التطوير» where this belongs
+   * — the only place in the shipped product that admitted to being unfinished. §5 lists
+   * customer detail as "balance, transactions, coupons", and a manager who clicks a
+   * customer is nearly always asking one of two questions: what has this person spent,
+   * and did they get the discount they were owed. Neither is answerable from a balance
+   * alone.
+   *
+   * Bounded rather than paged: a shop's busiest customer over a year is in the low
+   * hundreds of invoices, and the newest 100 answers both questions. A paging control
+   * on this screen would be machinery in front of a list nobody scrolls to the end of.
+   */
+  history: CustomerHistoryEntry[];
+  /** True when there is more history than was returned, so the screen can say so. */
+  historyTruncated: boolean;
 }
