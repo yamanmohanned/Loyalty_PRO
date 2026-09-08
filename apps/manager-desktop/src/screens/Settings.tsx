@@ -5,6 +5,7 @@ import { readBackendStatus, type BackendStatus } from '../lib/backend';
 import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, Notice, PageHeader } from '../components/ui';
 import { ServerAddressForm } from '../components/ServerAddressForm';
+import { DriveSection } from './settings/DriveSection';
 
 /**
  * Settings — the one place technical configuration lives.
@@ -154,6 +155,13 @@ export function SettingsScreen() {
             <ServerAddressForm key={remote ?? 'local'} onSaved={refresh} />
           </div>
         </Card>
+      </div>
+
+      {/* Cloud backup sits beside the server settings for the reason the brief gives:
+          both are one-time technical arrangements, and neither belongs on the path a
+          merchant walks every morning. */}
+      <div className="mt-6">
+        <DriveSection />
       </div>
     </>
   );

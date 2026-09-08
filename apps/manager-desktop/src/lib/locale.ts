@@ -467,6 +467,37 @@ export const locale = {
       useLocal: 'العودة إلى خادم هذا الجهاز',
       useLocalDone: 'تمت العودة إلى خادم هذا الجهاز. أعد تشغيل البرنامج.',
     },
+
+    /**
+     * Google Drive.
+     *
+     * Almost nothing here describes a failure, because the API already writes the
+     * failure sentences: it classifies no-network, a withdrawn grant, an expired
+     * token, a full Drive and a wrong client separately, each with its own message and
+     * its own remedy, and the panel renders those verbatim. Restating them here would
+     * be a second copy to drift.
+     *
+     * What is left is the frame: the three states, the labels on the controls, and the
+     * one sentence about scope a merchant deserves to read before granting anything.
+     */
+    drive: {
+      title: 'النسخ الاحتياطي إلى Google Drive',
+      stateConnected: 'متصل',
+      stateNotConnected: 'غير متصل',
+      stateNotConfigured: 'غير مُعدّ',
+      lastSuccess: 'آخر نسخة ناجحة:',
+      /* Said plainly, before he grants anything: this app cannot read his Drive. */
+      scopeNote:
+        'يطلب البرنامج صلاحية «drive.file» فقط — أي أنه لا يرى ولا يفتح أي ملف في حسابك عدا النسخ الاحتياطية التي ينشئها هو. لا يمكنه الاطلاع على بقية ملفاتك.',
+      connect: 'ربط حساب Google',
+      connecting: 'جارٍ فتح صفحة الموافقة…',
+      consentOpened: 'فُتحت صفحة الموافقة في المتصفّح. أكمل الموافقة هناك ثم عد إلى هذه الشاشة.',
+      connected: 'تم ربط الحساب بنجاح.',
+      disconnect: 'فصل الحساب',
+      disconnected: 'تم فصل الحساب. تستمر النسخ الاحتياطية على هذا الجهاز كالمعتاد.',
+      keepLabel: 'عدد النسخ المحفوظة في Drive',
+      keepHint: 'عند تجاوز هذا العدد تُحذف أقدم نسخة تلقائياً',
+    },
   },
 
   overview: {
