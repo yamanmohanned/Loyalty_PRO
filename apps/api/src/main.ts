@@ -5,7 +5,7 @@ import { assertMigrationsMatchBuild, verifyDatabaseIdentity } from './lib/db-ide
 import { markRunning, markStopped, verifyDatabaseIntegrity } from './lib/db-integrity';
 import { assertDatabaseMatchesBuild } from './lib/demo-guard';
 import { ensureDatabaseReady, installDatabaseTemplateIfAbsent } from './lib/migrate';
-import { checkpointWal, prisma } from './lib/prisma';
+import { checkpointWal, prisma, readSqliteSettings } from './lib/prisma';
 import { clearStartupFailure } from './lib/startup-error';
 import { startBackupScheduler } from './services/backup/schedule.service';
 import { startStorageSampler } from './services/storage.service';
@@ -127,6 +127,15 @@ export async function main(): Promise<void> {
     previous: previousRun,
     log: bootstrapLog,
   });
+
+  /*
+    The settings every concurrency guarantee rests on, read back from SQLite rather
+    than assumed from having set them. WAL is refused on some filesystems and silently
+    stays `delete`; foreign keys are off by default on any connection that missed the
+    setup. Logging them means a support call — and a concurrency test claiming to have
+    run under production settings — can compare rather than trust.
+  */
+  bootstrapLog('sqlite settings', { ...(await readSqliteSettings()) });
 
   // Only now is there anything worth serving.
   const app = await buildApp();

@@ -344,6 +344,70 @@ export async function listPendingMigrations(options: MigrateOptions = {}): Promi
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
+ *  THE LEDGER ITSELF, CHECKED ON EVERY BOOT — INCLUDING THE ONES THAT MIGRATE NOTHING
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ── The gap this closes, found by a kill drill ───────────────────────────────
+ *
+ * `_prisma_migrations` records a migration as started, and marks `finished_at` when it
+ * completes. A row with `finished_at` NULL means the last attempt died half-way; a row
+ * with `rolled_back_at` means somebody undid one by hand. Both mean the schema on disk
+ * is not the schema the ledger claims, and both were already refused — inside
+ * `applyPendingMigrations`, in the loop that walks the migration files.
+ *
+ * Which was fine until production stopped calling it. The service now ships a
+ * pre-migrated template and only VERIFIES, so `applyPendingMigrations` is not reached
+ * on a normal boot; and `listPendingMigrations` treats a row's mere PRESENCE as
+ * "applied", so a half-finished row is not pending either. The result was a production
+ * service that started happily on a database whose last migration had been interrupted
+ * — the exact condition the check was written for, made invisible by the change that
+ * removed the code path around it.
+ *
+ * The drill caught it: marking the newest migration unfinished and restarting produced
+ * a healthy service instead of a refusal.
+ *
+ * So the ledger is now inspected on its own, before any decision about migrating, on
+ * every boot in every mode. It reads two statements and costs nothing.
+ */
+export async function assertMigrationLedgerIsSound(
+  options: MigrateOptions = {},
+): Promise<void> {
+  const client = options.client ?? defaultClient;
+
+  await client.$executeRawUnsafe(MIGRATIONS_TABLE_DDL);
+  const rows = await client.$queryRawUnsafe<AppliedRow[]>(
+    'SELECT migration_name, checksum, finished_at, rolled_back_at FROM "_prisma_migrations"',
+  );
+
+  const unfinished = rows.filter((row) => row.finished_at === null || row.finished_at === undefined);
+  const rolledBack = rows.filter((row) => row.rolled_back_at !== null && row.rolled_back_at !== undefined);
+
+  if (unfinished.length === 0 && rolledBack.length === 0) return;
+
+  const log = options.log ?? ((): void => {});
+  log('migration ledger is not sound', {
+    unfinished: unfinished.map((r) => r.migration_name),
+    rolledBack: rolledBack.map((r) => r.migration_name),
+  });
+
+  /*
+    Worded like the other installation faults: it is not the merchant's data that is
+    wrong, and the remedy he would otherwise reach for — restoring a backup — is not
+    the one that helps. The migration NAMES stay in the log; they are English directory
+    names with timestamps in them and mean nothing to a shop owner.
+  */
+  const count = unfinished.length + rolledBack.length;
+  throw new Error(
+    `تعذّر تشغيل الخدمة: ${count} من تحديثات بنية قاعدة البيانات لم تكتمل — ` +
+      'على الأرجح توقّف الجهاز أثناء تحديث البرنامج. ' +
+      'لم تُفتح قاعدة البيانات ولم تتغيّر الآن. ' +
+      '**لا تحذف أي ملف** — أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، ' +
+      'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+  );
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
  *  A SNAPSHOT BEFORE ANY MIGRATION, AND FAIL CLOSED IF IT CANNOT BE TAKEN
  * ═══════════════════════════════════════════════════════════════════════════
  * (CLAUDE_UPDATE_4.md §10.2)
@@ -458,6 +522,13 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
       'تعذّر العثور على مجلد الترحيلات (migrations). حدّد WALAA_MIGRATIONS_DIR أو شغّل الخدمة من مجلد التثبيت.',
     );
   }
+
+  /*
+    Before any question about what is PENDING: is what is already recorded sound? A
+    half-applied migration is not pending — its row exists — so this has to be asked
+    separately, and on every boot rather than only on the ones that migrate.
+  */
+  await assertMigrationLedgerIsSound({ ...options, client });
 
   const pending = await listPendingMigrations({ ...options, client, directory });
 

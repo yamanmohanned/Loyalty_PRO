@@ -14,5 +14,11 @@ export default [
     product's rules only produces noise that pushes real errors off the screen.
   */
   { ignores: ['_*.ts', '_*.mjs', 'prisma/_*.ts', 'prisma/_*.mjs'] },
+  /*
+    The drills print their findings, which is their entire output. `no-console` is right
+    for a service whose logging goes through pino and wrong for a command whose contract
+    is what it writes to a terminal.
+  */
+  { files: ['drills/**/*.mjs'], rules: { 'no-console': 'off' } },
   ...baseConfig(),
 ];

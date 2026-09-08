@@ -53,6 +53,53 @@ export async function applySqlitePragmas(client: PrismaClient = prisma): Promise
 }
 
 /**
+ * What SQLite actually settled on, read back rather than assumed.
+ *
+ * ── Why this is worth a round trip at boot ───────────────────────────────────
+ *
+ * Every claim this system makes about behaving correctly when two people press the
+ * same button at once rests on these five values. `journal_mode` decides whether a
+ * reader blocks a writer at all; `busy_timeout` decides whether contention becomes a
+ * failed sale or a short wait; `foreign_keys` decides whether the relations in the
+ * schema are enforced or decorative.
+ *
+ * Setting them is not the same as having them. `journal_mode = WAL` is refused on
+ * some filesystems and silently stays `delete`; `foreign_keys` is reset to off by
+ * anything that opens a fresh connection without this function; a pooled connection
+ * that missed the setup answers differently from the one that ran it.
+ *
+ * So they are read back and logged at boot. It also makes a test honest: a concurrency
+ * result proves nothing unless the settings it ran under are the settings that ship,
+ * and this is how the two are compared rather than assumed to match.
+ */
+export interface SqliteSettings {
+  journal_mode: string;
+  busy_timeout: number;
+  foreign_keys: number;
+  synchronous: number;
+  wal_autocheckpoint: number;
+}
+
+export async function readSqliteSettings(
+  client: PrismaClient = prisma,
+): Promise<SqliteSettings> {
+  const one = async (pragma: string): Promise<unknown> => {
+    const rows = await client.$queryRawUnsafe<Array<Record<string, unknown>>>(
+      `PRAGMA ${pragma}`,
+    );
+    return Object.values(rows[0] ?? {})[0];
+  };
+
+  return {
+    journal_mode: String(await one('journal_mode')),
+    busy_timeout: Number(await one('busy_timeout')),
+    foreign_keys: Number(await one('foreign_keys')),
+    synchronous: Number(await one('synchronous')),
+    wal_autocheckpoint: Number(await one('wal_autocheckpoint')),
+  };
+}
+
+/**
  * ═══════════════════════════════════════════════════════════════════════════
  *  THE WAL SIZE, SET FROM ARITHMETIC RATHER THAN LEFT TO A DEFAULT
  * ═══════════════════════════════════════════════════════════════════════════
