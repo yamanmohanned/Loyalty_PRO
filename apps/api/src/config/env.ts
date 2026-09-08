@@ -165,6 +165,36 @@ const EnvSchema = z.object({
   GOOGLE_DRIVE_API_BASE: z.string().optional(),
 });
 
+/**
+ * The settings that have no default and must be present, asked of the schema itself.
+ *
+ * ── Why this is derived rather than listed ───────────────────────────────────
+ *
+ * The installer writes `walaa.env` from `packaging/walaa.env.template`, which is a
+ * hand-written file. A setting added here as required and forgotten there does not
+ * fail the build, the test suite, or a developer's machine — every one of those has a
+ * repository `.env` that satisfies it. It fails on a merchant's first launch, as a
+ * service that will not start, hours away from anyone who could see why.
+ *
+ * A hand-kept list of "the required ones" would be a second thing to forget. So the
+ * schema is asked: parse nothing, and collect the keys it complains are missing. That
+ * answer cannot drift from the schema because it *is* the schema.
+ *
+ * `src/__tests__/env-contract.test.ts` holds the template and `.env.example` to it.
+ */
+export function requiredEnvKeys(): string[] {
+  const parsed = EnvSchema.safeParse({});
+  if (parsed.success) return [];
+
+  return [
+    ...new Set(
+      parsed.error.issues
+        .filter((issue) => issue.code === 'invalid_type' && issue.received === 'undefined')
+        .map((issue) => String(issue.path[0])),
+    ),
+  ].sort();
+}
+
 export type Env = z.infer<typeof EnvSchema>;
 
 let cached: Env | null = null;

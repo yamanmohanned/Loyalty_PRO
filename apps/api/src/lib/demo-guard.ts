@@ -1,4 +1,5 @@
 import { basename } from 'node:path';
+import type { PrismaClient } from '@prisma/client';
 import { prisma } from './prisma';
 import { PRIMARY_DEMO_LOGIN } from './demo-credentials';
 import { verifyPassword } from './password';
@@ -87,17 +88,27 @@ export async function readDemoProvenance(): Promise<DemoProvenance | null> {
   }
 }
 
-/** Writes the signature. Called by the seed builder, never at runtime. */
-export async function stampDemoProvenance(seedId: string): Promise<void> {
-  await prisma.$executeRawUnsafe(
+/**
+ * Writes the signature. Called by the seed builder, never at runtime.
+ *
+ * Takes an explicit client for the same reason `stampIdentity` does: the schema-hash
+ * invariant in `db-template.test.ts` has to stamp a throwaway database, and a helper
+ * that can only ever write to the process-wide client cannot be tested without
+ * pointing the whole process at a fixture.
+ */
+export async function stampDemoProvenance(
+  seedId: string,
+  client: Pick<PrismaClient, '$executeRawUnsafe'> = prisma,
+): Promise<void> {
+  await client.$executeRawUnsafe(
     `CREATE TABLE IF NOT EXISTS ${PROVENANCE_TABLE} (
        id       INTEGER PRIMARY KEY CHECK (id = 1),
        seedId   TEXT NOT NULL,
        builtAt  TEXT NOT NULL
      )`,
   );
-  await prisma.$executeRawUnsafe(`DELETE FROM ${PROVENANCE_TABLE}`);
-  await prisma.$executeRawUnsafe(
+  await client.$executeRawUnsafe(`DELETE FROM ${PROVENANCE_TABLE}`);
+  await client.$executeRawUnsafe(
     `INSERT INTO ${PROVENANCE_TABLE} (id, seedId, builtAt) VALUES (1, ?, ?)`,
     seedId,
     new Date().toISOString(),

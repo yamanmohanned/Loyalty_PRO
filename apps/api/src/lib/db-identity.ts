@@ -400,12 +400,47 @@ export async function assertMigrationsMatchBuild(log: Log): Promise<void> {
 
   if (!identityEnforced()) return;
 
+  /*
+    Worded so it cannot be mistaken for a data problem.
+
+    Everything about this failure is inside the installed program: the migration files
+    beside the binary are not the ones it was built against. The database has not been
+    opened, let alone written to. A merchant reading a refusal will reach for the
+    remedy he knows — restore a backup — and here that would overwrite good data to
+    cure a packaging fault, and fail identically afterwards. So the message says what
+    is wrong with the software, says his data is untouched, and rules the backup out by
+    name.
+  */
   throw new Error(
-    'تعذّر تشغيل الخدمة: ملفات تحديث قاعدة البيانات المرفقة لا تطابق هذه النسخة من البرنامج. ' +
-      'المطلوب أن تكون ملفات التحديث والبرنامج من نفس الإصدار. ' +
-      'أعد تثبيت البرنامج من ملف التثبيت الكامل، ولا تنسخ ملفات من تثبيت آخر. ' +
-      'التفاصيل التقنية مسجّلة في ملف السجل.',
+    'تعذّر تشغيل الخدمة: ملفات البرنامج المثبّتة غير متطابقة — ملفات تحديث قاعدة البيانات ' +
+      'لا تخصّ هذه النسخة من البرنامج. هذه مشكلة في التثبيت وليست في بياناتك. ' +
+      'قاعدة بياناتك لم تُفتح ولم تتغيّر. ' +
+      '**لا تستعد نسخة احتياطية** — أعد تثبيت البرنامج من ملف التثبيت الكامل، ولا تنسخ ملفات ' +
+      'من تثبيت آخر، أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
   );
+}
+
+/**
+ * Is this installation internally consistent — do the migration files beside the
+ * binary match the fingerprint compiled into it?
+ *
+ * `null` when it cannot be established, which is treated exactly like `false`: not
+ * knowing whether the build is sound is not a licence to blame the merchant's data.
+ */
+function migrationsMatchBuild(): boolean | null {
+  let directory: string | null;
+  try {
+    directory = resolveMigrationsDir();
+  } catch {
+    return null;
+  }
+  if (!directory) return null;
+
+  try {
+    return computeMigrationsFingerprint(directory) === EXPECTED_MIGRATIONS_FINGERPRINT;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -441,6 +476,51 @@ export async function verifyDatabaseIdentity(
     });
 
     if (enforced) {
+      /*
+        ── Two causes, opposite remedies, and only one of them is his ───────────
+
+        The hashes disagreeing means one of two things, and telling them apart is the
+        whole value of the message:
+
+          **The database is foreign.** The build is internally consistent — the
+          migration files beside the binary are the ones it was compiled against — so
+          the thing that does not belong is the file. His data is the problem, and
+          restoring a backup is the remedy.
+
+          **The BUILD is stale.** Someone added a migration and shipped without
+          regenerating the constants, or a runtime directory was assembled from two
+          different releases. His database is very probably perfect. Telling him to
+          restore a backup here would be advising him to overwrite good data to cure a
+          packaging mistake — and if he did, the new file would fail the same check,
+          because the fault never was in the file.
+
+        The second is not hypothetical: these constants shipped once as placeholders
+        that had never been generated, which would have produced exactly this refusal
+        against every correct database in the field.
+
+        `assertMigrationsMatchBuild` runs before this and already refuses the stale
+        case in production, so this branch is belt to that brace. It is written anyway
+        because that check returns early when the migrations directory cannot be found
+        — and "I could not verify the build" is precisely when blaming the data is
+        least defensible.
+      */
+      if (migrationsMatchBuild() !== true) {
+        log('refusing on a schema mismatch this build cannot vouch for', {
+          file,
+          expected: EXPECTED_SCHEMA_HASH,
+          actual: schemaHash,
+          migrationsMatchBuild: migrationsMatchBuild(),
+        });
+
+        throw new Error(
+          'تعذّر تشغيل الخدمة: نسخة البرنامج المثبّتة غير مكتملة — ملفاتها الداخلية لا تتفق مع بعضها. ' +
+            'هذه مشكلة في التثبيت وليست في بياناتك. ' +
+            'قاعدة بياناتك لم تُفتح ولم تتغيّر، ولا تحتاج إلى أي إجراء. ' +
+            '**لا تستعد نسخة احتياطية ولا تحذف أي ملف** — أعد تثبيت البرنامج من ملف التثبيت الكامل، ' +
+            'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+        );
+      }
+
       throw new Error(
         `تعذّر تشغيل الخدمة: بنية قاعدة البيانات في الملف «${file}» لا تطابق هذه النسخة من البرنامج. ` +
           'المطلوب قاعدة بيانات أنشأها هذا الإصدار أو نسخة احتياطية منه. ' +

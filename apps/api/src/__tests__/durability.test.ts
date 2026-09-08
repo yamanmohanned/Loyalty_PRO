@@ -222,7 +222,10 @@ describe('a damaged archive', () => {
 
     const bytes = readFileSync(good);
     const flipped = Buffer.from(bytes);
-    flipped[Math.floor(flipped.length / 2)] ^= 0x01;
+    // `noUncheckedIndexedAccess` types an index read as possibly-undefined, and `^=`
+    // is a read as well as a write. Explicit, so the intent survives the strictness.
+    const middle = Math.floor(flipped.length / 2);
+    flipped[middle] = (flipped[middle] ?? 0) ^ 0x01;
     const bitflip = join(dir, 'bitflip.walaabk');
     writeFileSync(bitflip, flipped);
 

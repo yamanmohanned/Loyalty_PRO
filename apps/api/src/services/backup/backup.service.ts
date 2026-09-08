@@ -225,7 +225,10 @@ async function prepareStaging(): Promise<{ path: string; reclaimedBytes: number 
     const code = (error as { code?: string }).code;
     throw new AppError(
       'STORAGE_UNAVAILABLE',
-      `تعذّر تجهيز مجلد النسخ الاحتياطي (${code ?? 'خطأ'}): ${staging}`,
+      `تعذّر تجهيز مجلد النسخ الاحتياطي (${code ?? 'خطأ'}): ${staging}. ` +
+        'المطلوب مجلد موجود وقابل للكتابة. ' +
+        'تحقّق من أن القرص متصل ومن صلاحيات الوصول إلى هذا المسار، ثم أعد المحاولة. ' +
+        'لم تُؤخذ أي نسخة احتياطية، وقاعدة البيانات لم تتغيّر.',
       { cause: error },
     );
   }

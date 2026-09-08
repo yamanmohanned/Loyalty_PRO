@@ -424,39 +424,28 @@ if (process.env.WALAA_DEMO === '1') {
 }
 
 // ── 7. Configuration template ───────────────────────────────────────────────────
-// Not a working configuration: the secrets are generated per installation by
-// `walaa-service.exe install`, so no two shops share a JWT signing key and no secret
-// is ever committed to this repository.
-writeFileSync(
-  join(STAGE, 'walaa.env.template'),
-  [
-    '# ولاء — إعدادات الخدمة. يُنشأ هذا الملف تلقائياً عند التثبيت.',
-    '# Generated per installation by `walaa-service.exe install`. Do not commit a filled copy.',
-    '',
-    'NODE_ENV=production',
-    // Filled in by `walaa-service.exe install` with the name THIS build opens:
-    // walaa.db for production, walaa-demo.db for a demo. The two never share a file.
-    'DATABASE_URL="file:{{DATABASE_FILE}}"',
-    'API_PORT=4000',
-    'API_HOST=0.0.0.0',
-    'LOG_LEVEL=info',
-    '',
-    '# Generated at install time — 48 random bytes each.',
-    'JWT_ACCESS_SECRET={{JWT_ACCESS_SECRET}}',
-    'JWT_REFRESH_SECRET={{JWT_REFRESH_SECRET}}',
-    'QR_TOKEN_SECRET={{QR_TOKEN_SECRET}}',
-    '',
-    'MERCHANT_TIMEZONE=Asia/Baghdad',
-    'MERCHANT_CURRENCY=IQD',
-    'NOTIFICATION_PROVIDER=stub',
-    '',
-    '# The Tauri webview, plus the LAN address the Loyalty Station browses to.',
-    '# The installer appends the machine address; add others by hand if a second',
-    '# station is set up on a different subnet.',
-    'API_CORS_ORIGINS="http://tauri.localhost,https://tauri.localhost,http://localhost:4000"',
-    '',
-  ].join('\n'),
-);
+/*
+  Copied, not generated.
+
+  This was a literal array right here, which meant nothing outside this script could
+  read it — and the thing worth reading it for is the check that every setting the API
+  *requires* is present. A required setting added to the schema and forgotten in this
+  list does not fail the build, the tests, or anybody's machine: it fails on a
+  merchant's first launch, as a service that refuses to start over a value nobody knew
+  was missing.
+
+  As a file it is reviewable in a diff and assertable in a test —
+  `apps/api/src/__tests__/env-contract.test.ts` holds it to the schema.
+
+  Still not a working configuration: the `{{PLACEHOLDER}}` secrets are generated per
+  installation by `walaa-service.exe install`, so no two shops share a JWT signing key
+  and no secret is ever committed to this repository.
+*/
+const envTemplate = join(REPO, 'packaging', 'walaa.env.template');
+if (!existsSync(envTemplate)) {
+  throw new Error(`the configuration template is missing: ${envTemplate}`);
+}
+cpSync(envTemplate, join(STAGE, 'walaa.env.template'));
 note('walaa.env.template');
 
 // ── 8. Manifest ─────────────────────────────────────────────────────────────────

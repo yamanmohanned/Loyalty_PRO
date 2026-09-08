@@ -14,6 +14,7 @@
     "db:studio": "dotenv -e ../../.env -- prisma studio",
     "db:verify": "tsx prisma/verify.ts",
     "db:template": "dotenv -e ../../.env -- tsx prisma/build-db-template.ts",
+    "db:template:check": "dotenv -e ../../.env -- tsx prisma/build-db-template.ts --check",
     "db:reset-ceremony": "tsx prisma/reset-ceremony.ts",
     "restore": "tsx src/tools/restore-cli.ts",
     "test": "vitest run --passWithNoTests",

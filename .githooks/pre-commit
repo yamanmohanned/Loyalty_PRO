@@ -1,0 +1,75 @@
+#!/bin/sh
+#
+# Refuses a commit that changes the database schema without regenerating the
+# fingerprints compiled into the service.
+#
+# ── Why a hook, when a test already covers it ────────────────────────────────
+#
+# The test is the authority and CI is the backstop. This exists because of WHERE the
+# failure otherwise lands: a stale fingerprint that reaches a commit is discovered by
+# whoever next runs the suite, or — if nobody does — by a merchant, as a service that
+# refuses to start and blames his database. The cheapest place to notice is the moment
+# the migration is written, by the person who wrote it.
+#
+# It runs only when the schema is actually involved, so ordinary commits pay nothing.
+#
+# Install (once per clone):
+#
+#     git config core.hooksPath .githooks
+#
+# Bypass, when you genuinely mean to commit a half-finished migration:
+#
+#     git commit --no-verify
+#
+# — and expect `pnpm test` to fail until you regenerate.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# `prisma/schema.prisma` is in the trigger set even though the fingerprints are
+# computed from the migration FILES: a schema edit without a migration is the state
+# just before the migration exists, and reminding someone there is that the point.
+touches_schema=$(printf '%s\n' "$staged" | grep -E '^apps/api/prisma/(migrations/|schema\.prisma$)' || true)
+
+if [ -z "$touches_schema" ]; then
+  exit 0
+fi
+
+echo "pre-commit: the database schema changed — checking the compiled fingerprints"
+
+# ── The check reads the WORKING TREE, so the index needs its own question ────
+#
+# `db:template:check` recomputes from the files on disk. That passes when someone
+# regenerated correctly — and it passes just as happily when they regenerated and then
+# staged only the migration, leaving the new fingerprints behind as unstaged changes.
+# The commit would then carry a schema the constants do not describe, while every check
+# on the machine that made it says everything is fine.
+fingerprints="apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json"
+for f in $fingerprints; do
+  if ! git diff --quiet -- "$f"; then
+    echo ""
+    echo "pre-commit: REFUSED."
+    echo ""
+    echo "  A migration is staged and $f has changes that are NOT staged."
+    echo "  The commit would carry a schema its fingerprints do not describe."
+    echo ""
+    echo "  Fix:  git add $fingerprints"
+    echo ""
+    exit 1
+  fi
+done
+
+if ! pnpm --filter @walaa/api db:template:check; then
+  echo ""
+  echo "pre-commit: REFUSED."
+  echo ""
+  echo "  A migration is staged and the fingerprints compiled into the service do not"
+  echo "  match it. Committing this ships a build that refuses to open a correct"
+  echo "  database, and says so in a message that blames the merchant's data."
+  echo ""
+  echo "  Fix:  pnpm --filter @walaa/api db:template"
+  echo "        git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json"
+  echo ""
+  exit 1
+fi
