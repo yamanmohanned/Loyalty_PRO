@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
+import { LoginRequestSchema, isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
+import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
 import { Eye, EyeOff, LogIn, Lock, User } from 'lucide-react';
@@ -49,8 +50,8 @@ export function LoginScreen({
 }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const errors = useFormErrors();
   /* The reference puts a visibility toggle in its password field. Taken: it is a
      real control that works against no backend and fabricates nothing, and at a till
      a mistyped password behind dots is the most common way to be locked out of a
@@ -60,11 +61,22 @@ export function LoginScreen({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setError(null);
+
+    /*
+      The API's own schema, before the request goes out.
+
+      An empty box is the commonest reason a sign-in fails, and it used to be answered
+      by the server with «اسم المستخدم مطلوب» buried in a `fields` array this screen
+      dropped — so an empty username read to the merchant as a rejected password.
+      Parsed here, it lands on the field it belongs to and nothing is sent.
+    */
+    const parsed = errors.validate(LoginRequestSchema, { username, password });
+    if (!parsed) return;
+
     setSubmitting(true);
 
     try {
-      const response = await api.post<LoginResponse>('/auth/login', { username, password });
+      const response = await api.post<LoginResponse>('/auth/login', parsed);
 
       // An allow-list, not a deny-list. This read `role === 'STATION'` until the V3-6
       // security pass added `AGENT`, at which point a role nobody had considered would
@@ -73,7 +85,7 @@ export function LoginScreen({
       // this is the same rule the API's `roles` config now states on every route: a role
       // added later must not inherit access by default.
       if (!isDashboardRole(response.user.role)) {
-        setError(locale.login.wrongApp);
+        errors.rejectField('username', locale.login.wrongApp);
         setSubmitting(false);
         return;
       }
@@ -104,7 +116,15 @@ export function LoginScreen({
         (caught.status === 401 || caught.status === 400 || caught.status === 403);
 
       if (!authentic) console.error('[login] request failed', caught);
-      setError(authentic ? (caught as ApiRequestError).message : locale.login.failed);
+
+      /*
+        A 400 carries fields — an empty box, a username too short — and those mark
+        themselves. A 401 does not and must not: which of the two was wrong is exactly
+        what a password prompt may never disclose, so it stays a single sentence over
+        both boxes.
+      */
+      if (authentic) errors.fail(caught);
+      else errors.rejectForm(locale.login.failed);
       setSubmitting(false);
     }
   }
@@ -133,10 +153,10 @@ export function LoginScreen({
         <p className="mt-3 text-base text-steel">{locale.login.signInHint}</p>
       </div>
 
-      <form onSubmit={submit} className="mt-8 space-y-7">
+      <form ref={errors.ref} onSubmit={submit} className="mt-8 space-y-7" noValidate>
         {/* The glyph inside the field is the reference's, and it is decoration in the
             strict sense — `aria-hidden`, with the label above carrying the meaning. */}
-        <Field label={locale.login.username}>
+        <Field label={locale.login.username} error={errors.fields.username} required>
           <Input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -152,7 +172,7 @@ export function LoginScreen({
           />
         </Field>
 
-        <Field label={locale.login.password}>
+        <Field label={locale.login.password} error={errors.fields.password} required>
           <Input
             type={reveal ? 'text' : 'password'}
             value={password}
@@ -177,8 +197,8 @@ export function LoginScreen({
           />
         </Field>
 
-        {notice && !error ? <Notice tone="accent">{notice}</Notice> : null}
-        {error ? <Notice tone="danger">{error}</Notice> : null}
+        {notice && !errors.summary ? <Notice tone="accent">{notice}</Notice> : null}
+        {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
 
         {/* Tall, full-width, gradient, with a leading glyph — the reference's primary
             action exactly, minus the neon rim beneath it (§6.4, §11). The 40px above

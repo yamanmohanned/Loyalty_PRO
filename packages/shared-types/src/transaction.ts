@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CardRejectionSchema, ScannedCardSchema } from './card-stock';
 import { CaptureModeSchema, DiscountTypeSchema } from './enums';
 import { CapturedInvoiceSchema } from './invoice';
-import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
+import { IqdAmountSchema, PositiveIqdAmountSchema, CurrencySchema } from './money';
 import { DiscountSlipSchema, VoucherSchema } from './voucher';
 
 /**
@@ -76,7 +76,8 @@ export const TransactionSchema = z.object({
   discountRate: z.number().int().min(0),
   discountValue: IqdAmountSchema,
   amountNet: IqdAmountSchema,
-  currency: z.literal('IQD'),
+  // `CurrencySchema`, not a second literal: one definition, one Arabic message.
+  currency: CurrencySchema,
   captureMode: CaptureModeSchema,
   occurredAt: z.string().datetime({ offset: true }),
   capturedAt: z.string().datetime({ offset: true }),

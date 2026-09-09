@@ -1,4 +1,9 @@
-import { ERROR_STATUS, type ApiError, type ApiErrorCode } from '@walaa/shared-types';
+import {
+  ERROR_STATUS,
+  summarizeFieldErrors,
+  type ApiError,
+  type ApiErrorCode,
+} from '@walaa/shared-types';
 
 /**
  * One error type for the whole service (CLAUDE.md §9).
@@ -59,10 +64,26 @@ export const forbidden = (message = 'ليس لديك صلاحية لهذا ال�
 
 export const notFound = (message = 'غير موجود') => new AppError('NOT_FOUND', message);
 
+/**
+ * A rejection this service decided on, rather than one the schema caught.
+ *
+ * ── The message is no longer optional in practice ────────────────────────────
+ *
+ * The default used to be «البيانات المُرسلة غير صحيحة», and a caller who passed
+ * `fields` and let the message default produced exactly the failure this whole pass
+ * exists to remove: the API knew which field and why, and said neither. There is now
+ * no default at all — the sentence is derived from the fields when one is not given,
+ * so the generic string cannot be reached by forgetting an argument.
+ */
 export const validationFailed = (
-  message = 'البيانات المُرسلة غير صحيحة',
+  message?: string,
   fields?: Array<{ path: string; message: string }>,
-) => new AppError('VALIDATION_FAILED', message, { fields });
+) =>
+  new AppError(
+    'VALIDATION_FAILED',
+    message ?? (fields && fields.length > 0 ? summarizeFieldErrors(fields) : 'تعذّر قبول البيانات المُدخلة'),
+    { fields },
+  );
 
 /**
  * The idempotency guard firing (CLAUDE.md §0.2). `details` carries the transaction

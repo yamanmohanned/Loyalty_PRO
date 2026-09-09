@@ -8,6 +8,7 @@
  * stores plain strings and will not object to a wrong one. See enums.ts.
  */
 
+export * from './messages';
 export * from './auth';
 export * from './backup';
 export * from './backup-drive';
@@ -28,3 +29,13 @@ export * from './storage';
 export * from './sync';
 export * from './transaction';
 export * from './voucher';
+
+/*
+  The Arabic error map is installed as a side effect of importing this package.
+
+  Every app in this product imports it for its schemas, so this is the one place that
+  cannot be forgotten — and forgetting it would put Zod's English defaults back in
+  front of a shop owner. See `messages.ts` for the 136 that were there before.
+*/
+import { installArabicErrorMap } from './messages';
+installArabicErrorMap();

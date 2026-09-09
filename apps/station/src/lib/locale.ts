@@ -227,6 +227,9 @@ export const locale = {
      */
     cardLabel: 'امسح البطاقة التي ستسلّمها',
     cardPlaceholder: 'امسح البطاقة…',
+    /* Said when the scan came through incomplete. The message used to be the field's
+       own LABEL, which told the operator nothing and read as an instruction. */
+    cardUnreadable: 'الرقم الممسوح غير مكتمل — امسح البطاقة مرة أخرى',
     cardScanned: (serial: string) => `بطاقة رقم ${serial} — جاهزة للتسليم`,
     cardScannedNoSerial: 'بطاقة جاهزة للتسليم',
     cardClear: 'مسح',
@@ -239,6 +242,9 @@ export const locale = {
   },
 
   reprint: {
+    /* Said instead of doing nothing at all, which is what a one-character search
+       used to produce: a button that looked broken. */
+    queryTooShort: 'أدخل حرفين على الأقل للبحث — الاسم أو رقم الهاتف أو رقم البطاقة',
     title: 'بحث وإعادة طباعة بطاقة',
     subtitle: 'ابحث برقم البطاقة أو رقم الهاتف أو الاسم',
     queryLabel: 'بحث عن زبون',

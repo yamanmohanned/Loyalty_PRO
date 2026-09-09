@@ -14,7 +14,8 @@ import type {
   CardBatchExportResponse,
   CardBatchListResponse,
 } from '@walaa/shared-types';
-import { api } from '../lib/api';
+import { api, ApiRequestError } from '../lib/api';
+import { useFormErrors } from '../lib/form';
 import { locale, formatDate } from '../lib/locale';
 import {
   Button,
@@ -57,7 +58,12 @@ export function CardsScreen() {
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /*
+    Rejections land on the box they are about. The quantity field is the one that
+    actually gets refused — a batch size over the ceiling, or a zero — and it used to
+    answer in a red panel at the top of a screen the field is not even on.
+  */
+  const errors = useFormErrors();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['card-batches'],
@@ -74,12 +80,12 @@ export function CardsScreen() {
       }),
     onSuccess: (response) => {
       setNotice(locale.cards.generated(response.batch.serialRangeFormatted));
-      setError(null);
+      errors.clear();
       setQuantity('');
       setNote('');
       void invalidate();
     },
-    onError: (failure: Error) => setError(failure.message),
+    onError: (failure: Error) => errors.fail(failure),
   });
 
   const voidBatch = useMutation({
@@ -89,10 +95,10 @@ export function CardsScreen() {
       }),
     onSuccess: (response) => {
       setNotice(locale.cards.voidedCount(response.voided));
-      setError(null);
+      errors.clear();
       void invalidate();
     },
-    onError: (failure: Error) => setError(failure.message),
+    onError: (failure: Error) => errors.fail(failure),
   });
 
   const askVoid = (batch: CardBatch): void => {
@@ -139,7 +145,7 @@ export function CardsScreen() {
 
       <div className="space-y-6">
         {notice ? <Notice tone="accent">{notice}</Notice> : null}
-        {error ? <Notice tone="danger">{error}</Notice> : null}
+        {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
 
         {/* ── The reorder signal ──────────────────────────────────────────── */}
 
@@ -218,7 +224,7 @@ export function CardsScreen() {
         <Card>
           <CardHeader title={locale.cards.generate} subtitle={locale.cards.quantityHint} />
           <div className="grid gap-5 p-6 md:grid-cols-[10rem_1fr_auto] md:items-end">
-            <Field label={locale.cards.quantity}>
+            <Field label={locale.cards.quantity} error={errors.fields.quantity} required>
               <Input
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value.replace(/\D/g, ''))}
@@ -228,7 +234,7 @@ export function CardsScreen() {
               />
             </Field>
 
-            <Field label={locale.cards.note}>
+            <Field label={locale.cards.note} error={errors.fields.note}>
               <Input
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
@@ -273,9 +279,9 @@ export function CardsScreen() {
                 voidPending={voidBatch.isPending}
                 onNotice={(message) => {
                   setNotice(message);
-                  setError(null);
+                  errors.clear();
                 }}
-                onError={setError}
+                onError={(message: string) => errors.rejectForm(message)}
                 onExported={() => void invalidate()}
               />
             ))}
@@ -331,6 +337,12 @@ function BatchPanel({
 }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  /*
+    Its own, because this panel is repeated once per batch. A rejection about the
+    reprint range in batch three belongs beside batch three's boxes, not in a panel at
+    the top of the page next to a different batch's.
+  */
+  const errors = useFormErrors();
 
   /**
    * Downloads go through a Blob rather than a link to the API.
@@ -371,7 +383,17 @@ function BatchPanel({
       setTo('');
       onExported();
     },
-    onError: (failure: Error) => onError(failure.message),
+    /*
+      Marked on this panel's own boxes when the API names a field — the export range
+      is refused by `serialFrom`/`serialTo` — and passed up as a sentence when it
+      does not, so a failure with nothing to point at still reaches the screen.
+    */
+    onError: (failure: Error) => {
+      errors.fail(failure);
+      if (!(failure instanceof ApiRequestError) || !failure.fields?.length) {
+        onError(failure.message);
+      }
+    },
   });
 
   const fromNumber = Number(from);
@@ -475,7 +497,7 @@ function BatchPanel({
           <p className="mt-1 text-sm leading-relaxed text-steel">{locale.cards.reprintHint}</p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-            <Field label={locale.cards.reprintFrom}>
+            <Field label={locale.cards.reprintFrom} error={errors.fields.serialFrom}>
               <Input
                 value={from}
                 onChange={(event) => setFrom(event.target.value.replace(/\D/g, ''))}
@@ -486,7 +508,7 @@ function BatchPanel({
               />
             </Field>
 
-            <Field label={locale.cards.reprintTo}>
+            <Field label={locale.cards.reprintTo} error={errors.fields.serialTo}>
               <Input
                 value={to}
                 onChange={(event) => setTo(event.target.value.replace(/\D/g, ''))}

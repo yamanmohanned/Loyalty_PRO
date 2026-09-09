@@ -271,6 +271,12 @@ export const locale = {
     error: 'حدث خطأ',
     errorBody: 'تعذّر تحميل البيانات. تحقّق من الاتصال بالخادم وأعد المحاولة.',
     comingSoon: 'قيد التطوير',
+    /* Beside a label, not as an asterisk — the asterisk needs a legend, and every
+       form that uses one forgets to render it. */
+    requiredMark: 'مطلوب',
+    /* Under a field whose rule is only about the alphabet, which is the rule the
+       merchant broke on install night. */
+    latinOnlyHint: 'أحرف إنجليزية وأرقام فقط',
 
     /**
      * ── The three sentences that replace a browser's English ─────────────────
@@ -544,12 +550,23 @@ export const locale = {
     subtitle: 'لا يوجد حساب على هذا الجهاز بعد. أنشئ حساب المالك الآن — يستغرق دقيقة واحدة.',
     merchantName: 'اسم المتجر',
     merchantNameHint: 'كما يظهر في التقارير وعلى بطاقات الزبائن',
+    /*
+      ── Every hint here is a rule the merchant actually broke ────────────────
+
+      He typed a branch code in Arabic and got «البيانات المرسلة غير صحيحة». The rule
+      was known, was written down in the schema, and was shown to him only in a
+      refusal that did not name it. A hint under the box costs one line and is read
+      before the mistake rather than after.
+    */
+    allRequired: 'كل الحقول في هذه الصفحة مطلوبة.',
     branchName: 'اسم الفرع',
+    branchNameHint: 'مثال: الفرع الرئيسي',
     branchCode: 'رمز الفرع',
-    branchCodeHint: 'أحرف إنجليزية وأرقام — يُطبع على الفواتير',
+    branchCodeHint: 'أحرف إنجليزية وأرقام وشرطة فقط — مثال: BAG-01. يُطبع على الفواتير.',
     ownerName: 'اسم المالك',
+    ownerNameHint: 'الاسم الذي يظهر في سجل العمليات',
     username: 'اسم المستخدم للدخول',
-    usernameHint: 'أحرف إنجليزية وأرقام، بدون مسافات',
+    usernameHint: 'أحرف إنجليزية وأرقام فقط، بدون مسافات — مثال: owner',
     password: 'كلمة المرور',
     passwordHint: '10 أحرف على الأقل. اخترها بنفسك ولا تشاركها مع أحد.',
     passwordConfirm: 'تأكيد كلمة المرور',

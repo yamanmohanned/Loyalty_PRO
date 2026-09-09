@@ -7,6 +7,7 @@ import type {
   DriveStatus,
 } from '@walaa/shared-types';
 import { api } from '../../lib/api';
+import { useFormErrors } from '../../lib/form';
 import { locale } from '../../lib/locale';
 import { Button, Card, CardHeader, Chip, Field, Input, Notice } from '../../components/ui';
 
@@ -47,7 +48,9 @@ import { Button, Card, CardHeader, Chip, Field, Input, Notice } from '../../comp
 export function DriveSection() {
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  /* A refusal about the retention count belongs under the retention box, not in a
+     panel at the bottom of a card whose top half is about a Google account. */
+  const errors = useFormErrors();
   const pollTimer = useRef<number | null>(null);
 
   const status = useQuery({
@@ -67,7 +70,7 @@ export function DriveSection() {
   const connect = useMutation({
     mutationFn: () => api.post<DriveConnectStart>('/backup/drive/connect', {}),
     onSuccess: (start) => {
-      setError(null);
+      errors.clear();
       setNotice(locale.settings.drive.consentOpened);
 
       /*
@@ -90,7 +93,7 @@ export function DriveSection() {
             } else if (progress.state === 'FAILED') {
               stopPolling();
               setNotice(null);
-              setError(progress.failure?.message ?? locale.common.error);
+              errors.rejectForm(progress.failure?.message ?? locale.common.error);
             }
           })
           .catch(() => {
@@ -100,29 +103,29 @@ export function DriveSection() {
     },
     onError: (caught: Error) => {
       setNotice(null);
-      setError(caught.message);
+      errors.fail(caught);
     },
   });
 
   const disconnect = useMutation({
     mutationFn: () => api.post('/backup/drive/disconnect', {}),
     onSuccess: () => {
-      setError(null);
+      errors.clear();
       setNotice(locale.settings.drive.disconnected);
       void queryClient.invalidateQueries({ queryKey: ['drive'] });
     },
-    onError: (caught: Error) => setError(caught.message),
+    onError: (caught: Error) => errors.fail(caught),
   });
 
   const save = useMutation({
     mutationFn: (update: { enabled?: boolean; keep?: number }) =>
       api.patch('/backup/drive/settings', update),
     onSuccess: () => {
-      setError(null);
+      errors.clear();
       setNotice(locale.common.saved);
       void queryClient.invalidateQueries({ queryKey: ['drive'] });
     },
-    onError: (caught: Error) => setError(caught.message),
+    onError: (caught: Error) => errors.fail(caught),
   });
 
   const data = status.data;
@@ -214,7 +217,11 @@ export function DriveSection() {
                 </div>
 
                 {/* Retention: how many copies Drive keeps before the oldest is dropped. */}
-                <Field label={locale.settings.drive.keepLabel} hint={locale.settings.drive.keepHint}>
+                <Field
+                  label={locale.settings.drive.keepLabel}
+                  hint={locale.settings.drive.keepHint}
+                  error={errors.fields.keep}
+                >
                   <Input
                     type="number"
                     min={1}
@@ -233,7 +240,7 @@ export function DriveSection() {
               </>
             ) : null}
 
-            {error ? <Notice tone="danger">{error}</Notice> : null}
+            {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
             {notice ? <Notice tone="accent">{notice}</Notice> : null}
           </>
         )}

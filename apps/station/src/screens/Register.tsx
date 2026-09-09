@@ -7,7 +7,9 @@ import {
   normalizeCardNumber,
   type Customer,
 } from '@walaa/shared-types';
+import { CreateCustomerRequestSchema } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
+import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
 import { usePrint } from '../lib/print';
 import { Barcode } from '../components/Barcode';
@@ -40,7 +42,14 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
   const [phone, setPhone] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [mode, setMode] = useState<Mode>('CARD');
-  const [error, setError] = useState<string | null>(null);
+  /*
+    Per FIELD, not one message parked under the phone box.
+
+    This screen rendered `error.fields[0].message` under the phone number whatever
+    field the API had rejected, so «الاسم مطلوب» appeared under a phone number that
+    was correct and the operator retyped the phone with a customer waiting.
+  */
+  const errors = useFormErrors();
   const [cardError, setCardError] = useState<string | null>(null);
   /**
    * A registration the server accepted the request for and did not store
@@ -81,26 +90,41 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
-    setError(null);
     setCardError(null);
 
     if (mode === 'CARD' && !looksLikeCardNumber(cardNumber)) {
-      // Refused here rather than sent: a half-scanned number would come back as a
-      // server-side "unknown card", which reads as a bad card rather than a bad scan.
-      setCardError(locale.register.cardLabel);
+      /*
+        Refused here rather than sent: a half-scanned number would come back as a
+        server-side "unknown card", which reads as a bad card rather than a bad scan.
+
+        The message used to be `locale.register.cardLabel` — the field's own LABEL,
+        «امسح البطاقة التي ستسلّمها», shown as the explanation of why the scan was
+        refused. It told the operator nothing he could not see, and it read as an
+        instruction rather than a fault. It now says what is wrong with the number.
+      */
+      setCardError(locale.register.cardUnreadable);
       cardInputRef.current?.focus();
       return;
     }
+
+    /*
+      The API's own schema, before the request goes out — the same object the route
+      validates with, so a value this form accepts cannot be refused for its shape.
+      It also normalises: `PhoneInputSchema` emits E.164, and posting the raw box
+      would send something this screen never checked.
+    */
+    const parsed = errors.validate(CreateCustomerRequestSchema, {
+      name,
+      phone,
+      ...(mode === 'CARD' ? { cardNumber: normalizeCardNumber(cardNumber) } : {}),
+    });
+    if (!parsed) return;
 
     setBusy(true);
     setNotSaved(null);
 
     try {
-      const response = await api.post<{ customer: Customer }>('/customers', {
-        name,
-        phone,
-        ...(mode === 'CARD' ? { cardNumber: normalizeCardNumber(cardNumber) } : {}),
-      });
+      const response = await api.post<{ customer: Customer }>('/customers', parsed);
       setCreated({ customer: response.customer, mode });
       // A pre-printed card is already in the customer's hand — printing anything
       // would be a second, contradictory card. Only the thermal path prints.
@@ -109,7 +133,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
       if (error_ instanceof ApiRequestError && error_.code === 'CUSTOMER_ALREADY_EXISTS') {
         // Not a dead end: the person already has a card and probably lost it, which
         // is the reprint flow one tap away.
-        setError(locale.register.duplicate);
+        errors.rejectField('phone', locale.register.duplicate);
       } else if (error_ instanceof ApiRequestError && error_.code === 'CARD_NOT_ISSUABLE') {
         // The card, not the person. Shown against the card field with the server's
         // own per-state sentence, so the operator knows to reach for another card
@@ -118,10 +142,10 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
         cardInputRef.current?.focus();
       } else if (error_ instanceof ApiRequestError && error_.isUnsavedWrite) {
         setNotSaved({ storage: error_.isStorageFailure });
-      } else if (error_ instanceof ApiRequestError) {
-        setError(error_.fields?.[0]?.message ?? error_.message);
       } else {
-        setError(locale.errors.unexpected);
+        // Marks whichever field the API named, and falls back to its sentence when
+        // it named none.
+        errors.fail(error_);
       }
     } finally {
       setBusy(false);
@@ -196,8 +220,8 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
           </Notice>
         ) : null}
 
-        <form onSubmit={submit} className="space-y-5">
-          <Field label={locale.register.name}>
+        <form ref={errors.ref} onSubmit={submit} className="space-y-5" noValidate>
+          <Field label={locale.register.name} error={errors.fields.name}>
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -208,7 +232,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
             />
           </Field>
 
-          <Field label={locale.register.phone} error={error}>
+          <Field label={locale.register.phone} error={errors.fields.phone}>
             <Input
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
@@ -217,7 +241,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
               autoComplete="off"
               dir="ltr"
               className="h-16 text-center font-mono text-2xl tracking-widest"
-              invalid={Boolean(error)}
+              invalid={Boolean(errors.fields.phone)}
             />
           </Field>
 
@@ -254,7 +278,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
             <Notice tone="success">{locale.register.cardScannedNoSerial}</Notice>
           ) : null}
 
-          {error === locale.register.duplicate ? (
+          {errors.fields.phone === locale.register.duplicate ? (
             <Notice tone="warn">
               <Button
                 variant="quiet"

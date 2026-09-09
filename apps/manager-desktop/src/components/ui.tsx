@@ -101,17 +101,33 @@ export function Button({
  */
 const FieldContext = createContext<{ invalid: boolean }>({ invalid: false });
 
-/** Label ABOVE, helper/error BELOW — never placeholder-only (§6.4). */
+/**
+ * Label ABOVE, helper/error BELOW — never placeholder-only (§6.4).
+ *
+ * ── `required` says so before the button is pressed ──────────────────────────
+ *
+ * A merchant filled in what he could reach on an unscrollable setup form, pressed the
+ * button, and was told his data was wrong. Two things had to change for that not to
+ * happen again, and this is the first: a field that must be filled says so while he is
+ * looking at it, in a word rather than an asterisk nobody has explained.
+ *
+ * `hint` is the other half — the rule, under the field, before it is broken. Both are
+ * the same argument: a form that states its requirements only in a refusal is a form
+ * that refuses first and explains second.
+ */
 export function Field({
   label,
   hint,
   error,
+  required,
   children,
   className,
 }: {
   label: string;
   hint?: string;
   error?: string;
+  /** Renders «مطلوب» beside the label. Not the HTML attribute — see `Input`. */
+  required?: boolean;
   children: ReactNode;
   className?: string;
 }) {
@@ -121,7 +137,15 @@ export function Field({
         {/* 12px to the input (reference: 11px, snapped to the 4px rhythm of §6.5),
             and the label at 15px — `login.png`'s label is the same size as its body
             text, not a step down from it. */}
-        <span className="mb-3 block text-[0.9375rem] font-medium text-ink">{label}</span>
+        <span className="mb-3 flex items-baseline gap-2 text-[0.9375rem] font-medium text-ink">
+          {label}
+          {/* A word, not a `*`. The asterisk convention needs a legend somewhere on
+              the page to be readable, every form that uses it forgets the legend, and
+              a shop owner has never been told what it means. */}
+          {required ? (
+            <span className="text-xs font-normal text-steel">{locale.common.requiredMark}</span>
+          ) : null}
+        </span>
         {children}
         {/*
           8px below, not 4.

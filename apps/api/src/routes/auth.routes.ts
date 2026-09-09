@@ -41,14 +41,28 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
    * Creates the shop and its owner. Once, ever.
    *
    * Self-closing: the count and the insert share one transaction, so this refuses from
-   * the moment a single user exists. The rate limit is tight because the window in
-   * which it can succeed is measured in minutes and a caller hammering it afterwards is
-   * not a merchant.
+   * the moment a single user exists.
+   *
+   * ── The limit was 5 a minute, and that was a trap ────────────────────────────
+   *
+   * "Tight, because the window is measured in minutes" reasoned about an attacker and
+   * forgot the merchant. This is a SIX-FIELD form with format rules on three of them,
+   * filled in once, by a shop owner, at a counter — and every rejected attempt spends
+   * one of the five. Reproducing the install-night failure used the budget up twice in
+   * five minutes and answered «عدد كبير من المحاولات»: a true sentence, about the
+   * wrong thing, in the middle of the one form that has no way around it.
+   *
+   * A tight limit was never what protected this endpoint either. What protects it is
+   * that it can succeed exactly once — a caller hammering it after the owner exists
+   * gets 403 whatever the rate, and one racing the owner beforehand is not slowed in
+   * any useful way by four attempts versus nineteen. The limit is here to stop a
+   * machine, not a person, so it is set where a person cannot reach it and a script
+   * still can.
    */
   app.post(
     '/bootstrap',
     {
-      config: { public: true, rateLimit: { max: 5, timeWindow: '1 minute' } },
+      config: { public: true, rateLimit: { max: 20, timeWindow: '1 minute' } },
       schema: { body: BootstrapRequestSchema },
     },
     async (request, reply) => {

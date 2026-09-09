@@ -29,7 +29,17 @@ export const PositiveIqdAmountSchema = IqdAmountSchema.positive('المبلغ ي
 export type IqdAmount = z.infer<typeof IqdAmountSchema>;
 
 /** ISO 4217. The platform is single-currency today; the field exists so it can stop being. */
-export const CurrencySchema = z.literal('IQD');
+/*
+  The message is written out rather than left to the error map.
+
+  The map's sentence for a literal names the literal, and the literal here is `IQD` —
+  three Latin letters in the middle of an Arabic refusal, which is the exact class
+  `messages.test.ts` refuses. A currency this product only ever stores one of does not
+  need its wire token quoted at a shop owner.
+*/
+export const CurrencySchema = z.literal('IQD', {
+  errorMap: () => ({ message: 'العملة المدعومة هي الدينار العراقي فقط' }),
+});
 export type Currency = z.infer<typeof CurrencySchema>;
 
 /** A discount percentage: whole percent, 1–100. Never a float. */

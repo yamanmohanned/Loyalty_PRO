@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { OwnerPasswordSchema } from '@walaa/shared-types';
 import { AppError, validationFailed } from '../lib/errors';
 import { hashPassword } from '../lib/password';
 import { prisma } from '../lib/prisma';
@@ -46,30 +47,17 @@ import { AUDIT_ACTIONS, recordAudit } from './audit.service';
  * product, and the Station is the account most likely to be written on a sticky note.
  */
 
-/** Anything shorter is a password somebody chose while a merchant watched them type. */
-const MIN_PASSWORD_LENGTH = 10;
+/*
+  The password rule is not defined here any more.
 
-/**
- * Passwords this refuses outright.
- *
- * Not a completeness exercise — a deny-list can never be one. These are the specific
- * values this product's own history makes likely: the development seed's password,
- * which is in the repository and in every conversation about it, and the handful a
- * person types when they intend to "change it later" and never do.
- */
-const REFUSED_PASSWORDS = new Set(
-  [
-    'walaa!dev2026',
-    'walaa2026',
-    'password',
-    'password1',
-    '1234567890',
-    '0123456789',
-    'admin12345',
-    'qwertyuiop',
-    'walaawalaa',
-  ].map((value) => value.toLowerCase()),
-);
+  It used to be: the length floor lived in `BootstrapRequestSchema` and the deny-list
+  lived in this file, so a password the setup form was willing to send could still be
+  refused on arrival — and the merchant got «البيانات المرسلة غير صحيحة» after typing
+  it twice. One rule, one definition, in the package both sides import.
+
+  It is still asserted HERE as well as at the route, because a rule this cheap should
+  hold for any caller that never went near the route.
+*/
 
 export interface BootstrapInput {
   merchantName: string;
@@ -100,17 +88,12 @@ export async function bootstrapInstallation(
 ): Promise<{ merchantId: string; branchId: string; userId: string }> {
   const password = input.password;
 
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    throw validationFailed('كلمة المرور قصيرة — استخدم 10 أحرف أو أكثر.', [
-      { path: 'password', message: `الحد الأدنى ${MIN_PASSWORD_LENGTH} أحرف` },
+  const acceptable = OwnerPasswordSchema.safeParse(password);
+  if (!acceptable.success) {
+    const first = acceptable.error.issues[0];
+    throw validationFailed(first?.message ?? 'كلمة المرور غير صالحة', [
+      { path: 'password', message: first?.message ?? 'كلمة المرور غير صالحة' },
     ]);
-  }
-
-  if (REFUSED_PASSWORDS.has(password.toLowerCase())) {
-    throw validationFailed(
-      'كلمة المرور هذه معروفة ولا يمكن استخدامها. اختر كلمة مرور خاصة بمتجرك.',
-      [{ path: 'password', message: 'كلمة مرور شائعة' }],
-    );
   }
 
   // Hashed before the transaction opens: Argon2id is deliberately slow, and holding

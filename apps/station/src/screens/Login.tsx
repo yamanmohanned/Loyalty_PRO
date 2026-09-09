@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { BookOpen, Lock, LogIn, User } from 'lucide-react';
-import { isStationRole, type LoginResponse } from '@walaa/shared-types';
+import { LoginRequestSchema, isStationRole, type LoginResponse } from '@walaa/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
+import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
 import { AuthLayout } from '../components/AuthLayout';
 import { Guide } from '../components/Guide';
-import { Button, Divider, Field, Input } from '../components/ui';
+import { Button, Divider, Field, Input, Notice } from '../components/ui';
 
 /**
  * Station operator login (§6.2 #2).
@@ -28,20 +29,30 @@ export function LoginScreen({
 }): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+    The credential failure is a FORM message, not a field one. It sat under the
+    password box, which says "the password was the wrong half" — a disclosure a sign-in
+    may not make, and a lie in the common case where the username was the typo.
+  */
+  const errors = useFormErrors();
   const [guideOpen, setGuideOpen] = useState(false);
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
-    setError(null);
+
+    // The API's own schema first: an empty box is the commonest failure here and it
+    // belongs on the box, not in a sentence about credentials.
+    const parsed = errors.validate(LoginRequestSchema, { username, password });
+    if (!parsed) return;
+
     setBusy(true);
 
     try {
-      const response = await api.post<LoginResponse>('/auth/login', { username, password });
+      const response = await api.post<LoginResponse>('/auth/login', parsed);
 
       if (!isStationRole(response.user.role)) {
-        setError(locale.login.notStation);
+        errors.rejectForm(locale.login.notStation);
         setBusy(false);
         return;
       }
@@ -49,11 +60,19 @@ export function LoginScreen({
       setTokens(response.tokens);
       onAuthenticated(response.user);
     } catch (error_) {
-      setError(
-        error_ instanceof ApiRequestError && error_.isNetworkFailure
-          ? locale.errors.network
-          : locale.login.failed,
-      );
+      /*
+        A 400 carries fields and marks them. Everything else is one sentence over both
+        boxes: which of the two was wrong is exactly what must not be disclosed.
+      */
+      if (error_ instanceof ApiRequestError && error_.status === 400 && error_.fields?.length) {
+        errors.fail(error_);
+      } else {
+        errors.rejectForm(
+          error_ instanceof ApiRequestError && error_.isNetworkFailure
+            ? locale.errors.network
+            : locale.login.failed,
+        );
+      }
       setBusy(false);
     }
   }
@@ -69,8 +88,8 @@ export function LoginScreen({
 
         {/* The reference's rhythm, snapped to the 4px grid: heading→sub 12,
             sub→fields 32, label→input 12, input→next 28, input→action 40. */}
-        <form onSubmit={submit} className="mt-8 space-y-7">
-          <Field label={locale.login.username}>
+        <form ref={errors.ref} onSubmit={submit} className="mt-8 space-y-7" noValidate>
+          <Field label={locale.login.username} error={errors.fields.username}>
             <Input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
@@ -82,7 +101,7 @@ export function LoginScreen({
             />
           </Field>
 
-          <Field label={locale.login.password} error={error}>
+          <Field label={locale.login.password} error={errors.fields.password}>
             <Input
               type="password"
               value={password}
@@ -90,10 +109,12 @@ export function LoginScreen({
               autoComplete="current-password"
               dir="ltr"
               className="text-start"
-              invalid={Boolean(error)}
+              invalid={Boolean(errors.fields.password)}
               icon={<Lock size={20} />}
             />
           </Field>
+
+          {errors.summary ? <Notice tone="error">{errors.summary}</Notice> : null}
 
           <Button type="submit" size="large" disabled={busy} className="!mt-10 w-full">
             <LogIn size={22} aria-hidden />

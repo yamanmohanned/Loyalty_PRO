@@ -65,7 +65,16 @@ export function ReprintScreen({ shopName }: { shopName: string }): JSX.Element {
   async function search(event: FormEvent): Promise<void> {
     event.preventDefault();
     const trimmed = query.trim();
-    if (trimmed.length < 2) return;
+    if (trimmed.length < 2) {
+      /*
+        This used to `return` in silence. The operator typed one character, pressed
+        the button, and the screen did nothing at all — which reads as a broken button
+        with a customer waiting, and is the same defect as a generic message with the
+        message removed.
+      */
+      setError(locale.reprint.queryTooShort);
+      return;
+    }
 
     setError(null);
     setBusy(true);

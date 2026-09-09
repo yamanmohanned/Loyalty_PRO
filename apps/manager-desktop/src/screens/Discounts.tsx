@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BadgePercent, Plus, Trash2 } from 'lucide-react';
 import type { DiscountConfigResponse, DiscountRuleRow } from '@walaa/shared-types';
 import { assessMargin, SAFE_PERCENTAGE_MAX, SAFE_PERCENTAGE_MIN } from '@walaa/shared-types';
-import { api, ApiRequestError } from '../lib/api';
+import { api } from '../lib/api';
+import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
 import {
   AmountInput,
@@ -37,8 +38,8 @@ import {
 
 export function DiscountsScreen() {
   const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const errors = useFormErrors();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['discount-config'],
@@ -95,7 +96,7 @@ export function DiscountsScreen() {
 
   async function save() {
     if (!settings || !rules) return;
-    setError(null);
+    errors.clear();
     setSaved(false);
 
     try {
@@ -109,15 +110,15 @@ export function DiscountsScreen() {
       setDraftRules(null);
       setSaved(true);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) {
-        setError(
-          caught.fields?.length
-            ? `${caught.message} — ${caught.fields[0]?.message ?? ''}`
-            : caught.message,
-        );
-      } else {
-        setError(locale.common.errorBody);
-      }
+      /*
+        The rejection lands on the row and the box it is about.
+
+        This used to append the first field's message to the summary and stop there:
+        «القواعد تتجاوز الحدود المسموحة — نسبة الخصم أعلى من الحد» over a table of six
+        rules, with nothing saying which one. The paths the API reports are indexed
+        (`rules.2.discountRate`), so the row can mark itself.
+      */
+      errors.fail(caught);
     }
   }
 
@@ -179,9 +180,9 @@ export function DiscountsScreen() {
         }
       />
 
-      {error ? (
+      {errors.summary ? (
         <div className="mb-4">
-          <Notice tone="danger">{error}</Notice>
+          <Notice tone="danger">{errors.summary}</Notice>
         </div>
       ) : null}
       {saved ? (
@@ -210,7 +211,11 @@ export function DiscountsScreen() {
         <Card>
           <CardHeader title={locale.discounts.settingsTitle} />
           <div className="grid grid-cols-2 gap-5 p-6">
-            <Field label={locale.discounts.discountType} hint={settings.discountType === 'NONE' ? locale.discounts.typeNoneHint : undefined}>
+            <Field
+              label={locale.discounts.discountType}
+              hint={settings.discountType === 'NONE' ? locale.discounts.typeNoneHint : undefined}
+              error={errors.fields.discountType}
+            >
               <Select
                 value={settings.discountType}
                 onChange={(e) => updateSettings({ discountType: e.target.value as DiscountConfigResponse['settings']['discountType'] })}
@@ -221,7 +226,7 @@ export function DiscountsScreen() {
               </Select>
             </Field>
 
-            <Field label={locale.discounts.minRate} hint={locale.discounts.safeBand}>
+            <Field label={locale.discounts.minRate} hint={locale.discounts.safeBand} error={errors.fields.minRate}>
               <Input
                 type="number"
                 min={0}
@@ -232,7 +237,7 @@ export function DiscountsScreen() {
               />
             </Field>
 
-            <Field label={locale.discounts.maxRate}>
+            <Field label={locale.discounts.maxRate} error={errors.fields.maxRate}>
               <Input
                 type="number"
                 min={0}
@@ -247,6 +252,7 @@ export function DiscountsScreen() {
             <Field
               label={locale.discounts.absoluteCap}
               hint={locale.discounts.absoluteCapHint}
+              error={errors.fields.absoluteMaxDiscountValue}
               className="col-span-2"
             >
               <AmountInput
@@ -258,6 +264,7 @@ export function DiscountsScreen() {
             <Field
               label={locale.discounts.settlement}
               hint={locale.discounts.settlementHint}
+              error={errors.fields.settlementStrategy}
               className="col-span-2"
             >
               <Select
@@ -334,14 +341,20 @@ export function DiscountsScreen() {
                     </div>
                   ) : null}
                   <div className="grid grid-cols-[1.6fr_1.2fr_1.2fr_1.4fr_auto] items-end gap-4">
-                    <Field label={locale.discounts.colThreshold}>
+                    <Field
+                      label={locale.discounts.colThreshold}
+                      error={errors.fields[`rules.${index}.thresholdAmount`]}
+                    >
                       <AmountInput
                         value={rule.thresholdAmount}
                         onChange={(e) => updateRule(index, { thresholdAmount: Number(e.target.value) })}
                       />
                     </Field>
 
-                    <Field label={locale.discounts.discountType}>
+                    <Field
+                      label={locale.discounts.discountType}
+                      error={errors.fields[`rules.${index}.discountType`]}
+                    >
                       <Select
                         value={rule.discountType}
                         onChange={(e) =>
@@ -355,7 +368,10 @@ export function DiscountsScreen() {
                       </Select>
                     </Field>
 
-                    <Field label={locale.discounts.colRate}>
+                    <Field
+                      label={locale.discounts.colRate}
+                      error={errors.fields[`rules.${index}.discountRate`]}
+                    >
                       {rule.discountType === 'PERCENTAGE' ? (
                         <AmountInput
                           suffix="٪"
@@ -386,6 +402,7 @@ export function DiscountsScreen() {
                     <Field
                       label={locale.discounts.colRuleCap}
                       hint={locale.discounts.colRuleCapHint}
+                      error={errors.fields[`rules.${index}.maxDiscountValue`]}
                     >
                       <AmountInput
                         value={rule.maxDiscountValue ?? ''}

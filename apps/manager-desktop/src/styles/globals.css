@@ -17,7 +17,27 @@
     @apply bg-canvas text-ink font-sans antialiased;
     font-size: 1rem;
     line-height: 1.6;
-    overflow: hidden;
+
+    /*
+      ── `overflow: hidden` used to be here, and it cost the first installation ──
+
+      It was written to stop the page rubber-banding like a web page. What it actually
+      did was make the document unable to scroll AT ALL, so any screen that did not
+      build its own scroll container became a screen whose lower half could not be
+      reached. The dashboard has one (`<main overflow-y-auto>`), so the defect was
+      invisible in everything anybody tested; the pre-session screens do not.
+
+      «إعداد المتجر لأول مرة» is the tallest form in the product — six fields, a
+      confirmation, a warning panel and a button — and it is the FIRST thing a merchant
+      ever sees. On the 1024×700 window `tauri.conf.json` sets as the minimum, its lower
+      fields were below the fold and there was no way to scroll to them. The merchant
+      tabbed to them blind, could not read their labels or their rules, submitted, and
+      got a refusal that did not say which field.
+
+      `overscroll-behavior` is what was actually wanted: it stops the bounce and the
+      scroll chaining without stopping the scrolling.
+    */
+    overscroll-behavior: none;
   }
 
   /* Text the manager may genuinely want to copy — amounts, codes, phone numbers. */

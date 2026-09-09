@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifySchemaCompiler } from 'fastify';
 import { ZodError, type ZodTypeAny } from 'zod';
+import { summarizeFieldErrors } from '@walaa/shared-types';
 import { AppError } from '../lib/errors';
 
 /**
@@ -14,6 +15,21 @@ import { AppError } from '../lib/errors';
  * Unknown-field rejection comes from the schemas themselves: every request schema in
  * `@walaa/shared-types` is `.strict()`, so an unexpected field is a 400 rather than a
  * value silently dropped on the floor.
+ *
+ * ── The envelope names the field, and that is a fix ──────────────────────────
+ *
+ * The top-level `message` was the constant «البيانات المُرسلة غير صحيحة» for every
+ * rejection this compiler ever produced. The `fields` array beside it always carried
+ * the real answer — «رمز الفرع: أحرف إنجليزية وأرقام وشرطة فقط» — and the screens
+ * rendered `message` and dropped `fields`, so a merchant at a counter was told his
+ * data was wrong and nothing else.
+ *
+ * Both halves are fixed. The screens now render the fields (see the dashboard's
+ * `lib/form.ts`), and `message` is no longer a constant: it is built from the same
+ * issues, so any surface that renders only the sentence still names the field. The
+ * two are not duplicates — the sentence carries the field's Arabic NAME, because
+ * nothing beside it says which field it is; the per-field entry does not, because it
+ * is rendered under a labelled field.
  */
 
 const isZodSchema = (schema: unknown): schema is ZodTypeAny =>
@@ -37,12 +53,23 @@ export const zodValidatorCompiler: FastifySchemaCompiler<ZodTypeAny> =
   };
 
 function toAppError(error: ZodError): AppError {
-  return new AppError('VALIDATION_FAILED', 'البيانات المُرسلة غير صحيحة', {
-    fields: error.issues.map((issue) => ({
-      path: issue.path.join('.'),
-      message: issue.message,
-    })),
-  });
+  /*
+    Deduplicated by (path, message). A field with both a `min` and a `regex` on it
+    reports two issues for one empty value — the merchant sees «رمز الفرع مطلوب»
+    followed by «رمز الفرع: أحرف إنجليزية…», the second of which is noise while the
+    field is empty. The first message per path wins, which is the more specific one
+    in every schema here because the length rule is written first.
+  */
+  const seen = new Set<string>();
+  const fields: Array<{ path: string; message: string }> = [];
+  for (const issue of error.issues) {
+    const path = issue.path.join('.');
+    if (seen.has(path)) continue;
+    seen.add(path);
+    fields.push({ path, message: issue.message });
+  }
+
+  return new AppError('VALIDATION_FAILED', summarizeFieldErrors(fields), { fields });
 }
 
 export function registerZodValidation(app: FastifyInstance): void {

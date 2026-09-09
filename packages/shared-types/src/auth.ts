@@ -91,6 +91,85 @@ export type AccessTokenClaims = z.infer<typeof AccessTokenClaimsSchema>;
  * nothing about the installation beyond a boolean — deliberately: a caller who learns
  * "already set up" learns nothing they could not learn by trying to log in.
  */
+/* ── The owner's password, defined ONCE ─────────────────────────────────────── */
+
+/**
+ * Anything shorter is a password somebody chose while a merchant watched them type.
+ */
+export const MIN_OWNER_PASSWORD_LENGTH = 10;
+
+/**
+ * Passwords refused outright.
+ *
+ * Not a completeness exercise — a deny-list can never be one. These are the specific
+ * values this product's own history makes likely: the development seed's password,
+ * which is in the repository and in every conversation about it, and the handful a
+ * person types when they intend to "change it later" and never do.
+ */
+export const REFUSED_PASSWORDS: ReadonlySet<string> = new Set(
+  [
+    'walaa!dev2026',
+    'walaa2026',
+    'password',
+    'password1',
+    '1234567890',
+    '0123456789',
+    'admin12345',
+    'qwertyuiop',
+    'walaawalaa',
+  ].map((value) => value.toLowerCase()),
+);
+
+/**
+ * The owner password rule, as ONE schema both sides parse.
+ *
+ * ── Why it moved here ────────────────────────────────────────────────────────
+ *
+ * The length floor lived in this schema and the deny-list lived in the API service,
+ * which meant a password the setup form was willing to send could still be refused
+ * by the server — «البيانات المرسلة غير صحيحة», after the merchant had typed it
+ * twice. Two rules in two places is not a validation problem, it is a definition
+ * problem: the form can only promise what it can evaluate.
+ *
+ * So the whole rule is one exported schema. The form parses with it before sending,
+ * the route parses with it on arrival, and the service asserts it a third time on the
+ * value it is about to hash — because a rule this cheap should hold for a caller that
+ * never went near the route.
+ *
+ * Stated to the merchant BEFORE he types, too: `OWNER_PASSWORD_RULES` is the same
+ * facts as a list the setup screen renders live as he fills the field in.
+ */
+export const OwnerPasswordSchema = z
+  .string()
+  .min(MIN_OWNER_PASSWORD_LENGTH, `كلمة المرور: ${MIN_OWNER_PASSWORD_LENGTH} أحرف على الأقل`)
+  .max(200)
+  .refine((value) => !REFUSED_PASSWORDS.has(value.trim().toLowerCase()), {
+    message: 'كلمة المرور هذه معروفة ولا يمكن استخدامها — اختر كلمة مرور خاصة بمتجرك',
+  });
+
+/**
+ * The same rule, as things a person can check while typing.
+ *
+ * `test` runs on the value in the field, so the setup screen can tick each line off
+ * live instead of listing requirements the merchant only meets by accident.
+ */
+export const OWNER_PASSWORD_RULES: ReadonlyArray<{
+  id: string;
+  label: string;
+  test: (value: string) => boolean;
+}> = Object.freeze([
+  {
+    id: 'length',
+    label: `${MIN_OWNER_PASSWORD_LENGTH} أحرف على الأقل`,
+    test: (value: string) => value.length >= MIN_OWNER_PASSWORD_LENGTH,
+  },
+  {
+    id: 'not-known',
+    label: 'ليست كلمة مرور شائعة أو كلمة مرور التجربة',
+    test: (value: string) => value.length > 0 && !REFUSED_PASSWORDS.has(value.trim().toLowerCase()),
+  },
+]);
+
 export const BootstrapStatusSchema = z.object({
   /** True only while this installation has no account at all. */
   required: z.boolean(),
@@ -118,9 +197,7 @@ export const BootstrapRequestSchema = z
       .min(3, 'اسم المستخدم قصير')
       .max(64)
       .regex(/^[A-Za-z0-9._-]+$/, 'اسم المستخدم: أحرف إنجليزية وأرقام فقط'),
-    /* The floor is enforced again on the server — this is the client's copy of the
-       rule so the field can say so before the request is sent, not the rule itself. */
-    password: z.string().min(10, 'كلمة المرور: 10 أحرف على الأقل').max(200),
+    password: OwnerPasswordSchema,
   })
   .strict();
 export type BootstrapRequest = z.infer<typeof BootstrapRequestSchema>;
