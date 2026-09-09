@@ -68,3 +68,15 @@ packaging/updater/*.key
 apps/api/_*
 apps/api/prisma/_*
 apps/manager-desktop/uilab.*
+
+# ── The updater signing key must never enter a commit ────────────────────────
+#
+# The private half signs updates that install on every machine running this product.
+# It lives outside the repository entirely (see packaging/SIGNING.md), and these
+# patterns exist so that a copy dropped in here by accident is refused rather than
+# committed. `signing-key.test.ts` asserts the same thing from the other direction.
+*.key
+!**/node_modules/**/*.key
+.walaa-signing/
+walaa-updater.key*
+TAURI_SIGNING*

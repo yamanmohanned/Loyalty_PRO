@@ -1,7 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { LoginRequestSchema, RefreshRequestSchema } from '@walaa/shared-types';
+import {
+  type BootstrapRequest,
+  BootstrapRequestSchema,
+  type BootstrapStatus,
+  LoginRequestSchema,
+  RefreshRequestSchema,
+} from '@walaa/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { login, logout, refresh, revokeAllForUser } from '../services/auth.service';
+import { bootstrapInstallation, bootstrapRequired } from '../services/bootstrap.service';
 
 /**
  * Auth routes.
@@ -17,6 +24,46 @@ import { login, logout, refresh, revokeAllForUser } from '../services/auth.servi
  * role added later cannot quietly inherit access to anything.
  */
 export async function authRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * Is this installation still without an account?
+   *
+   * Public, because nothing can authenticate before the first account exists. It
+   * answers a bare boolean and nothing else — a caller who learns "already set up"
+   * has learned exactly what a failed login would have told them.
+   */
+  app.get(
+    '/bootstrap',
+    { config: { public: true, rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    async (): Promise<BootstrapStatus> => ({ required: await bootstrapRequired() }),
+  );
+
+  /**
+   * Creates the shop and its owner. Once, ever.
+   *
+   * Self-closing: the count and the insert share one transaction, so this refuses from
+   * the moment a single user exists. The rate limit is tight because the window in
+   * which it can succeed is measured in minutes and a caller hammering it afterwards is
+   * not a merchant.
+   */
+  app.post(
+    '/bootstrap',
+    {
+      config: { public: true, rateLimit: { max: 5, timeWindow: '1 minute' } },
+      schema: { body: BootstrapRequestSchema },
+    },
+    async (request, reply) => {
+      const body = request.body as BootstrapRequest;
+      await bootstrapInstallation(body, { ip: request.ip });
+
+      /*
+        No token is returned. The owner signs in with the credentials he has just
+        chosen, which is the one moment he is certain to remember them — and it proves
+        the account works before he walks away from the machine.
+      */
+      return reply.code(201).send({ created: true });
+    },
+  );
+
   app.post(
     '/login',
     {

@@ -1,0 +1,188 @@
+import type { Prisma } from '@prisma/client';
+import { AppError, validationFailed } from '../lib/errors';
+import { hashPassword } from '../lib/password';
+import { prisma } from '../lib/prisma';
+import { writeTransaction } from '../lib/write-transaction';
+import { AUDIT_ACTIONS, recordAudit } from './audit.service';
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  FIRST RUN — the shop creates its own owner, and nobody ships a password
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ── The hole this fills ──────────────────────────────────────────────────────
+ *
+ * The shipped database template is migrated and **empty**: zero merchants, zero
+ * branches, zero users. That is the right thing to ship — a template carrying a known
+ * account would be a known password on every installation of this product, which is
+ * the single worst credential mistake a small product can make.
+ *
+ * But nothing existed to fill it. A merchant who installed the build met a login screen
+ * that no password on earth could open, because there was no account to open it with.
+ * The development seed (`prisma/seed.ts`) creates `owner` / `Walaa!Dev2026`, and it is
+ * a dev script that is not bundled into the service — so it was covering the gap on
+ * every machine except the one that mattered.
+ *
+ * ── Why the endpoint is public, and why that is safe ─────────────────────────
+ *
+ * Nobody can authenticate before the first account exists, so the call that creates it
+ * cannot require authentication. What makes it safe is that it is **self-closing**: the
+ * count and the insert happen in one transaction, and the moment a single user exists
+ * this refuses forever. It is not "the first caller wins a race" either — SQLite admits
+ * one writer and every write here goes through the same serialising queue, so two
+ * simultaneous callers are ordered and the second one loses.
+ *
+ * The realistic exposure is therefore the minutes between the installer finishing and
+ * the shop owner typing his name — on a LAN, behind a firewall rule scoped to private
+ * networks, on a machine standing in a back office. The alternative, a shipped
+ * credential, is exposed for the life of the installation on every machine at once.
+ *
+ * ── What it deliberately does not do ─────────────────────────────────────────
+ *
+ * It creates exactly one merchant, one branch and one OWNER. It does not create a
+ * STATION account: the till's account is made from the dashboard afterwards, by
+ * somebody who has already proved they are the owner. Bundling it here would mean a
+ * second password chosen in the same thirty seconds by someone who has not yet seen the
+ * product, and the Station is the account most likely to be written on a sticky note.
+ */
+
+/** Anything shorter is a password somebody chose while a merchant watched them type. */
+const MIN_PASSWORD_LENGTH = 10;
+
+/**
+ * Passwords this refuses outright.
+ *
+ * Not a completeness exercise — a deny-list can never be one. These are the specific
+ * values this product's own history makes likely: the development seed's password,
+ * which is in the repository and in every conversation about it, and the handful a
+ * person types when they intend to "change it later" and never do.
+ */
+const REFUSED_PASSWORDS = new Set(
+  [
+    'walaa!dev2026',
+    'walaa2026',
+    'password',
+    'password1',
+    '1234567890',
+    '0123456789',
+    'admin12345',
+    'qwertyuiop',
+    'walaawalaa',
+  ].map((value) => value.toLowerCase()),
+);
+
+export interface BootstrapInput {
+  merchantName: string;
+  branchName: string;
+  branchCode: string;
+  ownerName: string;
+  username: string;
+  password: string;
+}
+
+/** Whether this installation still has no account at all. */
+export async function bootstrapRequired(): Promise<boolean> {
+  return (await prisma.user.count()) === 0;
+}
+
+/**
+ * Creates the shop and its owner, once.
+ *
+ * Every check that decides whether this is allowed happens **inside** the transaction
+ * that does the writing. Counting outside it and inserting after would be the
+ * read-then-write shape that the voucher redemption drill demonstrates failing: two
+ * callers both read zero, both insert, and the installation ends up with two owners
+ * where the whole guarantee was that it has one.
+ */
+export async function bootstrapInstallation(
+  input: BootstrapInput,
+  meta: { ip: string },
+): Promise<{ merchantId: string; branchId: string; userId: string }> {
+  const password = input.password;
+
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw validationFailed('كلمة المرور قصيرة — استخدم 10 أحرف أو أكثر.', [
+      { path: 'password', message: `الحد الأدنى ${MIN_PASSWORD_LENGTH} أحرف` },
+    ]);
+  }
+
+  if (REFUSED_PASSWORDS.has(password.toLowerCase())) {
+    throw validationFailed(
+      'كلمة المرور هذه معروفة ولا يمكن استخدامها. اختر كلمة مرور خاصة بمتجرك.',
+      [{ path: 'password', message: 'كلمة مرور شائعة' }],
+    );
+  }
+
+  // Hashed before the transaction opens: Argon2id is deliberately slow, and holding
+  // the single writer for the length of a hash would stall every other write behind it.
+  const passwordHash = await hashPassword(password);
+
+  return writeTransaction(async (db: Prisma.TransactionClient) => {
+    if ((await db.user.count()) > 0) {
+      /*
+        `FORBIDDEN` rather than a new error code. The shared `ApiErrorCode` enum is a
+        contract every client compiles against, and "you may not do this" is exactly
+        what a 403 means — adding a fourteenth code to say it more precisely would
+        widen a shared type for one caller's benefit.
+      */
+      throw new AppError(
+        'FORBIDDEN',
+        'تم إعداد هذا التثبيت مسبقاً. سجّل الدخول بحساب المالك، وإذا نسيت كلمة المرور تواصل مع الدعم الفني.',
+      );
+    }
+
+    const merchant = await db.merchant.create({
+      data: { name: input.merchantName.trim() },
+      select: { id: true },
+    });
+
+    const branch = await db.branch.create({
+      data: {
+        merchantId: merchant.id,
+        name: input.branchName.trim(),
+        code: input.branchCode.trim().toUpperCase(),
+      },
+      select: { id: true },
+    });
+
+    const user = await db.user.create({
+      data: {
+        merchantId: merchant.id,
+        // Null, because an OWNER is not bound to one branch (§13.9: branch is a
+        // verified property of the writer, and the owner may write anywhere).
+        branchId: null,
+        name: input.ownerName.trim(),
+        username: input.username.trim().toLowerCase(),
+        passwordHash,
+        role: 'OWNER',
+      },
+      select: { id: true },
+    });
+
+    /*
+      Audited like every other privileged act, and this one has no actor to name — the
+      account being created IS the first actor. Recording it against the new owner is
+      the honest answer: it is the row that says when this installation came into
+      existence and from where.
+    */
+    await recordAudit(
+      {
+        merchantId: merchant.id,
+        actorUserId: user.id,
+        action: AUDIT_ACTIONS.INSTALLATION_BOOTSTRAPPED,
+        entityType: 'merchant',
+        entityId: merchant.id,
+        before: null,
+        after: {
+          merchantName: input.merchantName.trim(),
+          branchCode: input.branchCode.trim().toUpperCase(),
+          ownerUsername: input.username.trim().toLowerCase(),
+          fromIp: meta.ip,
+        },
+      },
+      db,
+    );
+
+    return { merchantId: merchant.id, branchId: branch.id, userId: user.id };
+  });
+}

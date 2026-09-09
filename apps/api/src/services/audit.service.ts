@@ -25,6 +25,15 @@ export const AUDIT_ACTIONS = {
    * exactly where somebody asks "where did my data go".
    */
   DEMO_RESET: 'demo.reset',
+  /**
+   * The installation created its own shop and owner on first run.
+   *
+   * The first row in an append-only trail, and the only one written by an actor who did
+   * not exist a moment earlier. It records when this installation came into being and
+   * from which address — which is the question somebody asks if an owner account ever
+   * appears that the merchant did not create.
+   */
+  INSTALLATION_BOOTSTRAPPED: 'installation.bootstrapped',
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
   CARD_REPRINTED: 'customer.card_reprinted',

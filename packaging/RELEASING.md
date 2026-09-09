@@ -101,20 +101,30 @@ Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 
 ---
 
-## 6. Auto-update signing — currently unsigned
+## 6. Auto-update signing
 
-`pnpm package:installer` finishes the installer and then fails with:
+Releases are signed. The key, where it lives, what happens if it is lost, and how to
+publish an update are all in **`packaging/SIGNING.md`** — read that once before your
+first release.
 
-> A public key has been found, but no private key. Make sure to set
-> `TAURI_SIGNING_PRIVATE_KEY` environment variable.
+The short version:
 
-The installer itself is complete and usable at that point; only the updater's signature
-is missing. Until the private key is available, **updates are done by running the newer
-installer over the top**, which is what `DEPLOYMENT.md` §11 tells the installer to do.
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.walaa-signing\walaa-updater.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<from your password manager>"
+pnpm package:build
+pnpm package:installer
+```
 
-To enable signed auto-update later, set `TAURI_SIGNING_PRIVATE_KEY` (and its password if
-it has one) and rebuild. Do not ship an unsigned update feed: an update channel nobody
-verifies is a way to install anything on a merchant's back-office PC.
+That produces the installer **and** a `.sig` beside it. Both go on the GitHub release,
+with a `latest.json` — `packaging/scripts/make-update-feed.mjs` writes that from the
+built artefacts rather than by hand.
+
+Key id **`B8268634955ED1C6`**. Its public half is compiled into every installed copy, so
+**it cannot be changed retroactively**: a build that shipped without one could never
+self-update, and rotating the key means visiting every machine. `signing-key.test.ts`
+asserts that the private half is not in this repository and that the public half is
+present and is genuinely a public key.
 
 ---
 

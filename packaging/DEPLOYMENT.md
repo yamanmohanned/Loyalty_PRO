@@ -73,9 +73,17 @@ Open **ولاء** from the Start menu.
 
 1. It shows «جارٍ تشغيل البرنامج» for a few seconds while SQLite opens. This is normal
    on a cold start and is not an error.
-2. The login screen asks for a username and a password. **There is nothing else on it** —
-   no address, no port, no server button. The manager PC finds its own service.
-3. Sign in with the owner account.
+2. **«إعداد المتجر لأول مرة» appears — this is expected, and it happens exactly once.**
+   Nothing ships with a password: the installed database is migrated and empty, because
+   a shipped account would be the same working login on every copy of this product.
+   So the shop creates its own owner here.
+
+   Fill it in **with the merchant**, and let him choose and type the password. Minimum
+   ten characters; the development password is refused by name. **Write it down with
+   him — there is no password reset in this product**, by design.
+3. The login screen follows, with a note confirming the account exists. Sign in with
+   what he just chose. **There is nothing else on that screen** — no address, no port,
+   no server button. The manager PC finds its own service.
 4. The **key ceremony** appears and cannot be skipped. Write the key on paper, put it
    somewhere that is not this building, and type it back.
 
@@ -145,8 +153,10 @@ Work down it. Every line was performed during verification.
 - [ ] Network profile is **Private**, not Public
 - [ ] Installer run as Administrator, finished without an error dialog
 - [ ] `services.msc` shows **WalaaApi** — Running, Automatic
-- [ ] Dashboard opens and the login screen shows **only** a username and a password
-- [ ] Owner can sign in
+- [ ] Dashboard opens on «إعداد المتجر لأول مرة» and the shop's own owner is created
+- [ ] The password was chosen by the merchant, is 10+ characters, and is written down
+- [ ] The login screen afterwards shows **only** a username and a password
+- [ ] Owner can sign in with what he chose
 - [ ] Key ceremony completed, key written down and taken **off site**
 - [ ] Tablet reaches `http://<MANAGER-IP>:4000` and the station account signs in
 - [ ] Discount rules match what the merchant actually agreed to

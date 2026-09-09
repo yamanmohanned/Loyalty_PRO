@@ -77,3 +77,50 @@ export const AccessTokenClaimsSchema = z.object({
 });
 
 export type AccessTokenClaims = z.infer<typeof AccessTokenClaimsSchema>;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  FIRST RUN — creating the shop and its owner
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The shipped database is migrated and empty by design: a template carrying a known
+ * account would be the same password on every installation of this product. So the
+ * first thing a merchant does is create his own, and this is the shape of that.
+ *
+ * `GET /auth/bootstrap` answers whether it is still needed. It is public and says
+ * nothing about the installation beyond a boolean — deliberately: a caller who learns
+ * "already set up" learns nothing they could not learn by trying to log in.
+ */
+export const BootstrapStatusSchema = z.object({
+  /** True only while this installation has no account at all. */
+  required: z.boolean(),
+});
+export type BootstrapStatus = z.infer<typeof BootstrapStatusSchema>;
+
+export const BootstrapRequestSchema = z
+  .object({
+    merchantName: z.string().trim().min(2, 'اسم المتجر مطلوب').max(120),
+    branchName: z.string().trim().min(2, 'اسم الفرع مطلوب').max(120),
+    /* Printed on receipts and matched against captured invoices, so it is constrained
+       to what a POS can put on a roll: Latin letters, digits and a dash. */
+    branchCode: z
+      .string()
+      .trim()
+      .min(2, 'رمز الفرع مطلوب')
+      .max(16)
+      .regex(/^[A-Za-z0-9-]+$/, 'رمز الفرع: أحرف إنجليزية وأرقام وشرطة فقط'),
+    ownerName: z.string().trim().min(2, 'اسم المالك مطلوب').max(120),
+    /* Lowercased on write. A username that differs only by case is two accounts to a
+       database and one account to the person typing it. */
+    username: z
+      .string()
+      .trim()
+      .min(3, 'اسم المستخدم قصير')
+      .max(64)
+      .regex(/^[A-Za-z0-9._-]+$/, 'اسم المستخدم: أحرف إنجليزية وأرقام فقط'),
+    /* The floor is enforced again on the server — this is the client's copy of the
+       rule so the field can say so before the request is sent, not the rule itself. */
+    password: z.string().min(10, 'كلمة المرور: 10 أحرف على الأقل').max(200),
+  })
+  .strict();
+export type BootstrapRequest = z.infer<typeof BootstrapRequestSchema>;

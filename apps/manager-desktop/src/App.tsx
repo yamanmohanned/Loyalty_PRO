@@ -21,7 +21,7 @@ import {
   Users,
   BarChart3,
 } from 'lucide-react';
-import { setTokens, setUnauthenticatedHandler } from './lib/api';
+import { api, setTokens, setUnauthenticatedHandler } from './lib/api';
 import { startRealtime } from './lib/realtime';
 import { BackendGate } from './components/BackendGate';
 import { locale } from './lib/locale';
@@ -33,6 +33,7 @@ import { AppBar, collectAlerts } from './components/AppBar';
 import { DemoBadge, DemoWelcome } from './components/DemoSurfaces';
 import { startUpdateCheck, UpdateNotice } from './components/UpdateNotice';
 import { IS_DEMO } from './lib/demo';
+import { FirstRunScreen } from './screens/FirstRun';
 import { LoginScreen, type SessionUser } from './screens/Login';
 import { OverviewScreen } from './screens/Overview';
 import { CardsScreen } from './screens/Cards';
@@ -111,7 +112,16 @@ const queryClient = new QueryClient({
   },
 });
 
-type BootState = 'needs-login' | 'ready';
+/**
+ * `checking` is not a spinner for its own sake.
+ *
+ * The app must know whether this installation has an account before it can decide
+ * between the first-run screen and the login screen, and guessing wrong in either
+ * direction is worse than a moment's wait: a login form on a database with no accounts
+ * cannot succeed, and a setup form on a live shop invites somebody to try creating a
+ * second owner.
+ */
+type BootState = 'checking' | 'needs-first-run' | 'needs-login' | 'ready';
 
 const NAV_ITEMS = [
   { to: '/', label: locale.nav.overview, icon: LayoutDashboard, end: true },
@@ -486,9 +496,29 @@ function Boot() {
     backend answers before this component renders at all, so starting anywhere but the
     login screen would be showing a spinner for a fact already in hand.
   */
-  const [state, setState] = useState<BootState>('needs-login');
+  const [state, setState] = useState<BootState>('checking');
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [firstRunDone, setFirstRunDone] = useState(false);
   const navigate = useNavigate();
+
+  /*
+    Asked once, of the backend `BackendGate` has already proved is answering.
+
+    A failure here falls through to the login screen rather than to the setup screen.
+    That is the safe direction: a login on a fresh installation fails with a sentence,
+    while a setup form shown by mistake on a shop that already has an owner is an
+    invitation to create a second one.
+  */
+  useEffect(() => {
+    void (async () => {
+      try {
+        const status = await api.get<{ required: boolean }>('/auth/bootstrap');
+        setState(status.required ? 'needs-first-run' : 'needs-login');
+      } catch {
+        setState('needs-login');
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     // A refresh that fails anywhere in the app returns the manager to login rather
@@ -500,9 +530,22 @@ function Boot() {
     });
   }, [navigate]);
 
+  if (state === 'checking') {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-canvas">
+        <p className="text-steel">{locale.common.loading}</p>
+      </div>
+    );
+  }
+
+  if (state === 'needs-first-run') {
+    return <FirstRunScreen onCreated={() => { setFirstRunDone(true); setState('needs-login'); }} />;
+  }
+
   if (state === 'needs-login' || !user) {
     return (
       <LoginScreen
+        notice={firstRunDone ? locale.firstRun.created : undefined}
         onAuthenticated={(session) => {
           setUser(session);
           setState('ready');

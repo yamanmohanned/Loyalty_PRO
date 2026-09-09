@@ -41,6 +41,58 @@ const prisma = new PrismaClient();
 const env = loadEnv();
 
 /** Dev-only credentials, printed at the end so there is no hunting for them. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  THIS SCRIPT REFUSES TO RUN AGAINST A PRODUCTION DATABASE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * It creates `owner` / `manager` / `station` / `agent`, all with the password on the
+ * next line — a password that is in this repository, in the shell history of everyone
+ * who has run this, and in every conversation about the project. On a developer's
+ * machine that is exactly right. On a merchant's it would be the single worst
+ * credential mistake this product could make: the same working login on every
+ * installation, published.
+ *
+ * Two things keep it away from a shop, and the second exists because the first is not
+ * a guarantee:
+ *
+ *   1. **It is not shipped.** `stage.mjs` bundles `src/server.ts` and its imports; this
+ *      is a `prisma/` script and never enters the bundle. A merchant's machine has no
+ *      copy of it and no `tsx` to run it with.
+ *   2. **It refuses anyway.** Not being present is a property of the packaging, and
+ *      packaging changes. A developer with the repository open, a `DATABASE_URL`
+ *      pointed at a restored copy of a shop's database, and one absent-minded
+ *      `pnpm db:seed` is the realistic accident — and it would put a published password
+ *      into a live shop with no error at all.
+ *
+ * The check is `NODE_ENV`, which the installer writes as `production` into every
+ * `walaa.env` it generates. `WALAA_ALLOW_PRODUCTION_SEED=1` overrides it for the one
+ * legitimate case: rebuilding a demo dataset from a production-shaped environment.
+ */
+function refuseInProduction(): void {
+  const production = process.env.NODE_ENV === 'production';
+  const overridden = process.env.WALAA_ALLOW_PRODUCTION_SEED === '1';
+  if (!production || overridden) return;
+
+  console.error(
+    [
+      '',
+      '  REFUSED: this is a development seed and NODE_ENV is production.',
+      '',
+      '  It would create accounts whose password is published in this repository.',
+      '  A real shop creates its own owner on first launch — see',
+      '  `bootstrap.service.ts` and the first-run screen.',
+      '',
+      '  If you genuinely mean to seed a production-shaped database (rebuilding a',
+      '  demo dataset, for instance), set WALAA_ALLOW_PRODUCTION_SEED=1.',
+      '',
+    ].join('\n'),
+  );
+  process.exit(1);
+}
+
+refuseInProduction();
+
 const DEV_PASSWORD = 'Walaa!Dev2026';
 
 /** Argon2id parameters matching what the API uses. Must not drift, or logins fail. */

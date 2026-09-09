@@ -345,6 +345,13 @@ describe('the route inventory', () => {
         'GET, HEAD /health',
         'GET, HEAD /realtime',
         'OPTIONS *',
+        /*
+          First run. Public by necessity — nothing can authenticate before the first
+          account exists — and safe because `POST` is self-closing: the user count and
+          the insert share one transaction, so it refuses from the moment a single
+          account exists. `GET` answers a bare boolean that a failed login would have
+          revealed anyway.
+        */
         'POST /api/v1/auth/login',
         'POST /api/v1/auth/logout',
         'POST /api/v1/auth/refresh',
@@ -377,6 +384,7 @@ describe('the route inventory', () => {
         'GET, HEAD, PUT /api/v1/system/printing',
         'GET, HEAD /api/v1/system/storage',
         'GET, HEAD /api/v1/vouchers/reconciliation',
+        'GET, HEAD, POST /api/v1/auth/bootstrap',
         'GET, HEAD, POST /api/v1/cards/batches',
         'GET, HEAD, PATCH /api/v1/customers/:id',
         'PATCH /api/v1/backup/drive/settings',

@@ -39,7 +39,14 @@ export type SessionUser = AuthUser;
  * A failure here says what to do and never names a machine, a port or a URL. The
  * technical detail goes to the log.
  */
-export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
+export function LoginScreen({
+  onAuthenticated,
+  /** Carried over from first run, so the owner is told the account exists. */
+  notice,
+}: {
+  onAuthenticated: (user: SessionUser) => void;
+  notice?: string;
+}) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +177,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (user: Sessi
           />
         </Field>
 
+        {notice && !error ? <Notice tone="accent">{notice}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {/* Tall, full-width, gradient, with a leading glyph — the reference's primary

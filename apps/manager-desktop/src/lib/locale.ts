@@ -531,6 +531,37 @@ export const locale = {
     } as Record<string, string>,
   },
 
+  /**
+   * First run.
+   *
+   * The shipped database has no accounts, deliberately — a template carrying a working
+   * login would be the same password on every copy of this product. So the first screen
+   * a merchant sees is not a login but this, and it appears exactly once.
+   */
+  firstRun: {
+    tagline: 'الخطوة الأولى: تعريف المتجر وإنشاء حساب المالك.',
+    title: 'إعداد المتجر لأول مرة',
+    subtitle: 'لا يوجد حساب على هذا الجهاز بعد. أنشئ حساب المالك الآن — يستغرق دقيقة واحدة.',
+    merchantName: 'اسم المتجر',
+    merchantNameHint: 'كما يظهر في التقارير وعلى بطاقات الزبائن',
+    branchName: 'اسم الفرع',
+    branchCode: 'رمز الفرع',
+    branchCodeHint: 'أحرف إنجليزية وأرقام — يُطبع على الفواتير',
+    ownerName: 'اسم المالك',
+    username: 'اسم المستخدم للدخول',
+    usernameHint: 'أحرف إنجليزية وأرقام، بدون مسافات',
+    password: 'كلمة المرور',
+    passwordHint: '10 أحرف على الأقل. اخترها بنفسك ولا تشاركها مع أحد.',
+    passwordConfirm: 'تأكيد كلمة المرور',
+    passwordMismatch: 'كلمتا المرور غير متطابقتين. أعد إدخالهما.',
+    noResetTitle: 'لا توجد طريقة لاستعادة كلمة المرور',
+    noResetBody:
+      'هذا البرنامج يعمل داخل متجرك ولا يرسل بريداً ولا رسائل استعادة. إذا نسيت كلمة المرور فلا يمكن لأحد فتح الحساب — اكتبها في مكان آمن الآن.',
+    submit: 'إنشاء الحساب والمتابعة',
+    submitting: 'جارٍ الإنشاء…',
+    created: 'تم إنشاء الحساب. سجّل الدخول الآن بالبيانات التي اخترتها.',
+  },
+
   overview: {
     /* ── V4-4: the four headline figures §2.4 asks for ─────────────────── */
     kpiSales: 'المبيعات الملتقطة',
