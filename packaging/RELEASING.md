@@ -97,7 +97,10 @@ Take the SHA-256 and put it wherever you record releases:
 Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.2.0:** 33,672,204 bytes · `4183BDE1057068C899378934C4898637D64C1871347590D96AAFEA37AC751E56`
+**0.2.0 (signed):** 33,682,447 bytes · `AADF7480F9D4D55E52F2DC595FBDB288E9A634EFD8742BAD205FBE57DCE88137`
+
+Signed with key `BE2E4C7B42C8D100`; the `.sig` beside it is 420 bytes and its key id
+was checked against the public key compiled into the app.
 
 ---
 
