@@ -32,14 +32,31 @@ import { describe, expect, it } from 'vitest';
 const REPO = join(__dirname, '..', '..', '..', '..');
 
 /**
- * The first line of every minisign secret key, whatever the file is called.
+ * What a leaked private key actually looks like on disk.
  *
- * Assembled at runtime rather than written as a literal, and that is not decoration:
- * the first version of this test spelled the header out, and then found ITSELF — this
- * file is tracked, so the needle was in the haystack. Any documentation that quoted the
- * header would have tripped it too. Splitting the string means only a real key matches.
+ * ── Two corrections, both found by looking at the real file ──────────────────
+ *
+ * The first version searched for `minisign encrypted secret key`. The key Tauri
+ * generates says **`rsign`** — Tauri signs with rsign2, minisign's Rust cousin — so the
+ * guard would have sailed past the very file it exists to catch.
+ *
+ * Worse, the file is not that text at all: it is a **single base64 line** whose decoded
+ * contents are the header plus the material. So a committed key contains none of those
+ * words in readable form. Both shapes are therefore checked — the decoded header for a
+ * key someone unwrapped, and the base64 prefix for the file as Tauri writes it.
+ *
+ * Assembled at runtime rather than written as literals, because this file is tracked
+ * too: the first version found ITSELF, since the needle was in the haystack.
  */
-const PRIVATE_KEY_HEADER = ['untrusted comment: minisign', 'encrypted', 'secret key'].join(' ');
+const PRIVATE_KEY_NEEDLES = [
+  // The decoded header, for a key that was unwrapped before being pasted somewhere.
+  ['untrusted comment: rsign', 'encrypted', 'secret key'].join(' '),
+  ['untrusted comment: minisign', 'encrypted', 'secret key'].join(' '),
+  // The file exactly as Tauri writes it: base64 of the above. This is the shape that
+  // would actually appear in a commit.
+  ['dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWdu', 'IGVuY3J5'].join(''),
+  ['dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWdu', 'IGVuY3J5'].join(''),
+];
 
 describe('the updater signing key', () => {
   /**
@@ -67,7 +84,7 @@ describe('the updater signing key', () => {
         continue; // unreadable or deleted-but-tracked; not a leak
       }
 
-      if (text.includes(PRIVATE_KEY_HEADER)) offenders.push(relative);
+      if (PRIVATE_KEY_NEEDLES.some((needle) => text.includes(needle))) offenders.push(relative);
     }
 
     expect(

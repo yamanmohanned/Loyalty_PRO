@@ -1,6 +1,6 @@
 {
   "name": "@walaa/api",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Walaa loyalty backend — Fastify service, Prisma data layer.",
   "type": "module",
@@ -18,6 +18,8 @@
     "drill:contention": "node drills/contention.mjs",
     "drill:kill": "node drills/kill.mjs",
     "drill:recover": "node drills/recover.mjs",
+    "drill:update": "node drills/update.mjs",
+    "drill:upgrade": "node drills/upgrade.mjs",
     "db:reset-ceremony": "tsx prisma/reset-ceremony.ts",
     "restore": "tsx src/tools/restore-cli.ts",
     "test": "vitest run --passWithNoTests",
