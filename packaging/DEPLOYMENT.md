@@ -226,6 +226,19 @@ navigation rail.
    the message says whether it is the data or the build — see §10.
 4. Sign in and check the customer count against what it was before.
 
-**NOT VERIFIED:** an in-place upgrade from a build older than 0.2.0 carrying real
-merchant data. There is no such installation yet; the upgrade path was exercised with
-0.2.0 data only.
+### What the upgrade path has been proven to do
+
+`pnpm --filter @walaa/api drill:upgrade` builds two genuine runtimes and walks the
+boundary: 0.2.0 creates a shop, 0.2.1 opens the same database. Verified across it —
+the identity, integrity and migration-set checks all pass on the inherited file, **no
+migration runs**, every customer, invoice, voucher and user survives with an identical
+content hash, the branch code and merchant settings survive, the owner created on 0.2.0
+still signs in, and the version the service reports genuinely changes.
+
+`drill:update` proves the signature check both ways: a genuine update verifies, one
+signed by a different key is refused, and one with a single bit flipped is refused.
+
+**NOT VERIFIED:** the last mile — an *installed* copy noticing the feed, downloading and
+relaunching itself. That needs an elevated install, which could not be performed here.
+Do the first real update on a machine you can reach before relying on it for a shop you
+cannot.

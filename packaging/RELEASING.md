@@ -97,10 +97,15 @@ Take the SHA-256 and put it wherever you record releases:
 Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.2.0 (signed):** 33,682,447 bytes · `AADF7480F9D4D55E52F2DC595FBDB288E9A634EFD8742BAD205FBE57DCE88137`
+**0.2.1 (signed, current):** 33,676,439 bytes ·
+`5F4A10580EC8C8867806C38C17A1419F8AD85A1F4707D718A031CAB1A8C109F3`
 
-Signed with key `BE2E4C7B42C8D100`; the `.sig` beside it is 420 bytes and its key id
-was checked against the public key compiled into the app.
+**0.2.0 (signed):** 33,682,447 bytes ·
+`AADF7480F9D4D55E52F2DC595FBDB288E9A634EFD8742BAD205FBE57DCE88137`
+
+Both signed with key `BE2E4C7B42C8D100`, each with a 420-byte `.sig` beside it whose key
+id was checked against the public key compiled into the app. 0.2.0 is kept because
+`drill:upgrade` uses the pair to prove a shop's data survives a real version change.
 
 ---
 
