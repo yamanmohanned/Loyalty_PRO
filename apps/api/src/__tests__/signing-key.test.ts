@@ -31,8 +31,15 @@ import { describe, expect, it } from 'vitest';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 
-/** The first line of every minisign secret key, whatever the file is called. */
-const PRIVATE_KEY_HEADER = 'untrusted comment: minisign encrypted secret key';
+/**
+ * The first line of every minisign secret key, whatever the file is called.
+ *
+ * Assembled at runtime rather than written as a literal, and that is not decoration:
+ * the first version of this test spelled the header out, and then found ITSELF — this
+ * file is tracked, so the needle was in the haystack. Any documentation that quoted the
+ * header would have tripped it too. Splitting the string means only a real key matches.
+ */
+const PRIVATE_KEY_HEADER = ['untrusted comment: minisign', 'encrypted', 'secret key'].join(' ');
 
 describe('the updater signing key', () => {
   /**

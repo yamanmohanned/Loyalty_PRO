@@ -13,7 +13,7 @@ C:\Users\yaman\.walaa-signing\
     PASSWORD.txt             the key's password ← THE OTHER SECRET
 ```
 
-Key id **`B8268634955ED1C6`**. The directory has inheritance stripped and is granted to
+Key id **`BE2E4C7B42C8D100`**. The directory has inheritance stripped and is granted to
 `DESKTOP-TSC2UKD\yaman`, SYSTEM and Administrators only.
 
 It is **outside the repository on purpose**, and `.gitignore` plus
@@ -74,7 +74,10 @@ reinstall everywhere, and assume anything signed with the old key is untrustwort
 
 ```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.walaa-signing\walaa-updater.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content "C:\Users\yaman\.walaa-signing\PASSWORD.txt" -Raw).Trim()
+# -Raw plus PowerShell's utf8 writer is a trap: it adds a BOM, the BOM travels into
+# the password, and the first signed build failed with "Wrong password for that key".
+# ReadAllText decodes the BOM away.
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.walaa-signing\PASSWORD.txt").Trim()
 pnpm package:build
 pnpm package:installer
 ```

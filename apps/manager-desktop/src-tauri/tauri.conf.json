@@ -68,7 +68,7 @@
     "updater": {
       "active": true,
       "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4MjY4NjM0OTU1RUQxQzYKUldURzBWNlZOSVltdUs3MjJsOFFiL0hhcklZdzVjNVRWTmlYL0tWdGFUUTBRTlRxamdncmxUSXMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMkU0QzdCNDJDOEQxMDAKUldRQTBjaENlMHd1dmd1T256NWVXWmRqaFlsRnFLZCt6aEJnY3BvWWhtSFlxTUFxWDNIS0lJMzYK",
       "endpoints": [
         "https://github.com/yamanmo/walaa/releases/latest/download/latest.json"
       ],

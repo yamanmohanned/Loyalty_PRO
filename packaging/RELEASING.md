@@ -120,7 +120,7 @@ That produces the installer **and** a `.sig` beside it. Both go on the GitHub re
 with a `latest.json` — `packaging/scripts/make-update-feed.mjs` writes that from the
 built artefacts rather than by hand.
 
-Key id **`B8268634955ED1C6`**. Its public half is compiled into every installed copy, so
+Key id **`BE2E4C7B42C8D100`**. Its public half is compiled into every installed copy, so
 **it cannot be changed retroactively**: a build that shipped without one could never
 self-update, and rotating the key means visiting every machine. `signing-key.test.ts`
 asserts that the private half is not in this repository and that the public half is
