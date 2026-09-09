@@ -427,7 +427,7 @@ export async function assertMigrationsMatchBuild(log: Log): Promise<void> {
  * `null` when it cannot be established, which is treated exactly like `false`: not
  * knowing whether the build is sound is not a licence to blame the merchant's data.
  */
-function migrationsMatchBuild(): boolean | null {
+export function migrationsMatchBuild(): boolean | null {
   let directory: string | null;
   try {
     directory = resolveMigrationsDir();
@@ -521,11 +521,45 @@ export async function verifyDatabaseIdentity(
         );
       }
 
+      /*
+        ── Reached only when the file HOLDS RECORDS ────────────────────────────
+
+        An empty database of the wrong shape no longer arrives here at all:
+        `supersedeUnusableDatabase` runs before anything opens the database, finds
+        nothing in it, moves it aside and installs this build's template. What is left
+        for this branch is the case the refusal was always written for — a shop's
+        ledger, made by a different build.
+
+        Two things in the old sentence were wrong for that reader.
+
+        **It printed the Windows path.** `«C:\ProgramData\Walaa\walaa.db»`, inside an
+        RTL sentence, at a shop owner — the same leak `config/env.ts` removed from its
+        own messages and documented at length. The path is in the log line above,
+        which is where the person who can use it is looking.
+
+        **Its remedy could not resolve it.** «استعد أحدث نسخة احتياطية» assumes a
+        backup exists, taken by THIS build; on the machine that hit this there were no
+        backups at all, and the backup screen it names is behind a login that cannot be
+        reached while the service will not start. Reinstalling — the neighbouring
+        message's advice — never touches the data directory, so it changes nothing.
+
+        What actually resolves it is a person who can tell which build made the file.
+        So the sentence says what happened, says the data is untouched, says plainly
+        that reinstalling will not change it, and sends him to the one place that can
+        act. Where the file records the version that made it, that goes in too: it is
+        the single most useful fact a support call can open with.
+      */
+      const madeBy = identity?.productVersion;
       throw new Error(
-        `تعذّر تشغيل الخدمة: بنية قاعدة البيانات في الملف «${file}» لا تطابق هذه النسخة من البرنامج. ` +
-          'المطلوب قاعدة بيانات أنشأها هذا الإصدار أو نسخة احتياطية منه. ' +
-          'أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، أو تواصل مع الدعم الفني قبل أي خطوة أخرى — ' +
-          'لا تحذف أي ملف. التفاصيل التقنية مسجّلة في ملف السجل.',
+        'تعذّر تشغيل الخدمة: قاعدة البيانات الموجودة على هذا الجهاز أنشأها إصدار مختلف من البرنامج' +
+          (madeBy ? ` (الإصدار ${madeBy})` : '') +
+          // An Arabic comma. A Latin `,` inside an RTL sentence renders on the wrong
+          // side of the word it follows — the same class as the path, in miniature.
+          '، وهذا الإصدار لا يستطيع فتحها. ' +
+          'بياناتك موجودة ولم تتغيّر، ولم يُكتب فيها أي شيء. ' +
+          '**إعادة تثبيت البرنامج لن تحل هذه المشكلة** لأن التثبيت لا يمسّ بيانات المتجر. ' +
+          'تواصل مع الدعم الفني قبل أي خطوة أخرى، ولا تحذف أي ملف. ' +
+          'التفاصيل التقنية مسجّلة في ملف السجل.',
       );
     }
   }
@@ -592,12 +626,18 @@ export async function verifyDatabaseIdentity(
   });
 
   if (enforced) {
+    /*
+      The counts stay — they are the merchant's own figures and they are how he
+      recognises whose database this is. The PATH goes; it is in the log line
+      immediately above, and a Windows path inside an RTL sentence is unreadable as a
+      path and unusable by the person reading it.
+    */
     throw new Error(
-      `تعذّر تشغيل الخدمة: الملف «${file}» يحتوي بيانات (${census.counts.customer ?? 0} زبون، ` +
-        `${census.counts.transaction ?? 0} عملية) ولا يحمل توقيع هذا التثبيت. ` +
-        'المطلوب أن يفتح البرنامج قاعدة البيانات التي أنشأها هو. ' +
-        'لم يُكتب أي شيء في الملف. أوقف الخدمة وتواصل مع الدعم الفني — قد تكون هذه قاعدة بيانات ' +
-        'تخص تثبيتاً آخر، وحذفها أو الكتابة فوقها يفقد بياناتها. التفاصيل التقنية مسجّلة في ملف السجل.',
+      `تعذّر تشغيل الخدمة: قاعدة البيانات على هذا الجهاز تحتوي بيانات (${census.counts.customer ?? 0} زبون، ` +
+        `${census.counts.transaction ?? 0} عملية) لكنها لا تخصّ هذا التثبيت. ` +
+        'قد تكون منقولة من جهاز آخر. لم يُكتب فيها أي شيء ولم تتغيّر. ' +
+        'أوقف البرنامج وتواصل مع الدعم الفني — حذفها أو الكتابة فوقها يفقد بياناتها. ' +
+        'التفاصيل التقنية مسجّلة في ملف السجل.',
     );
   }
 

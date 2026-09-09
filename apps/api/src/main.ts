@@ -1,11 +1,16 @@
 import { hostname } from 'node:os';
 import { buildApp } from './app';
 import { configSource, loadEnv } from './config/env';
-import { assertMigrationsMatchBuild, verifyDatabaseIdentity } from './lib/db-identity';
+import {
+  assertMigrationsMatchBuild,
+  migrationsMatchBuild,
+  verifyDatabaseIdentity,
+} from './lib/db-identity';
 import { markRunning, markStopped, verifyDatabaseIntegrity } from './lib/db-integrity';
-import { assertDatabaseMatchesBuild } from './lib/demo-guard';
+import { assertDatabaseMatchesBuild, isDemoBuild } from './lib/demo-guard';
 import { ensureDatabaseReady, installDatabaseTemplateIfAbsent } from './lib/migrate';
 import { checkpointWal, prisma, readSqliteSettings } from './lib/prisma';
+import { supersedeUnusableDatabase } from './lib/supersede-database';
 import { clearStartupFailure } from './lib/startup-error';
 import { startBackupScheduler } from './services/backup/schedule.service';
 import { startStorageSampler } from './services/storage.service';
@@ -80,6 +85,41 @@ export async function main(): Promise<void> {
   // database is involved, so it is answerable before one is opened, and its failure
   // means the installation is wrong rather than the data.
   await assertMigrationsMatchBuild(bootstrapLog);
+
+  /*
+    ── An EMPTY database from another build is moved aside, not refused ────────
+
+    A merchant installed this release onto a machine that had had an earlier one on it.
+    The installer left the old `walaa.db` alone — correctly; an installer that
+    overwrites a data directory is one that can destroy a shop. So the service opened a
+    file of the wrong shape and refused to start, telling him to restore a backup that
+    did not exist from a screen he could not reach, or to reinstall, which does not
+    touch the data directory and so changes nothing.
+
+    The file had nothing in it. This asks before refusing: a file with rows in it still
+    stops the process below, and an empty one is renamed beside itself and replaced with
+    the shipped template.
+
+    Placed HERE deliberately. It must be after `assertMigrationsMatchBuild`, because a
+    build that cannot vouch for its own migrations must not be trusted to judge a
+    merchant's file; and before anything else opens the database, because Windows will
+    not rename a file that a connection is holding open.
+  */
+  const supersede = await supersedeUnusableDatabase(bootstrapLog, {
+    buildIsSound: migrationsMatchBuild() === true,
+    /* The build's own signal, not the shape of a filename. `walaa-demo.db` in the
+       path would have been a proxy for "this is a demo", and a proxy is what every
+       defect in this class has been made of. */
+    demo: isDemoBuild(),
+  });
+  if (supersede.verdict !== 'not-applicable' && supersede.verdict !== 'usable') {
+    bootstrapLog('existing database triage', {
+      verdict: supersede.verdict,
+      parkedAt: supersede.parkedAt ?? null,
+      rows: supersede.census?.total ?? null,
+      createdBy: supersede.createdBy ?? null,
+    });
+  }
 
   /*
     Read the previous run's marker BEFORE anything else can rewrite it, and replace it
