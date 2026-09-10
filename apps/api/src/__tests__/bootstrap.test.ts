@@ -208,3 +208,47 @@ describe('the development seed', () => {
     expect(source).toMatch(/^refuseInProduction\(\);$/m);
   });
 });
+
+describe('the shop it creates is one that can trade', () => {
+  /*
+    ── The blocker this pins ─────────────────────────────────────────────────
+
+    Bootstrap made a merchant, a branch and an owner, and nothing made
+    `discount_settings`. `scanCard` reads it with `findUniqueOrThrow`, so the FIRST
+    SALE of every installation was a 500 rendered at the till as «لم تُحفظ العملية …
+    أبلغ الإدارة فوراً». Found by walking a merchant's first sixty seconds, not by
+    reading the code — every test in this project had a seeded database.
+  */
+  it('has discount settings, so the first sale does not fail', async () => {
+    await post(VALID);
+
+    const settings = await prisma.discountSettings.findFirst();
+    expect(settings).not.toBeNull();
+    // The schema's defaults, and safe ones: percentage discounts within a bounded band
+    // and an absolute IQD ceiling, which §2.3 requires a percentage discount never to
+    // ship without.
+    expect(settings?.absoluteMaxDiscountValue).toBeGreaterThan(0);
+    expect(settings?.minRate).toBeLessThanOrEqual(settings?.maxRate ?? 0);
+  });
+
+  it('gives away nothing until the merchant writes a ladder', async () => {
+    await post(VALID);
+    // No rules: the ladder decides whether a discount happens at all, and a new shop's
+    // is empty. Settings enabled + no rules = sales recorded, nothing discounted.
+    expect(await prisma.discountRule.count()).toBe(0);
+  });
+
+  it('creates all of it or none of it', async () => {
+    /*
+      One transaction. A bootstrap that half-succeeded — an owner with no shop, or a
+      shop with no settings — is exactly the state this suite exists to make
+      impossible, and it is the state the product was shipping in.
+    */
+    await post({ ...VALID, password: 'short' });
+
+    expect(await prisma.merchant.count()).toBe(0);
+    expect(await prisma.branch.count()).toBe(0);
+    expect(await prisma.user.count()).toBe(0);
+    expect(await prisma.discountSettings.count()).toBe(0);
+  });
+});

@@ -109,7 +109,6 @@ export function LoginScreen({
               autoComplete="current-password"
               dir="ltr"
               className="text-start"
-              invalid={Boolean(errors.fields.password)}
               icon={<Lock size={20} />}
             />
           </Field>

@@ -143,6 +143,31 @@ export async function bootstrapInstallation(
     });
 
     /*
+      ── The shop's discount settings, in the SAME transaction ─────────────────
+
+      Without this row the first sale of the installation fails. `scanCard` reads it
+      with `findUniqueOrThrow`, so a merchant who installed, set up, registered a
+      customer and scanned their card met a 500 rendered at the till as «لم تُحفظ
+      العملية … أبلغ الإدارة فوراً» — the most alarming message in the product, on
+      install day, for a missing configuration row with perfectly good defaults.
+
+      Nothing outside `prisma/seed.ts` had ever created it, and that is a development
+      script which is not bundled into the service. The third thing found this way,
+      after the missing first-run flow and the missing staff accounts, and all three
+      are the same defect: the seed was standing in for a step the product does not
+      have.
+
+      Created here rather than only on demand because a bootstrapped installation
+      should BE a complete shop, not one that assembles itself on first use. The
+      schema's defaults apply — percentage discounts bounded 1–3% and capped at 5,000
+      IQD — and with **no rules configured no discount is ever given**, so the shop can
+      trade immediately without giving anything away before the merchant has agreed a
+      ladder. `discount-settings.service.ts` covers installations made by earlier
+      builds, which have no row and never will.
+    */
+    await db.discountSettings.create({ data: { merchantId: merchant.id } });
+
+    /*
       Audited like every other privileged act, and this one has no actor to name — the
       account being created IS the first actor. Recording it against the new owner is
       the honest answer: it is the row that says when this installation came into

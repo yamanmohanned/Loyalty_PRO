@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { summarizeFieldErrors } from '@walaa/shared-types';
 import { ApiRequestError } from './api';
 import { locale } from './locale';
@@ -55,25 +55,42 @@ export function toFormErrors(caught: unknown): FormErrorState {
 export function useFormErrors() {
   const [state, setState] = useState<FormErrorState>(EMPTY);
   const ref = useRef<HTMLFormElement | null>(null);
+  /*
+    ── Why a counter and an effect, and not a callback ─────────────────────────
 
-  const focusFirstInvalid = useCallback(() => {
-    requestAnimationFrame(() => {
-      const first = ref.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
-      if (!first) return;
-      first.focus({ preventScroll: true });
-      first.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    });
-  }, []);
+    The first version called `focus()` from inside the rejection, on the next animation
+    frame. That is a race with React's commit: the frame can fire before the re-render
+    that sets `aria-invalid`, so the query finds nothing and focus stays on the button.
+
+    It was not theoretical and it was not caught by reading the code. Driving the setup
+    form in a browser, focus DID move; driving the staff form the same way it did not,
+    and the only difference between them was how much work React had to do in between.
+    A fix that works on the screen you tested it on is the defect this whole pass is
+    about.
+
+    An effect runs AFTER the commit, so the marks are in the DOM by definition. The
+    counter is what makes two consecutive rejections of the same field re-fire it —
+    without it, an identical `fields` object is `===` to the last one and the effect
+    never runs a second time.
+  */
+  const [rejectedAt, setRejectedAt] = useState(0);
+
+  useEffect(() => {
+    if (rejectedAt === 0) return;
+    const first = ref.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (!first) return;
+    // Focused without scrolling, then scrolled deliberately: `focus()` alone jumps the
+    // field to the nearest edge, which on a long form puts it under the header.
+    first.focus({ preventScroll: true });
+    first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [rejectedAt]);
 
   const clear = useCallback(() => setState(EMPTY), []);
 
-  const reject = useCallback(
-    (next: FormErrorState) => {
-      setState(next);
-      focusFirstInvalid();
-    },
-    [focusFirstInvalid],
-  );
+  const reject = useCallback((next: FormErrorState) => {
+    setState(next);
+    setRejectedAt((n) => n + 1);
+  }, []);
 
   const fail = useCallback((caught: unknown) => reject(toFormErrors(caught)), [reject]);
 
@@ -105,6 +122,23 @@ export function useFormErrors() {
     [reject],
   );
 
+  /**
+   * Drops one field's mark, because the person is now typing in it.
+   *
+   * A red border that stays red while the value is being corrected is a message that
+   * says "still wrong" about something that is not wrong any more — the same defect as
+   * a message that sends the reader nowhere, in miniature. The summary goes with it:
+   * a sentence naming a field that is no longer marked is worse than no sentence.
+   */
+  const clearField = useCallback((path: string) => {
+    setState((current) => {
+      if (!(path in current.fields)) return current;
+      const next = { ...current.fields };
+      delete next[path];
+      return { fields: next, summary: Object.keys(next).length > 0 ? current.summary : null };
+    });
+  }, []);
+
   const rejectField = useCallback(
     (path: string, message: string) => reject({ fields: { [path]: message }, summary: message }),
     [reject],
@@ -116,5 +150,5 @@ export function useFormErrors() {
     [],
   );
 
-  return { ref, fields: state.fields, summary: state.summary, clear, fail, validate, rejectField, rejectForm };
+  return { ref, fields: state.fields, summary: state.summary, clear, fail, validate, rejectField, rejectForm, clearField };
 }

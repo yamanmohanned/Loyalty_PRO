@@ -75,8 +75,12 @@ export function FirstRunScreen({ onCreated }: { onCreated: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const errors = useFormErrors();
 
-  const set = (key: keyof BootstrapRequest) => (event: React.ChangeEvent<HTMLInputElement>) =>
+  /* Editing a marked field drops its mark: a red border that stays red while the
+     value is being corrected says "still wrong" about something that no longer is. */
+  const set = (key: keyof BootstrapRequest) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    errors.clearField(key);
     setForm((current) => ({ ...current, [key]: event.target.value }));
+  };
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -226,7 +230,10 @@ export function FirstRunScreen({ onCreated }: { onCreated: () => void }) {
           <Input
             type="password"
             value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
+            onChange={(e) => {
+              errors.clearField('passwordConfirm');
+              setConfirm(e.target.value);
+            }}
             dir="ltr"
             className="text-start"
             autoComplete="new-password"

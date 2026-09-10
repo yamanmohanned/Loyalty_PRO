@@ -12,6 +12,7 @@ import { forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
+import { ensureDiscountSettings } from './discount-settings.service';
 import { lookupCard } from './card.service';
 import {
   bracketMessage,
@@ -357,9 +358,15 @@ export async function scanCard(
 
   /* ── 3. Attribute, evaluate, and settle — atomically ────────────────────── */
 
-  const settings = await prisma.discountSettings.findUniqueOrThrow({
-    where: { merchantId: context.merchantId },
-  });
+  /*
+    `ensureDiscountSettings`, not `findUniqueOrThrow`.
+
+    The throw was a 500 at the till — «لم تُحفظ العملية … أبلغ الإدارة فوراً» — for a
+    missing configuration row with defined defaults, and it fired on the FIRST SALE of
+    every installation because nothing outside the development seed ever created one.
+    See `discount-settings.service.ts`.
+  */
+  const settings = await ensureDiscountSettings(context.merchantId);
   const rules = await getActiveRules(context.merchantId);
 
   // ═══ THE v4 CHANGE (§1.1) ═══

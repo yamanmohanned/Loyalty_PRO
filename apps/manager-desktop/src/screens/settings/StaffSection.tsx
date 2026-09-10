@@ -41,6 +41,9 @@ import { Button, Card, CardHeader, Chip, Field, Input, Notice, Select } from '..
  * the shop loses its Station permanently. So the owner can set a new one for a staff
  * account — and for no other, including his own.
  */
+/** Mirrors `BRANCH_BOUND_ROLES` in the service — both writers must name a branch. */
+const BRANCH_BOUND = new Set(['STATION', 'AGENT']);
+
 export function StaffSection() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -86,8 +89,11 @@ export function StaffSection() {
 
   const set =
     (key: keyof CreateUserRequest) =>
-    (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      // Editing a marked field drops its mark — see `lib/form.ts`.
+      errors.clearField(key);
       setForm((current) => ({ ...current, [key]: event.target.value }));
+    };
 
   const branches = staff.data?.branches ?? [];
 
@@ -102,12 +108,13 @@ export function StaffSection() {
     */
     const candidate = {
       ...form,
-      branchId: form.branchId || (form.role === 'STATION' ? branches[0]?.id ?? null : null),
+      branchId:
+        form.branchId || (BRANCH_BOUND.has(form.role) ? branches[0]?.id ?? null : null),
     };
     const parsed = errors.validate(CreateUserRequestSchema, candidate);
     if (!parsed) return;
 
-    if (parsed.role === 'STATION' && !parsed.branchId) {
+    if (BRANCH_BOUND.has(parsed.role) && !parsed.branchId) {
       errors.rejectField('branchId', locale.settings.staff.branchRequired);
       return;
     }
@@ -227,6 +234,7 @@ export function StaffSection() {
               <Field label={locale.settings.staff.roleLabel} hint={locale.settings.staff.roleHint}>
                 <Select value={form.role} onChange={set('role')}>
                   <option value="STATION">{locale.settings.staff.role.STATION}</option>
+                  <option value="AGENT">{locale.settings.staff.role.AGENT}</option>
                   <option value="MANAGER">{locale.settings.staff.role.MANAGER}</option>
                 </Select>
               </Field>
@@ -235,13 +243,14 @@ export function StaffSection() {
                 label={locale.settings.staff.branch}
                 hint={locale.settings.staff.branchHint}
                 error={errors.fields.branchId}
-                required={form.role === 'STATION'}
+                required={BRANCH_BOUND.has(form.role)}
               >
                 <Select
                   value={form.branchId ?? ''}
-                  onChange={(e) =>
-                    setForm((current) => ({ ...current, branchId: e.target.value || null }))
-                  }
+                  onChange={(e) => {
+                    errors.clearField('branchId');
+                    setForm((current) => ({ ...current, branchId: e.target.value || null }));
+                  }}
                 >
                   <option value="">{locale.settings.staff.noBranch}</option>
                   {branches.map((branch) => (

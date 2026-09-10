@@ -1,5 +1,7 @@
 import {
+  createContext,
   forwardRef,
+  useContext,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -71,12 +73,29 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, invalid, icon, ...props },
+  { className, invalid: invalidProp, icon, ...props },
   ref,
 ) {
+  /*
+    ── The wrapper tells the control, rather than every call site remembering ──
+
+    `Field` has taken an `error` prop since it was written and `Input` has taken an
+    `invalid` one, and keeping the two in step was left to whoever wrote the JSX. Most
+    call sites did not: a field in the wrong state showed red words underneath and a
+    perfectly ordinary border, and nothing in the accessibility tree said the value had
+    been rejected — so `lib/form.ts` could not find the field to move the cursor into
+    either, because it looks for `aria-invalid`.
+
+    An explicit prop still wins, for a control that is invalid for a reason its `Field`
+    does not know about.
+  */
+  const fromField = useContext(FieldContext);
+  const invalid = invalidProp ?? fromField.invalid;
+
   const field = (
     <input
       ref={ref}
+      aria-invalid={invalid || undefined}
       {...props}
       className={cn(
         // Measured off `login.png`: 12px radius, 18px of horizontal padding, and a
@@ -120,6 +139,16 @@ export function Divider({ label }: { label?: string }): JSX.Element {
 
 /* ── Field ─────────────────────────────────────────────────────────────────── */
 
+/**
+ * What a `Field` tells the control inside it.
+ *
+ * One boolean through context rather than an `invalid` prop every call site has to
+ * keep in step with `error` — see `Input` for what forgetting it cost. The default is
+ * the honest one for a control rendered outside any `Field`: not invalid, because
+ * nobody said it was.
+ */
+const FieldContext = createContext<{ invalid: boolean }>({ invalid: false });
+
 export function Field({
   label,
   hint,
@@ -132,6 +161,7 @@ export function Field({
   children: ReactNode;
 }): JSX.Element {
   return (
+    <FieldContext.Provider value={{ invalid: Boolean(error) }}>
     <label className="block">
       {/* Label above, helper and error below — one vertical rhythm everywhere (§6.4). */}
       {/* 12px to the input — the reference's 11px snapped to the 4px rhythm (§6.5). */}
@@ -143,6 +173,7 @@ export function Field({
         <span className="mt-2 block text-sm text-steel">{hint}</span>
       ) : null}
     </label>
+    </FieldContext.Provider>
   );
 }
 

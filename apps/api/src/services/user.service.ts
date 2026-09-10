@@ -33,7 +33,8 @@ import { AUDIT_ACTIONS, recordAudit } from './audit.service';
  *
  * - **It cannot create an OWNER.** There is exactly one, made at first run, and a
  *   second one would be a second unrecoverable password with full reach. `StaffRole`
- *   is `MANAGER | STATION` in the shared schema, so the API cannot be asked for one.
+ *   is `MANAGER | STATION | AGENT` in the shared schema, so the API cannot be asked
+ *   for one.
  * - **It cannot delete anybody.** A user is deactivated. `audit_log`,
  *   `transaction.linkedByUserId` and `voucher.redeemedByUserId` all point at these
  *   rows, and deleting one would either cascade a shop's history away or leave the
@@ -44,8 +45,18 @@ import { AUDIT_ACTIONS, recordAudit } from './audit.service';
  *   attacker would already have.
  */
 
+/**
+ * Roles that must name a branch.
+ *
+ * Both of them WRITE against a branch — the Station links a sale to the customer in
+ * front of it, the Agent declares the sale itself — and §13.9 verifies rather than
+ * trusts the branch on every one. An unbound writer is one that could attribute a
+ * sale to any branch in the shop.
+ */
+const BRANCH_BOUND_ROLES = new Set(['STATION', 'AGENT']);
+
 /** Which accounts an OWNER may create or change. Never OWNER. */
-const MANAGEABLE_ROLES = new Set(['MANAGER', 'STATION']);
+const MANAGEABLE_ROLES = new Set(['MANAGER', 'STATION', 'AGENT']);
 
 export async function listStaff(merchantId: string): Promise<StaffListResponse> {
   const [users, branches] = await Promise.all([
@@ -92,15 +103,21 @@ export async function createStaffUser(
   const username = input.username.trim().toLowerCase();
 
   /*
-    A STATION must name its branch. §13.9 verifies rather than trusts the branch on
-    every captured invoice — a bound user must match the branch the sale claims — and an
-    unbound till would either be refused on every scan or, worse, allowed to attribute a
-    sale to any branch in the shop. Refused here, with the field named, rather than
-    discovered at the counter.
+    A writer must name its branch. §13.9 verifies rather than trusts the branch on every
+    captured invoice — a bound user must match the branch the sale claims — and an
+    unbound till or capture agent would either be refused on every scan or, worse,
+    allowed to attribute a sale to any branch in the shop. Refused here, with the field
+    named, rather than discovered at the counter.
   */
-  if (input.role === 'STATION' && !input.branchId) {
+  if (BRANCH_BOUND_ROLES.has(input.role) && !input.branchId) {
     throw validationFailed(undefined, [
-      { path: 'branchId', message: 'حساب المحطة يجب أن يرتبط بفرع' },
+      {
+        path: 'branchId',
+        message:
+          input.role === 'AGENT'
+            ? 'حساب برنامج الالتقاط يجب أن يرتبط بفرع'
+            : 'حساب المحطة يجب أن يرتبط بفرع',
+      },
     ]);
   }
 
@@ -190,9 +207,9 @@ export async function updateStaffUser(
       throw new AppError('FORBIDDEN', 'لا يمكن تعديل حساب المالك من هنا.');
     }
 
-    if (existing.role === 'STATION' && input.branchId === null) {
+    if (BRANCH_BOUND_ROLES.has(existing.role) && input.branchId === null) {
       throw validationFailed(undefined, [
-        { path: 'branchId', message: 'حساب المحطة يجب أن يرتبط بفرع' },
+        { path: 'branchId', message: 'هذا الحساب يجب أن يبقى مرتبطاً بفرع' },
       ]);
     }
 

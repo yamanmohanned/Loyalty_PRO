@@ -126,7 +126,7 @@ describe('the shop can create the account its till signs in with', () => {
 describe('what it refuses', () => {
   it('cannot be asked for a second OWNER', async () => {
     /*
-      Refused by the SCHEMA (`StaffRoleSchema` is `MANAGER | STATION`), not by a check
+      Refused by the SCHEMA (`StaffRoleSchema` is `MANAGER | STATION | AGENT`), not by a check
       in the handler — so the guarantee holds for any caller that reaches the route,
       including one that skips whatever the handler remembers to validate.
     */
@@ -287,5 +287,78 @@ describe('the audit trail', () => {
     expect(serialised).not.toContain('NewTill!2026');
     expect(serialised).not.toContain('$argon2');
     expect(serialised).toContain('passwordChanged');
+  });
+});
+
+describe('the capture agent', () => {
+  it('gets its own account, so the OWNER password never goes into a config file', async () => {
+    /*
+      `INGEST_ROLES` is `OWNER | AGENT`: the Print Capture Agent on the cashier's PC is
+      what declares a sale. Without AGENT among the creatable roles the only account
+      that could run it was the OWNER — the password with no reset, typed into a
+      configuration file on a machine at the front of the shop.
+    */
+    const created = await create({
+      name: 'برنامج الالتقاط',
+      username: 'agent',
+      password: 'Agent!2026',
+      role: 'AGENT',
+      branchId,
+    });
+    expect(created.statusCode).toBe(201);
+
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: { username: 'agent', password: 'Agent!2026' },
+    });
+    expect(login.statusCode).toBe(200);
+    const agentToken = JSON.parse(login.body).tokens.accessToken;
+
+    // It can do the one thing it exists for ...
+    const ingest = await app.inject({
+      method: 'POST',
+      url: '/api/v1/ingest/invoice',
+      headers: { authorization: `Bearer ${agentToken}` },
+      payload: {
+        // The Normalized Invoice Schema, snake_case as it crosses the wire (§2.3).
+        invoice: {
+          invoice_id: 'INV-AGENT-1',
+          amount_gross: 25000,
+          currency: 'IQD',
+          branch_id: 'TST-01',
+          occurred_at: new Date().toISOString(),
+          captured_at: new Date().toISOString(),
+          capture_mode: 'SPOOL_WATCH',
+        },
+      },
+    });
+    expect([200, 201]).toContain(ingest.statusCode);
+
+    // ... and nothing else. It must not reach the dashboard or mint accounts.
+    const staff = await app.inject({
+      method: 'GET',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${agentToken}` },
+    });
+    expect(staff.statusCode).toBe(403);
+
+    const reports = await app.inject({
+      method: 'GET',
+      url: '/api/v1/reports/overview',
+      headers: { authorization: `Bearer ${agentToken}` },
+    });
+    expect(reports.statusCode).toBe(403);
+  });
+
+  it('must name a branch, like the till', async () => {
+    const response = await create({
+      name: 'برنامج الالتقاط',
+      username: 'agent',
+      password: 'Agent!2026',
+      role: 'AGENT',
+    });
+    expect(response.statusCode).toBe(400);
+    expect(fieldsOf(response)[0]?.path).toBe('branchId');
   });
 });

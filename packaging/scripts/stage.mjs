@@ -253,23 +253,88 @@ const nodeLicense = join(dirname(process.execPath), 'LICENSE');
 if (existsSync(nodeLicense)) cpSync(nodeLicense, join(STAGE, 'NODE-LICENSE.txt'));
 note(`node ${process.version} runtime (${mb(statSync(join(STAGE, 'node.exe')).size)})`);
 
+/**
+ * The newest modification time anywhere under a path, file or directory.
+ *
+ * Recursive because a bundle's freshness is decided by its newest asset and a source
+ * tree's by its newest file — comparing the two directory mtimes instead would compare
+ * when each folder last had an entry added, which is not the same question.
+ */
+function newestMtime(path) {
+  const info = statSync(path);
+  if (!info.isDirectory()) return info.mtimeMs;
+  return readdirSync(path)
+    .map((entry) => newestMtime(join(path, entry)))
+    .reduce((a, b) => Math.max(a, b), info.mtimeMs);
+}
+
 // ── 5b. The Loyalty Station ─────────────────────────────────────────────────────
 // Served by the API on its own port (§12.3), so the tablet browses to the manager
 // machine and there is no second web server to install. Staged as `station/`, which
 // is where `resolveStationDir` looks when the runtime directory is the working
 // directory.
 const stationDist = join(REPO, 'apps', 'station', 'dist');
-if (existsSync(join(stationDist, 'index.html')) && existsSync(join(stationDist, 'assets'))) {
-  cpSync(stationDist, join(STAGE, 'station'), { recursive: true });
-  note(`loyalty station bundle (${mb(directorySize(join(STAGE, 'station')))})`);
-} else {
-  console.warn(
-    '  WARNING: the Loyalty Station is not built — run `pnpm --filter @walaa/station build`.',
+if (!existsSync(join(stationDist, 'index.html')) || !existsSync(join(stationDist, 'assets'))) {
+  console.error(
+    [
+      '',
+      '  ERROR: the Loyalty Station is not built.',
+      '',
+      '         Run:  pnpm --filter @walaa/station build',
+      '',
+      '         Without it the installer ships an API that serves nothing at its own',
+      '         address, and the tablet at the till has nothing to open.',
+      '',
+    ].join('\n'),
   );
-  console.warn(
-    '           The installer will ship without it and the tablet will have nothing to open.',
-  );
+  process.exit(1);
 }
+
+/*
+  ── The bundle must be newer than its source ─────────────────────────────────
+
+  This checked only that `dist/` EXISTED, and warned when it did not. That measures
+  presence, which is a proxy for the thing that matters — whether the bundle about to
+  be shipped is built from the code in this tree.
+
+  It is the same defect the service-host check twenty lines below exists for, and it
+  bit the same way. Driving the packaged Station through a browser, a message I had
+  changed an hour earlier was still the old one: `dist/` was a fortnight old, staging
+  copied it without comment, and the runtime served it. Every Station fix in the
+  release would have shipped as the code before it.
+
+  A warning would not have helped either — this scrolls past inside a longer build. It
+  is an error, and it names what to run.
+*/
+const stationSourceRoots = ['src', 'index.html', 'vite.config.ts', 'package.json'];
+const newestStationSource = stationSourceRoots
+  .map((entry) => join(REPO, 'apps', 'station', entry))
+  .filter((path) => existsSync(path))
+  .map((path) => newestMtime(path))
+  .reduce((a, b) => Math.max(a, b), 0);
+
+const stationBuiltAt = newestMtime(stationDist);
+
+if (stationBuiltAt < newestStationSource) {
+  console.error(
+    [
+      '',
+      '  ERROR: the Loyalty Station bundle is OLDER than its source.',
+      `         bundle  ${new Date(stationBuiltAt).toISOString()}`,
+      `         source  ${new Date(newestStationSource).toISOString()}`,
+      '',
+      '         Run:  pnpm --filter @walaa/station build',
+      '',
+      '         Staging copies `apps/station/dist` as it finds it. A stale bundle ships',
+      '         silently: the till runs the code from whenever it was last built.',
+      '',
+    ].join('\n'),
+  );
+  process.exit(1);
+}
+
+cpSync(stationDist, join(STAGE, 'station'), { recursive: true });
+note(`loyalty station bundle (${mb(directorySize(join(STAGE, 'station')))})`);
 
 // ── 6b. Service host ────────────────────────────────────────────────────────────
 // The shim that lets the Service Control Manager start Node at all, and that keeps

@@ -224,7 +224,11 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
           <Field label={locale.register.name} error={errors.fields.name}>
             <Input
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                // Editing a marked field drops its mark — see `lib/form.ts`.
+                errors.clearField('name');
+                setName(event.target.value);
+              }}
               placeholder={locale.register.namePlaceholder}
               autoComplete="off"
               autoFocus
@@ -235,13 +239,15 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
           <Field label={locale.register.phone} error={errors.fields.phone}>
             <Input
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => {
+                errors.clearField('phone');
+                setPhone(event.target.value);
+              }}
               placeholder={locale.register.phonePlaceholder}
               inputMode="tel"
               autoComplete="off"
               dir="ltr"
               className="h-16 text-center font-mono text-2xl tracking-widest"
-              invalid={Boolean(errors.fields.phone)}
             />
           </Field>
 

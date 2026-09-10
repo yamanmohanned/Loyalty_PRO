@@ -219,7 +219,22 @@ export const OWNER_PASSWORD_RULES: ReadonlyArray<{
  * defensible for a till account shared by a shift: the person who knows it leaves, and
  * without this the shop loses its Station permanently. The OWNER can set a new one.
  */
-export const StaffRoleSchema = z.enum(['MANAGER', 'STATION']);
+/**
+ * The accounts an OWNER may create. Never OWNER.
+ *
+ * ── AGENT is here because leaving it out had a price ─────────────────────────
+ *
+ * `INGEST_ROLES` is `OWNER | AGENT`: the Print Capture Agent on the cashier's PC is
+ * what declares a sale, and a STATION deliberately cannot. Without AGENT on this list
+ * the only account that could run the agent was the OWNER — so the shop's most
+ * privileged password, the one with no reset, would have to be typed into a
+ * configuration file on a machine at the front of the shop.
+ *
+ * That is the same failure as a shipped credential wearing different clothes. An
+ * AGENT can capture invoices and do nothing else, and if that machine is ever lost the
+ * account is deactivated from the dashboard in one click.
+ */
+export const StaffRoleSchema = z.enum(['MANAGER', 'STATION', 'AGENT']);
 export type StaffRole = z.infer<typeof StaffRoleSchema>;
 
 export const CreateUserRequestSchema = z
@@ -235,9 +250,9 @@ export const CreateUserRequestSchema = z
       .regex(/^[A-Za-z0-9._-]+$/, 'أحرف إنجليزية وأرقام فقط، بدون مسافات'),
     password: StaffPasswordSchema,
     role: StaffRoleSchema,
-    /* A STATION is bound to the branch it stands in — §13.9's "branch is verified, not
-       trusted" depends on it, and an unbound till could attribute a sale to any branch
-       in the shop. A MANAGER may be unbound. */
+    /* A STATION and an AGENT are bound to the branch they stand in — §13.9's "branch
+       is verified, not trusted" depends on it, and an unbound till or capture agent
+       could attribute a sale to any branch in the shop. A MANAGER may be unbound. */
     branchId: z.string().uuid().nullable().optional(),
   })
   .strict();

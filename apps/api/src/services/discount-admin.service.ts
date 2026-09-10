@@ -10,6 +10,7 @@ import { notFound, validationFailed } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
+import { ensureDiscountSettings } from './discount-settings.service';
 
 /**
  * Discount configuration, and the guardrails that stop a misconfiguration from
@@ -70,8 +71,12 @@ export async function getDiscountConfiguration(merchantId: string): Promise<{
   /** Live margin assessment per rule, so the UI can show warnings without recomputing. */
   assessments: Array<{ thresholdAmount: number; warning: string | null; exceedsProfit: boolean }>;
 }> {
-  const settings = await prisma.discountSettings.findUnique({ where: { merchantId } });
-  if (!settings) throw notFound('لا توجد إعدادات خصم لهذا التاجر');
+  /*
+    Created on demand rather than 404'd. «لا توجد إعدادات خصم لهذا التاجر» told a
+    merchant his own shop had no settings and gave him nothing to do about it — there
+    is no screen in the product that creates them. They have defaults; this makes them.
+  */
+  const settings = await ensureDiscountSettings(merchantId);
 
   const rules = await prisma.discountRule.findMany({
     where: { merchantId },
