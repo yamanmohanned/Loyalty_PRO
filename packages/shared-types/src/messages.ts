@@ -63,7 +63,7 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   branchName: 'اسم الفرع',
   branchCode: 'رمز الفرع',
   ownerName: 'اسم المالك',
-  username: 'اسم المستخدم',
+  username: 'اسم الدخول',
   password: 'كلمة المرور',
   passwordConfirm: 'تأكيد كلمة المرور',
 

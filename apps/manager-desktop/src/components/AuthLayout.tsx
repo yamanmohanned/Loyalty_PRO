@@ -83,6 +83,21 @@ export function AuthLayout({
         -1, so it is invisible to assistive tech and can never sit above a control.
         Every alpha is at or below 0.03, which is the computed ceiling for staying
         under a 5% luma delta on this ground; the arithmetic is in the preset. */
+    /* `min-h`, and the grid below centres with `my-auto` rather than `items-center`.
+
+       ── The screen a merchant could not scroll ────────────────────────────────
+
+       `body { overflow: hidden }` made the document unscrollable and this layout has
+       no scroll container of its own, so «إعداد المتجر لأول مرة» — the tallest form
+       in the product and the FIRST thing anybody ever sees — had its lower fields
+       below the fold with no way to reach them. The merchant tabbed to them blind,
+       could not read their labels or their rules, and got a refusal that did not say
+       which field.
+
+       The body scrolls now. `my-auto` is the other half: a grid item centred with
+       `items-center` and taller than its track overflows in BOTH directions, and the
+       part above the fold cannot be scrolled back to. `my-auto` centres it while it
+       fits and lets it start at the top when it does not. */
     <div className="auth-atmosphere min-h-[100dvh] bg-auth-ground">
       {/*
         Proportions measured off `login.png` at its native 1448 px, not eyeballed:
@@ -120,7 +135,7 @@ export function AuthLayout({
         structural half of the fix — it lets the track shrink instead of pushing, so new
         content in that column cannot silently reintroduce the overflow.
       */}
-      <div className="mx-auto grid min-h-[100dvh] max-w-[82rem] items-center gap-12 px-6 py-10 xl:grid-cols-[42rem_1fr]">
+      <div className="mx-auto grid min-h-[100dvh] max-w-[82rem] content-center gap-12 px-6 py-10 xl:grid-cols-[42rem_1fr]">
         {/*
           THE FORM COMES FIRST, and that is a correction.
 
@@ -137,7 +152,7 @@ export function AuthLayout({
           It is also simply better: the form is the thing you act on, and it now sits
           where an RTL reader starts (§6.7 #4).
         */}
-        <div className="order-1 w-full justify-self-center xl:justify-self-start">
+        <div className="order-1 my-auto w-full justify-self-center xl:justify-self-start">
           {/* Solid near-white with a barely-there vertical gradient — the reference's
               card samples 254–255 at the top and 249–251 through the body, which is a
               gradient of about 5 levels. Invisible as an effect, and the reason the
@@ -178,7 +193,7 @@ export function AuthLayout({
           wash behind the headline, which is the one part of that illustration we can
           honestly keep, because light is not a picture of anything.
         */}
-        <div className="relative order-2 flex min-w-0 flex-col items-center text-center xl:items-start xl:text-start">
+        <div className="relative order-2 my-auto flex min-w-0 flex-col items-center text-center xl:items-start xl:text-start">
           <span
             className="pointer-events-none absolute -start-24 -top-24 -z-10 h-[26rem] w-[26rem] rounded-pill bg-[radial-gradient(circle,rgba(15,110,86,0.14)_0%,rgba(15,110,86,0.05)_45%,transparent_70%)]"
             aria-hidden

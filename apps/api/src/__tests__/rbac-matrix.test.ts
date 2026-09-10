@@ -207,6 +207,16 @@ const CASES: Case[] = [
   // shop rather than about an operator's shift.
   { method: 'GET', path: '/system/printing', allowed: DASHBOARD },
   { method: 'PUT', path: '/system/printing', allowed: DASHBOARD },
+
+  /* ── Staff accounts ─────────────────────────────────────────────────────────
+
+     OWNER only, not `DASHBOARD`. A MANAGER can read every report and rewrite the
+     discount ladder; minting a login is the one act that widens who can reach the
+     shop at all, and a MANAGER able to create a STATION account could create a
+     second identity that the audit trail then attributes to the till. */
+  { method: 'GET', path: '/users', allowed: ['OWNER'] },
+  { method: 'POST', path: '/users', allowed: ['OWNER'] },
+  { method: 'PATCH', path: '/users/:id', allowed: ['OWNER'] },
 ];
 
 async function tokenFor(role: Role): Promise<string> {
@@ -383,6 +393,11 @@ describe('the route inventory', () => {
         // One node, both verbs — Fastify collapses same-path routes in its tree.
         'GET, HEAD, PUT /api/v1/system/printing',
         'GET, HEAD /api/v1/system/storage',
+        // Both nodes, as `/discount` and `/flags` also produce: Fastify registers the
+        // prefix and the prefix-with-slash as separate entries in its tree.
+        'GET, HEAD, POST /api/v1/users',
+        'GET, HEAD, POST /api/v1/users/',
+        'PATCH /api/v1/users/:id',
         'GET, HEAD /api/v1/vouchers/reconciliation',
         'GET, HEAD, POST /api/v1/auth/bootstrap',
         'GET, HEAD, POST /api/v1/cards/batches',

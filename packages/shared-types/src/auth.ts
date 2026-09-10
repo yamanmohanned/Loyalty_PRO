@@ -5,8 +5,8 @@ import { PaperWidthSchema, RoleSchema } from './enums';
 
 export const LoginRequestSchema = z
   .object({
-    username: z.string().trim().min(3, 'اسم المستخدم مطلوب').max(64),
-    password: z.string().min(8, 'كلمة المرور قصيرة جداً').max(256),
+    username: z.string().trim().min(3).max(64),
+    password: z.string().min(8).max(256),
   })
   .strict();
 
@@ -121,6 +121,26 @@ export const REFUSED_PASSWORDS: ReadonlySet<string> = new Set(
 );
 
 /**
+ * A staff password — a till account, a second manager.
+ *
+ * Eight rather than the owner's ten, and the difference is deliberate rather than
+ * sloppy. The owner's password is the one that can never be reset and reaches
+ * everything; a Station account can be reset by the owner in ten seconds and can do
+ * nothing but the core loop. A rule so strict that a shift ends up writing the password
+ * on the monitor is a worse outcome than two fewer characters.
+ *
+ * The deny-list is the SAME. «walaa!dev2026» being in a repository does not become
+ * acceptable because the account is smaller.
+ */
+export const StaffPasswordSchema = z
+  .string()
+  .min(8, '8 أحرف على الأقل')
+  .max(200)
+  .refine((value) => !REFUSED_PASSWORDS.has(value.trim().toLowerCase()), {
+    message: 'هذه كلمة مرور معروفة ولا يمكن استخدامها — اختر واحدة أخرى',
+  });
+
+/**
  * The owner password rule, as ONE schema both sides parse.
  *
  * ── Why it moved here ────────────────────────────────────────────────────────
@@ -141,10 +161,10 @@ export const REFUSED_PASSWORDS: ReadonlySet<string> = new Set(
  */
 export const OwnerPasswordSchema = z
   .string()
-  .min(MIN_OWNER_PASSWORD_LENGTH, `كلمة المرور: ${MIN_OWNER_PASSWORD_LENGTH} أحرف على الأقل`)
+  .min(MIN_OWNER_PASSWORD_LENGTH, `${MIN_OWNER_PASSWORD_LENGTH} أحرف على الأقل`)
   .max(200)
   .refine((value) => !REFUSED_PASSWORDS.has(value.trim().toLowerCase()), {
-    message: 'كلمة المرور هذه معروفة ولا يمكن استخدامها — اختر كلمة مرور خاصة بمتجرك',
+    message: 'هذه كلمة مرور معروفة ولا يمكن استخدامها — اختر واحدة خاصة بمتجرك',
   });
 
 /**
@@ -170,6 +190,90 @@ export const OWNER_PASSWORD_RULES: ReadonlyArray<{
   },
 ]);
 
+/* ── Staff accounts ─────────────────────────────────────────────────────────── */
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  THE TILL'S ACCOUNT HAD NO WAY TO EXIST
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `bootstrapInstallation` creates exactly one OWNER, and says so deliberately: "the
+ * till's account is made from the dashboard afterwards, by somebody who has already
+ * proved they own the shop." That was the right decision and the dashboard screen was
+ * never built — no endpoint, no UI, nothing.
+ *
+ * The consequence, found by walking a merchant's first sixty seconds on a machine with
+ * no prior state: the owner is created, the dashboard opens, and the **Loyalty Station
+ * can never be signed into**. The Station is where the entire core loop lives — scan
+ * customer, scan invoice, link, notify — so the product could be installed, set up and
+ * logged into, and could not do the thing it exists to do.
+ *
+ * The only `station` account that has ever existed is the one in `prisma/seed.ts`,
+ * which is a development script and is not bundled into the service. It was covering
+ * the gap on every machine except a merchant's.
+ *
+ * ── Why a password reset is here too ─────────────────────────────────────────
+ *
+ * There is no self-service reset in this product, by design (§12.31). That is
+ * defensible for the OWNER, who is told so in writing before he chooses. It is not
+ * defensible for a till account shared by a shift: the person who knows it leaves, and
+ * without this the shop loses its Station permanently. The OWNER can set a new one.
+ */
+export const StaffRoleSchema = z.enum(['MANAGER', 'STATION']);
+export type StaffRole = z.infer<typeof StaffRoleSchema>;
+
+export const CreateUserRequestSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    /* Lowercased on write, like the owner's. A username differing only by case is two
+       accounts to a database and one account to the person typing it. */
+    username: z
+      .string()
+      .trim()
+      .min(3, 'أدخل 3 أحرف على الأقل')
+      .max(64)
+      .regex(/^[A-Za-z0-9._-]+$/, 'أحرف إنجليزية وأرقام فقط، بدون مسافات'),
+    password: StaffPasswordSchema,
+    role: StaffRoleSchema,
+    /* A STATION is bound to the branch it stands in — §13.9's "branch is verified, not
+       trusted" depends on it, and an unbound till could attribute a sale to any branch
+       in the shop. A MANAGER may be unbound. */
+    branchId: z.string().uuid().nullable().optional(),
+  })
+  .strict();
+export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>;
+
+export const UpdateUserRequestSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120).optional(),
+    password: StaffPasswordSchema.optional(),
+    isActive: z.boolean().optional(),
+    branchId: z.string().uuid().nullable().optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'لا يوجد أي تغيير لحفظه',
+  });
+export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
+
+export const StaffUserSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  username: z.string(),
+  role: RoleSchema,
+  isActive: z.boolean(),
+  branchId: z.string().uuid().nullable(),
+  branchCode: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type StaffUser = z.infer<typeof StaffUserSchema>;
+
+export const StaffListResponseSchema = z.object({
+  users: z.array(StaffUserSchema),
+  branches: z.array(z.object({ id: z.string().uuid(), name: z.string(), code: z.string() })),
+});
+export type StaffListResponse = z.infer<typeof StaffListResponseSchema>;
+
 export const BootstrapStatusSchema = z.object({
   /** True only while this installation has no account at all. */
   required: z.boolean(),
@@ -178,25 +282,36 @@ export type BootstrapStatus = z.infer<typeof BootstrapStatusSchema>;
 
 export const BootstrapRequestSchema = z
   .object({
-    merchantName: z.string().trim().min(2, 'اسم المتجر مطلوب').max(120),
-    branchName: z.string().trim().min(2, 'اسم الفرع مطلوب').max(120),
+    /*
+      No message on the length rules: the Arabic error map answers «هذا الحقل مطلوب»
+      for an empty one, and a message written here would be a SECOND name for a field
+      that already has one in `FIELD_LABELS`. That is not hypothetical — `username`
+      carried «اسم المستخدم» in the labels and «اسم الدخول» in its own message, and the
+      envelope printed both: «اسم المستخدم: اسم الدخول: أحرف إنجليزية وأرقام فقط».
+
+      A message states the RULE. The field's name is added once, by
+      `describeFieldError`, from the one place that holds it. `messages.test.ts` fails
+      the build if a message starts with a field name again.
+    */
+    merchantName: z.string().trim().min(2).max(120),
+    branchName: z.string().trim().min(2).max(120),
     /* Printed on receipts and matched against captured invoices, so it is constrained
        to what a POS can put on a roll: Latin letters, digits and a dash. */
     branchCode: z
       .string()
       .trim()
-      .min(2, 'رمز الفرع مطلوب')
+      .min(2)
       .max(16)
-      .regex(/^[A-Za-z0-9-]+$/, 'رمز الفرع: أحرف إنجليزية وأرقام وشرطة فقط'),
-    ownerName: z.string().trim().min(2, 'اسم المالك مطلوب').max(120),
+      .regex(/^[A-Za-z0-9-]+$/, 'أحرف إنجليزية وأرقام وشرطة فقط'),
+    ownerName: z.string().trim().min(2).max(120),
     /* Lowercased on write. A username that differs only by case is two accounts to a
        database and one account to the person typing it. */
     username: z
       .string()
       .trim()
-      .min(3, 'اسم المستخدم قصير')
+      .min(3)
       .max(64)
-      .regex(/^[A-Za-z0-9._-]+$/, 'اسم المستخدم: أحرف إنجليزية وأرقام فقط'),
+      .regex(/^[A-Za-z0-9._-]+$/, 'أحرف إنجليزية وأرقام فقط، بدون مسافات'),
     password: OwnerPasswordSchema,
   })
   .strict();

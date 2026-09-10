@@ -72,6 +72,16 @@ pub fn is_demo(resource_dir: &Path) -> bool {
     runtime_dir(resource_dir).join(DEMO_SEED).exists()
 }
 
+/// The service binary this installation ships, whether or not it is present.
+///
+/// Its EXISTENCE is the signal for "this machine hosts the backend", which decides
+/// whether the dashboard may ever offer a server-address field. A manager PC has it; a
+/// second machine running only the dashboard does not, and that is the one place an
+/// address is a real question.
+pub fn service_exe(resource_dir: &Path) -> PathBuf {
+    runtime_dir(resource_dir).join(SERVICE_EXE)
+}
+
 /// The writable runtime directory, which differs by build kind.
 ///
 /// A production install keeps its data in `%PROGRAMDATA%\Walaa`, locked to SYSTEM and

@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from './config';
+import { APP_VERSION } from './version';
 
 /**
  * What the backend says about itself, read from disk by the shell process.
@@ -36,6 +37,22 @@ export interface BackendStatus {
   checked: string[];
   port: number | null;
   demo: boolean;
+
+  /* ── What this MACHINE has, as distinct from what the service is doing ─────
+
+     Reported by the shell (`src-tauri/src/status.rs`) because the frontend was
+     inferring it from a missing port and inferring it wrongly. A manager PC whose
+     `walaa.env` had gone answered `backend_port → null`, which the dashboard read as
+     "no address configured" and answered with «لم يُعثر على خادم ولاء» and a box
+     asking the shop owner to type a server address — on the machine that IS the
+     server, for a fault no address could fix. */
+
+  /** `walaa-service.exe` is installed here. False only on a second machine. */
+  hostsService: boolean;
+  /** `walaa.env` is present. Its absence is its own failure with its own remedy. */
+  configPresent: boolean;
+  /** A database for this build exists in the data directory. */
+  databasePresent: boolean;
 }
 
 const UNKNOWN: BackendStatus = {
@@ -46,6 +63,15 @@ const UNKNOWN: BackendStatus = {
   checked: [],
   port: null,
   demo: false,
+  /*
+    Outside Tauri there is no shell to ask, so nothing about the installation is
+    established. `false` here means "not known to host a service", which routes to the
+    screen that OFFERS an address field — the safe direction: a browser pointed at a
+    dev server genuinely does need one, and withholding it there would leave no way in.
+  */
+  hostsService: false,
+  configPresent: false,
+  databasePresent: false,
 };
 
 export async function readBackendStatus(): Promise<BackendStatus> {
@@ -75,22 +101,62 @@ export async function readBackendPort(): Promise<number | null> {
 }
 
 /**
- * Whether the API is actually serving — not whether we launched something.
+ * What is at an address, in the four ways it can fail to be this product.
  *
- * The distinction is the whole point of health-gating: a process that has been spawned
- * and a process that is answering requests are different claims, and the merchant only
- * cares about the second.
+ * ── Why a boolean was not enough ─────────────────────────────────────────────
+ *
+ * `isBackendHealthy` returned true or false, and `BackendGate` therefore had exactly
+ * two states to render: healthy, or a screen that guessed. "Nothing is listening",
+ * "something is listening and it is not ولاء" and "a ولاء at a version this build
+ * cannot talk to" are three different problems with three different next moves, and
+ * they were one sentence.
+ *
+ * The distinctions already existed — `testApiUrl` in `lib/config.ts` has drawn them
+ * since V5 — but only on the Settings path, at the moment somebody types an address.
+ * A machine that had one saved met the guess instead. Same four answers, now on both.
  */
-export async function isBackendHealthy(base: string, timeoutMs = 2500): Promise<boolean> {
+export type ProbeResult =
+  | { ok: true }
+  | { ok: false; why: 'unreachable' | 'not-walaa' | 'version' };
+
+export async function probeBackend(base: string, timeoutMs = 2500): Promise<ProbeResult> {
+  let response: Response;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const response = await fetch(`${base}/health`, { signal: controller.signal });
+    response = await fetch(`${base}/health`, { signal: controller.signal });
     clearTimeout(timer);
-    if (!response.ok) return false;
-    const body = (await response.json()) as { service?: string };
-    return body.service === 'walaa-api';
   } catch {
-    return false;
+    // The request never completed: nothing listening, host down, firewall, DNS.
+    return { ok: false, why: 'unreachable' };
   }
+
+  let body: { service?: string; version?: string };
+  try {
+    body = (await response.json()) as typeof body;
+  } catch {
+    // Something answered and it was not JSON — a router's login page, a proxy error.
+    return { ok: false, why: 'not-walaa' };
+  }
+
+  if (!response.ok || body.service !== 'walaa-api') return { ok: false, why: 'not-walaa' };
+
+  /*
+    Major.minor only, matching `testApiUrl` deliberately: a patch release must not lock
+    a shop out of its own data over a version digit. `undefined` counts as a mismatch —
+    a server too old to report a version is too old to talk to.
+  */
+  const pair = (v: string | undefined): string => (v ? v.split('.').slice(0, 2).join('.') : '');
+  if (pair(body.version) !== pair(APP_VERSION)) return { ok: false, why: 'version' };
+
+  return { ok: true };
+}
+
+/**
+ * Whether the API is actually serving — not whether we launched something.
+ *
+ * Kept as the thin boolean for callers that only need one bit.
+ */
+export async function isBackendHealthy(base: string, timeoutMs = 2500): Promise<boolean> {
+  return (await probeBackend(base, timeoutMs)).ok;
 }

@@ -23,6 +23,7 @@ import { reportRoutes } from './routes/reports.routes';
 import { scanRoutes } from './routes/scan.routes';
 import { syncRoutes } from './routes/sync.routes';
 import { systemRoutes } from './routes/system.routes';
+import { userRoutes } from './routes/users.routes';
 import { voucherRoutes } from './routes/vouchers.routes';
 
 const env = loadEnv();
@@ -395,6 +396,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(reportRoutes, { prefix: '/reports' });
       await api.register(syncRoutes, { prefix: '/sync' });
       await api.register(systemRoutes, { prefix: '/system' });
+      await api.register(userRoutes, { prefix: '/users' });
     },
     { prefix: API_PREFIX },
   );

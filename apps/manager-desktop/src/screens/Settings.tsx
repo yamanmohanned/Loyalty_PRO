@@ -6,6 +6,7 @@ import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, Notice, PageHeader } from '../components/ui';
 import { ServerAddressForm } from '../components/ServerAddressForm';
 import { DriveSection } from './settings/DriveSection';
+import { StaffSection } from './settings/StaffSection';
 
 /**
  * Settings — the one place technical configuration lives.
@@ -155,6 +156,15 @@ export function SettingsScreen() {
             <ServerAddressForm key={remote ?? 'local'} onSaved={refresh} />
           </div>
         </Card>
+      </div>
+
+      {/* The till's login — and everything else a person signs in with.
+
+          FIRST among the one-time arrangements, because it is the one without which
+          the shop cannot trade: the Loyalty Station is where the whole core loop lives
+          and it had no account it could ever be signed into. */}
+      <div className="mt-6">
+        <StaffSection />
       </div>
 
       {/* Cloud backup sits beside the server settings for the reason the brief gives:

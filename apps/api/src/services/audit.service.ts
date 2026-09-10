@@ -34,6 +34,16 @@ export const AUDIT_ACTIONS = {
    * appears that the merchant did not create.
    */
   INSTALLATION_BOOTSTRAPPED: 'installation.bootstrapped',
+  /**
+   * A staff account — a till, a second manager — was created or changed.
+   *
+   * Audited for the reason every credential act is: the answer to "who could sign in as
+   * the till last Tuesday" has to exist, and it has to exist even when the account
+   * itself has since been deactivated. Neither entry ever carries a password or a hash:
+   * a password change is recorded as the FACT that one happened.
+   */
+  USER_CREATED: 'user.created',
+  USER_UPDATED: 'user.updated',
   CUSTOMER_CREATED: 'customer.created',
   CUSTOMER_UPDATED: 'customer.updated',
   CARD_REPRINTED: 'customer.card_reprinted',

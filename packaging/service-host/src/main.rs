@@ -916,6 +916,47 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         }
     }
 
+    /*
+      ── A LOST configuration beside an EXISTING database is refused ────────────
+
+      Everything below this point generates three fresh secrets. That is exactly right
+      on a new machine and catastrophic on a machine that already has a shop on it:
+
+        · `QR_TOKEN_SECRET` signs every loyalty card ever printed. Rotate it and every
+          card in every customer's wallet stops resolving — the barcodes are still
+          there, the customers still hold them, and the till says the card is unknown.
+        · `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` sign every session. Rotate them and
+          every till and every dashboard is signed out at once.
+
+      None of that is recoverable, and none of it announces itself: the service starts,
+      the dashboard opens, and the damage is discovered by a customer at a counter.
+
+      The rule that `ensure_env_file` never OVERWRITES an existing file was written for
+      exactly this reason. What it did not cover is the file being GONE — a restore that
+      copied `walaa.db` and not `walaa.env`, a data directory moved by hand, an
+      antivirus quarantine — where the same code path silently mints a new identity for
+      a shop that already has one.
+
+      So: a database present with no configuration beside it is not a first run. It is a
+      configuration that has been lost, and the answer is to say so and stop. Restoring
+      the file — or a backup taken with it — keeps the cards working; generating new
+      secrets does not, and cannot be undone.
+    */
+    if paths.database().exists() && !paths.is_demo() {
+        log_line(
+            &paths.logs,
+            &format!(
+                "refusing to generate new secrets: {} exists but {} does not",
+                paths.database().display(),
+                paths.env_file.display()
+            ),
+        );
+        return Err(
+            "تعذّر تشغيل الخدمة: ملف إعدادات البرنامج مفقود، لكن قاعدة بيانات المتجر موجودة على هذا الجهاز.              لم يُنشأ ملف جديد ولم تتغيّر بياناتك.              إنشاء إعدادات جديدة هنا سيُبطل كل بطاقات الولاء المطبوعة وكل الجلسات المفتوحة، ولا يمكن التراجع عنه.              تواصل مع الدعم الفني لاستعادة ملف الإعدادات — إعادة تثبيت البرنامج لن تعيده."
+                .to_string(),
+        );
+    }
+
     let template_path = paths.program.join("walaa.env.template");
     let template = fs::read_to_string(&template_path)
         .map_err(|e| format!("read {}: {e}", template_path.display()))?;
@@ -1694,5 +1735,121 @@ mod tests {
         assert!(!log.with_extension("log.1").exists());
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A scratch install: a program directory with a template, and a data directory.
+    fn scratch_install(name: &str) -> Paths {
+        let root = std::env::temp_dir().join(format!("walaa-env-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let program = root.join("program");
+        let data = root.join("data");
+        fs::create_dir_all(&program).unwrap();
+        fs::create_dir_all(data.join("logs")).unwrap();
+        fs::write(
+            program.join("walaa.env.template"),
+            "NODE_ENV=production
+DATABASE_URL=\"file:{{DATABASE_FILE}}\"
+API_PORT=4000
+             JWT_ACCESS_SECRET={{JWT_ACCESS_SECRET}}
+JWT_REFRESH_SECRET={{JWT_REFRESH_SECRET}}
+             QR_TOKEN_SECRET={{QR_TOKEN_SECRET}}
+",
+        )
+        .unwrap();
+        Paths {
+            env_file: data.join("walaa.env"),
+            logs: data.join("logs"),
+            migrations: program.join("migrations"),
+            program,
+            data,
+        }
+    }
+
+    /// A genuinely new machine still gets its own secrets — the case the guard below
+    /// must not break.
+    ///
+    /// The CONTENT is asserted on the demo path below rather than here. A production
+    /// install ends with `restrict_permissions`, which strips inheritance and grants
+    /// SYSTEM and Administrators only, so this test process cannot read back the file
+    /// it just caused to be written. Asserting "the read fails" instead would be a test
+    /// of whether the runner happens to be elevated, which is a test of the environment
+    /// and not of this code.
+    #[test]
+    fn a_first_run_with_no_database_generates_a_configuration() {
+        let paths = scratch_install("fresh");
+        assert!(ensure_env_file(&paths, Some(4321)).unwrap());
+        assert!(fs::metadata(&paths.env_file).unwrap().len() > 0);
+
+        let _ = fs::remove_dir_all(paths.data.parent().unwrap());
+    }
+
+    /// The substitution itself, on the path where the file stays readable.
+    ///
+    /// `is_demo()` is decided by the seed database beside the program, and a demo
+    /// install skips the ACL lockdown deliberately (it runs as the logged-on user, and
+    /// locking it out of its own configuration is a defect this project has already had
+    /// once). Same `ensure_env_file`, same substitution, readable afterwards.
+    #[test]
+    fn every_placeholder_is_substituted_and_the_port_is_the_one_asked_for() {
+        let paths = scratch_install("substitution");
+        fs::write(paths.demo_seed(), b"demo seed").unwrap();
+        assert!(paths.is_demo());
+
+        assert!(ensure_env_file(&paths, Some(4321)).unwrap());
+
+        let written = fs::read_to_string(&paths.env_file).unwrap();
+        assert!(written.contains("API_PORT=4321"));
+        assert!(!written.contains("{{"), "a placeholder survived: {written}");
+        // Three DIFFERENT secrets, not one value used three times.
+        let secrets: Vec<&str> = written
+            .lines()
+            .filter(|l| l.contains("_SECRET="))
+            .map(|l| l.split_once('=').unwrap().1)
+            .collect();
+        assert_eq!(secrets.len(), 3);
+        assert_eq!(
+            secrets.iter().collect::<std::collections::HashSet<_>>().len(),
+            3,
+        );
+
+        let _ = fs::remove_dir_all(paths.data.parent().unwrap());
+    }
+
+    /// ── The one that matters ────────────────────────────────────────────────
+    ///
+    /// `walaa.env` gone, `walaa.db` still there — a restore that copied the database
+    /// and not the configuration, a directory moved by hand, an antivirus quarantine.
+    /// Generating fresh secrets here rotates `QR_TOKEN_SECRET`, which invalidates every
+    /// loyalty card ever printed, silently and irreversibly. It must refuse.
+    #[test]
+    fn a_missing_configuration_beside_an_existing_database_is_refused() {
+        let paths = scratch_install("lost-config");
+        fs::write(paths.database(), b"a shop's database").unwrap();
+
+        let refusal = ensure_env_file(&paths, Some(4321)).unwrap_err();
+
+        // Refused with a reason, and — the actual property — nothing written.
+        assert!(refusal.contains("بطاقات الولاء"));
+        assert!(!paths.env_file.exists());
+
+        let _ = fs::remove_dir_all(paths.data.parent().unwrap());
+    }
+
+    /// And an existing configuration is still never rewritten, database or not.
+    #[test]
+    fn an_existing_configuration_is_left_exactly_as_it_was() {
+        let paths = scratch_install("existing");
+        fs::write(&paths.env_file, "QR_TOKEN_SECRET=theoriginalsecret
+DATABASE_URL=\"file:x\"
+")
+            .unwrap();
+        fs::write(paths.database(), b"a shop's database").unwrap();
+
+        assert!(!ensure_env_file(&paths, Some(4321)).unwrap());
+        assert!(fs::read_to_string(&paths.env_file)
+            .unwrap()
+            .contains("theoriginalsecret"));
+
+        let _ = fs::remove_dir_all(paths.data.parent().unwrap());
     }
 }

@@ -76,6 +76,36 @@ pub struct BackendStatus {
     pub port: Option<u16>,
     /// True for a demo build, so the UI can name the right remedy.
     pub demo: bool,
+
+    /* ── Does this machine HOST a backend? ───────────────────────────────────
+       ─────────────────────────────────────────────────────────────────────────
+
+       Three facts that were missing, and whose absence produced the worst message in
+       the product. On a manager PC whose `walaa.env` had gone, `backend_port`
+       returned `None`, the dashboard read that as "no address resolved", and showed
+       «لم يُعثر على خادم ولاء» **with a box asking the shop owner to type a server
+       address** — on the machine that IS the server.
+
+       Three things wrong with that at once. The cause was wrong: the settings file
+       was missing, not the server. The remedy was wrong: no address he could type
+       would have helped, because the service on this machine still would not start.
+       And the field must not exist here at all — a control offering to repoint a
+       working manager PC at another machine is how a merchant talks himself into
+       breaking a working install.
+
+       So the shell reports what it can see of the installation rather than leaving
+       the frontend to infer it from a missing port. */
+
+    /// Whether this installation includes the service — `walaa-service.exe` beside the
+    /// app. False on a second machine that only runs the dashboard, which is the ONE
+    /// place an address field belongs.
+    pub hosts_service: bool,
+    /// Whether `walaa.env` is present. Its absence is a distinct failure with a
+    /// distinct remedy, and it is the one that was being reported as "no server".
+    pub config_present: bool,
+    /// Whether a database file exists in the data directory. Decides whether a missing
+    /// configuration is an empty machine or a shop whose settings have been lost.
+    pub database_present: bool,
 }
 
 fn read_json(path: &Path) -> Option<serde_json::Value> {
@@ -85,8 +115,22 @@ fn read_json(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()
 }
 
-/// Reads the backend's own account of itself.
-pub fn read(data_dir: &PathBuf, demo: bool, port: Option<u16>) -> BackendStatus {
+/// The database file this build opens, by name.
+const PRODUCTION_DATABASE: &str = "walaa.db";
+const DEMO_DATABASE: &str = "walaa-demo.db";
+
+/// Reads the backend's own account of itself, and what this machine has installed.
+///
+/// `service_dir` is where the shipped runtime lives. `None` when the caller could not
+/// work it out, which is reported as "this machine hosts no service" — the honest
+/// answer, and the one that errs towards offering an address field rather than
+/// withholding it on a machine that genuinely needs one.
+pub fn read(
+    data_dir: &PathBuf,
+    demo: bool,
+    port: Option<u16>,
+    service_exe: Option<&Path>,
+) -> BackendStatus {
     let status_path = data_dir.join(STATUS_FILE);
     let error_path = data_dir.join(STARTUP_ERROR);
 
@@ -98,6 +142,11 @@ pub fn read(data_dir: &PathBuf, demo: bool, port: Option<u16>) -> BackendStatus 
         ],
         port,
         demo,
+        hosts_service: service_exe.map(|p| p.exists()).unwrap_or(false),
+        config_present: data_dir.join("walaa.env").exists(),
+        database_present: data_dir
+            .join(if demo { DEMO_DATABASE } else { PRODUCTION_DATABASE })
+            .exists(),
         ..Default::default()
     };
 
@@ -160,7 +209,7 @@ mod tests {
             r#"{"state":"running","at":"2026-09-08 02:00:00Z","attempts":0,"port":4791,"reason":null}"#,
             "logs-dir",
         );
-        let out = read(&dir, false, None);
+        let out = read(&dir, false, None, None);
         assert_eq!(out.state, "running");
         assert_eq!(out.port, Some(4791));
     }
@@ -172,7 +221,7 @@ mod tests {
             r#"{"state":"running","at":"x","attempts":0,"port":5123,"reason":null}"#,
             "port-from-file",
         );
-        assert_eq!(read(&dir, false, None).port, Some(5123));
+        assert_eq!(read(&dir, false, None, None).port, Some(5123));
     }
 
     /// A demo chose its own port in this process; the file is only an echo of it.
@@ -182,7 +231,7 @@ mod tests {
             r#"{"state":"running","at":"x","attempts":0,"port":5123,"reason":null}"#,
             "in-process-wins",
         );
-        assert_eq!(read(&dir, true, Some(6001)).port, Some(6001));
+        assert_eq!(read(&dir, true, Some(6001), None).port, Some(6001));
     }
 
     /// `null` means the service could not read its own configuration. It must stay
@@ -194,7 +243,7 @@ mod tests {
             r#"{"state":"failed","at":"x","attempts":2,"port":null,"reason":"سبب"}"#,
             "unknown-port",
         );
-        let out = read(&dir, false, None);
+        let out = read(&dir, false, None, None);
         assert_eq!(out.port, None);
         assert_eq!(out.reason.as_deref(), Some("سبب"));
     }
@@ -204,9 +253,58 @@ mod tests {
     fn a_missing_file_is_unknown_and_names_what_it_looked_at() {
         let dir = std::env::temp_dir().join("walaa-status-test-absent");
         let _ = fs::remove_dir_all(&dir);
-        let out = read(&dir, false, None);
+        let out = read(&dir, false, None, None);
         assert_eq!(out.state, "unknown");
         assert_eq!(out.port, None);
         assert_eq!(out.checked.len(), 2);
+    }
+
+    /// The fact whose absence produced «لم يُعثر على خادم ولاء» plus an address box on
+    /// the machine that IS the server.
+    #[test]
+    fn reports_whether_this_machine_hosts_the_service() {
+        let dir = data_dir_with(
+            r#"{"state":"failed","at":"x","attempts":1,"port":null,"reason":"سبب"}"#,
+            "hosts-service",
+        );
+        let exe = dir.join("walaa-service.exe");
+
+        // Not installed here: the dashboard may legitimately ask for an address.
+        assert!(!read(&dir, false, None, Some(&exe)).hosts_service);
+
+        fs::write(&exe, b"not really a binary, but it exists").unwrap();
+        assert!(read(&dir, false, None, Some(&exe)).hosts_service);
+    }
+
+    /// A missing `walaa.env` is its own state, and the one that was being reported as
+    /// "no server found".
+    #[test]
+    fn reports_whether_the_configuration_file_is_there() {
+        let dir = data_dir_with(
+            r#"{"state":"failed","at":"x","attempts":1,"port":null,"reason":"سبب"}"#,
+            "config-present",
+        );
+        assert!(!read(&dir, false, None, None).config_present);
+
+        fs::write(dir.join("walaa.env"), b"API_PORT=4000
+").unwrap();
+        assert!(read(&dir, false, None, None).config_present);
+    }
+
+    /// Whether a shop's database is sitting there decides whether a lost configuration
+    /// is an empty machine or a shop whose signing keys must not be regenerated.
+    #[test]
+    fn reports_whether_a_database_is_present_for_this_build() {
+        let dir = data_dir_with(
+            r#"{"state":"stopped","at":"x","attempts":0,"port":4000,"reason":null}"#,
+            "database-present",
+        );
+        assert!(!read(&dir, false, None, None).database_present);
+
+        // A production build looks for `walaa.db` and a demo for `walaa-demo.db`: the
+        // two never share a file, so neither may answer for the other.
+        fs::write(dir.join("walaa.db"), b"x").unwrap();
+        assert!(read(&dir, false, None, None).database_present);
+        assert!(!read(&dir, true, None, None).database_present);
     }
 }

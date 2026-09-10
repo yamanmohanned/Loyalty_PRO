@@ -79,7 +79,8 @@ fn backend_status(app: tauri::AppHandle) -> status::BackendStatus {
     let resource = app.path().resource_dir().unwrap_or_default();
     let demo = backend::is_demo(&resource);
     let port = *backend::PORT.lock().unwrap();
-    status::read(&backend::data_dir(demo), demo, port)
+    let service = backend::service_exe(&resource);
+    status::read(&backend::data_dir(demo), demo, port, Some(&service))
 }
 
 /// The port the backend is listening on.
@@ -114,7 +115,8 @@ fn backend_port(app: tauri::AppHandle) -> Option<u16> {
         return *backend::PORT.lock().unwrap();
     }
 
-    status::read(&backend::data_dir(false), false, None).port
+    let service = backend::service_exe(&resource);
+    status::read(&backend::data_dir(false), false, None, Some(&service)).port
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

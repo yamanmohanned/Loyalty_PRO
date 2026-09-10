@@ -335,9 +335,44 @@ export const locale = {
      * outside Settings, because it is the one moment Settings cannot be reached: it
      * is behind the login, the login is behind a working backend, and there is none.
      */
-    missingTitle: 'لم يُعثر على خادم ولاء',
+    missingTitle: 'لم يُعثر على جهاز المدير',
     missingBody:
-      'إذا كان هذا هو جهاز المدير، أعد تشغيل الجهاز — يبدأ الخادم مع النظام. وإذا كان جهازاً ثانياً في المتجر، أدخل عنوان جهاز المدير أدناه.',
+      'هذا الجهاز لا يشغّل خادم ولاء بنفسه، ولم يُحدَّد له عنوان جهاز المدير. أدخل عنوان جهاز المدير على شبكة المتجر أدناه.',
+
+    /* ── The four states a machine that HOSTS the service can be in ────────────
+
+       Split out of `missing*`, which used to answer for all of them with one
+       sentence, one guess about the cause, and an address field.
+
+       Every one of these is a manager PC. On a manager PC the address is not a
+       question — the machine runs the service and works its own port out — so none of
+       these screens carries a field, and every one of them names the remedy that
+       actually resolves the state it describes. */
+
+    /** `walaa.env` is gone. The service cannot start and no address can help. */
+    configMissingTitle: 'إعدادات البرنامج مفقودة',
+    configMissingBody:
+      'البرنامج مثبّت على هذا الجهاز لكن ملف إعداداته غير موجود، ولذلك لا تعمل الخدمة. بيانات المتجر لم تتغيّر. لا يمكن حل هذا بإعادة التثبيت ولا بإدخال عنوان — تواصل مع الدعم الفني لاستعادة الملف.',
+
+    /** Installed and configured, but nothing is listening. */
+    notRunningTitle: 'خدمة ولاء متوقّفة على هذا الجهاز',
+    notRunningBody:
+      'البرنامج مثبّت وإعداداته موجودة، لكن الخدمة لا تعمل الآن. أعد تشغيل الجهاز — تبدأ الخدمة مع النظام تلقائياً. إذا تكرّر الأمر بعد إعادة التشغيل، تواصل مع الدعم الفني.',
+
+    /** An address IS configured for another machine, and nothing answers there. */
+    remoteUnreachableTitle: 'لا يمكن الوصول إلى جهاز المدير',
+    remoteUnreachableBody:
+      'العنوان المحفوظ لجهاز المدير لا يستجيب. تأكّد أن جهاز المدير يعمل وأنكما على نفس الشبكة، ثم أعد المحاولة أو صحّح العنوان أدناه.',
+
+    /** Something answered there, and it is not this product. */
+    remoteNotWalaaTitle: 'العنوان المحفوظ ليس خادم ولاء',
+    remoteNotWalaaBody:
+      'يوجد جهاز يستجيب على هذا العنوان لكنه ليس خادم ولاء. صحّح العنوان أدناه — الأرجح أن رقم المنفذ مختلف.',
+
+    /** A walaa answered, at an incompatible version. */
+    remoteVersionTitle: 'إصدار جهاز المدير مختلف',
+    remoteVersionBody:
+      'خادم ولاء على هذا العنوان بإصدار مختلف عن هذا الجهاز، ولا يمكنهما العمل معاً. حدّث الجهازين إلى نفس الإصدار.',
 
     reasonLabel: 'السبب',
     retry: 'إعادة المحاولة الآن',
@@ -438,6 +473,42 @@ export const locale = {
    * rather than a form.
    */
   settings: {
+    /* ── Staff accounts ────────────────────────────────────────────────────
+
+       The screen first run always said it was deferring to, and which did not
+       exist: without it the Loyalty Station has no account and the shop cannot
+       trade. */
+    staff: {
+      title: 'حسابات الدخول',
+      subtitle: 'حساب محطة الولاء عند الصندوق، وأي مدير إضافي.',
+      add: 'إضافة حساب',
+      name: 'الاسم',
+      username: 'اسم الدخول',
+      password: 'كلمة المرور',
+      passwordHint: '8 أحرف على الأقل — اكتبها وسلّمها لمن سيستخدم الحساب',
+      roleLabel: 'نوع الحساب',
+      roleHint: 'المحطة: المسح والتسجيل والطباعة فقط. المدير: التقارير والإعدادات.',
+      role: {
+        OWNER: 'مالك',
+        MANAGER: 'مدير',
+        STATION: 'محطة',
+        AGENT: 'وكيل الالتقاط',
+      } as Record<string, string>,
+      branch: 'الفرع',
+      branchHint: 'حساب المحطة يعمل داخل فرع واحد — الفواتير تُنسب إليه.',
+      branchRequired: 'اختر الفرع الذي تعمل فيه المحطة',
+      noBranch: 'بدون فرع',
+      writeItDown:
+        'اكتب كلمة المرور وسلّمها لمن سيستخدم الحساب. يمكنك تغييرها لاحقاً من هذه الشاشة — كلمة مرور المالك وحدها لا يمكن استعادتها.',
+      submit: 'إنشاء الحساب',
+      creating: 'جارٍ الإنشاء…',
+      created: (username: string) => `تم إنشاء الحساب «${username}». سجّل الدخول به على الجهاز الذي سيستخدمه.`,
+      disable: 'إيقاف',
+      enable: 'تفعيل',
+      disabled: 'تم إيقاف الحساب. أي جلسة مفتوحة به أُغلقت.',
+      enabled: 'تم تفعيل الحساب.',
+      ownerLocked: 'حساب المالك',
+    },
     title: 'الإعدادات',
     subtitle: 'إعدادات الخادم والنسخ الاحتياطي — لا حاجة لتغييرها في التشغيل اليومي',
 

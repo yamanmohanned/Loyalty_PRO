@@ -105,6 +105,59 @@ describe('every rejection a merchant can reach', () => {
 
     expect([...unnamed].sort()).toEqual([]);
   });
+
+  it('never carries a field NAME in the rule — the name is added once, from one place', () => {
+    /*
+      ── The double label ─────────────────────────────────────────────────────
+
+      `username` was «اسم المستخدم» in `FIELD_LABELS` and its schema message opened
+      with «اسم الدخول», so the envelope printed both:
+
+        «اسم المستخدم: اسم الدخول: أحرف إنجليزية وأرقام فقط»
+
+      `describeFieldError` guards against a message that repeats its OWN label. It
+      cannot guard against one that carries a DIFFERENT name for the same field,
+      because a second name is not detectable as a repetition — it is only detectable
+      as the mistake it is. So the rule is that a message states the rule and nothing
+      else, and this is what enforces it.
+    */
+    const names = Object.values(FIELD_LABELS);
+    const offenders: string[] = [];
+
+    for (const [name, schema] of everySchema()) {
+      for (const probe of PROBES) {
+        const result = schema.safeParse(probe);
+        if (result.success) continue;
+        for (const issue of result.error.issues) {
+          const path = issue.path.join('.');
+          /*
+            A root-level issue comes from a bare schema — `PhoneInputSchema` parsed on
+            its own rather than as a field. Those name their subject deliberately
+            («رقم الهاتف مطلوب»), and when the same schema is embedded the path IS
+            `phone`, so `describeFieldError` deduplicates it there.
+          */
+          if (!path) continue;
+          const own = fieldLabel(path);
+          const carried = names.find(
+            (label) =>
+              /*
+                Its OWN name is allowed and is deduplicated by `describeFieldError` —
+                «رقم الهاتف غير صالح» under `phone` reads correctly inline and is not
+                repeated in the summary. What is refused is a message carrying a
+                DIFFERENT field's name, which is what a second vocabulary looks like.
+              */
+              label !== own &&
+              (issue.message.startsWith(`${label}:`) || issue.message.startsWith(`${label} `)),
+          );
+          if (carried) {
+            offenders.push(`${name}.${path} → «${issue.message}» (carries «${carried}»)`);
+          }
+        }
+      }
+    }
+
+    expect([...new Set(offenders)].sort()).toEqual([]);
+  });
 });
 
 describe('the error map itself', () => {
