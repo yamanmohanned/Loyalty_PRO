@@ -53,7 +53,7 @@ const INGEST: Role[] = ['OWNER', 'AGENT'];
 const tokens = new Map<Role, string>();
 
 interface Case {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   allowed: Role[];
   why?: string;
@@ -197,6 +197,10 @@ const CASES: Case[] = [
   { method: 'POST', path: '/backup/drive/disconnect', allowed: ['OWNER'] },
   { method: 'PATCH', path: '/backup/drive/settings', allowed: DASHBOARD },
   { method: 'POST', path: '/backup/drive/test', allowed: DASHBOARD },
+  // Restoring a copy replaces the whole ledger and signs everyone out: the owner only.
+  { method: 'POST', path: '/backup/restore/stage', allowed: ['OWNER'] },
+  { method: 'DELETE', path: '/backup/restore/stage', allowed: ['OWNER'] },
+  { method: 'POST', path: '/backup/restore/apply', allowed: ['OWNER'] },
 
   /* Reports and host telemetry. */
   { method: 'GET', path: '/reports/overview', allowed: DASHBOARD },
@@ -434,6 +438,9 @@ describe('the route inventory', () => {
         'POST /api/v1/scan/identify',
         'POST /api/v1/sync/batch',
         'POST /api/v1/system/client-errors',
+        // Registration order, not alphabetical — Fastify lists a node's methods as added.
+        'POST, DELETE /api/v1/backup/restore/stage',
+        'POST /api/v1/backup/restore/apply',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',
         'PUT /api/v1/discount/rules',

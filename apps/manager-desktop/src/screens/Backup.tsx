@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, CheckCircle2, CloudOff, DatabaseBackup, HardDrive, MinusCircle, RotateCcw, Usb } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiRequestError } from '../lib/api';
+import { getApiUrl } from '../lib/config';
 import { failureSentence } from '../lib/failure';
 import { locale, formatDateTime } from '../lib/locale';
 import {
@@ -9,6 +11,8 @@ import {
   CardHeader,
   Chip,
   ErrorState,
+  Field,
+  Input,
   Notice,
   PageHeader,
   Skeleton,
@@ -18,6 +22,8 @@ import { IS_DEMO } from '../lib/demo';
 import type {
   BackupOverview,
   HistoryEntry,
+  RestoreOutcome,
+  StagedRestore,
   VerificationResult,
 } from '@walaa/shared-types';
 import { KeyConfirmedSummary } from './KeyCeremony';
@@ -209,6 +215,8 @@ export function BackupScreen() {
             </div>
           </Card>
 
+          <RestoreCard data={data} onChanged={invalidate} />
+
           {/* 3-2-1: one row per destination, so a manager sees how many copies exist
               rather than a single green tick that hides two failures. */}
           <div className="grid grid-cols-3 gap-6">
@@ -307,6 +315,272 @@ export function BackupScreen() {
         </div>
       ) : null}
     </>
+  );
+}
+
+/* ── Restoring a copy ──────────────────────────────────────────────────────── */
+
+/** How long to wait for the service to come back before reloading anyway. */
+const RESTART_WAIT_MS = 120_000;
+
+/**
+ * Waits for the service to go down and come back, then reloads into the login screen.
+ *
+ * The restored database has its own accounts and sessions, so the page must start
+ * again rather than carry on with a session the new file has never heard of.
+ */
+async function reloadWhenBack(): Promise<void> {
+  const base = await getApiUrl();
+  const started = Date.now();
+  let wentDown = false;
+
+  while (Date.now() - started < RESTART_WAIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const response = await fetch(`${base}/health`, { cache: 'no-store' });
+      // Up again after being seen down — or up after long enough that the restart
+      // happened between two polls.
+      if (response.ok && (wentDown || Date.now() - started > 10_000)) break;
+      if (!response.ok) wentDown = true;
+    } catch {
+      wentDown = true;
+    }
+  }
+  window.location.reload();
+}
+
+/**
+ * Restoring a copy over the shop's data — from this machine, a USB drive or Google Drive.
+ *
+ * Two steps, and nothing is replaced in the first: choosing a copy fetches, decrypts and
+ * checks it, and shows what it holds against what the program holds now. Only the
+ * owner's confirmation replaces anything, and even then the present state is backed up
+ * first and appears in this same list.
+ */
+function RestoreCard({ data, onChanged }: { data: BackupOverview; onChanged: () => void }) {
+  const text = locale.backup.restoreCopy;
+  const [needsKey, setNeedsKey] = useState<{
+    kind: string;
+    id: string;
+    fingerprint: string | null;
+  } | null>(null);
+  const [typedKey, setTypedKey] = useState('');
+  const [phase, setPhase] = useState<'idle' | 'restarting' | 'next-start'>('idle');
+
+  const stage = useMutation({
+    mutationFn: (input: { kind: string; id: string; key?: string }) =>
+      api.post<StagedRestore>('/backup/restore/stage', input),
+    onSuccess: () => {
+      setNeedsKey(null);
+      setTypedKey('');
+    },
+    onError: (error: Error, input) => {
+      // A copy made with another key is a question for the owner, not a dead end: ask
+      // for the key written on paper, right here.
+      const details =
+        error instanceof ApiRequestError
+          ? (error.details as { reason?: string; fingerprint?: string | null } | undefined)
+          : undefined;
+      if (details?.reason === 'KEY_MISMATCH' || details?.reason === 'KEY_INVALID') {
+        setNeedsKey({
+          kind: input.kind,
+          id: input.id,
+          fingerprint: details.fingerprint ?? needsKey?.fingerprint ?? null,
+        });
+      }
+    },
+    onSettled: onChanged,
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => api.delete('/backup/restore/stage'),
+    onSettled: onChanged,
+  });
+
+  const apply = useMutation({
+    mutationFn: () => api.post<{ restarting: boolean }>('/backup/restore/apply', { confirm: true }),
+    onSuccess: ({ restarting }) => {
+      if (restarting) {
+        setPhase('restarting');
+        void reloadWhenBack();
+      } else {
+        setPhase('next-start');
+        onChanged();
+      }
+    },
+  });
+
+  const copies = data.destinations
+    .flatMap((destination) =>
+      destination.backups.map((backup) => ({ ...backup, kind: destination.kind, label: destination.label })),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 12);
+
+  const staged = data.restore.staged;
+  const busy = stage.isPending || apply.isPending || cancel.isPending || phase !== 'idle';
+
+  return (
+    <Card>
+      <CardHeader title={text.title} subtitle={text.subtitle} />
+      <div className="space-y-4 p-6">
+        {data.restore.last ? <LastRestore outcome={data.restore.last} /> : null}
+
+        {phase === 'restarting' ? (
+          <Notice tone="warning" title={text.restartingTitle}>
+            {text.restartingBody}
+          </Notice>
+        ) : null}
+        {phase === 'next-start' ? <Notice tone="warning">{text.nextStart}</Notice> : null}
+
+        {staged ? (
+          <StagedPreview
+            staged={staged}
+            busy={busy}
+            onConfirm={() => apply.mutate()}
+            onCancel={() => cancel.mutate()}
+          />
+        ) : null}
+        {apply.error ? <Notice tone="danger">{failureSentence(apply.error)}</Notice> : null}
+
+        {stage.error ? <Notice tone="danger">{failureSentence(stage.error)}</Notice> : null}
+
+        {needsKey && !staged ? (
+          <div className="space-y-3 rounded-md border border-border p-4">
+            <Field label={text.keyLabel} hint={text.keyHint(needsKey.fingerprint)}>
+              <Input
+                value={typedKey}
+                onChange={(event) => setTypedKey(event.target.value)}
+                dir="ltr"
+                className="font-mono text-start"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => stage.mutate({ kind: needsKey.kind, id: needsKey.id, key: typedKey })}
+                disabled={busy || !typedKey.trim()}
+              >
+                {text.openWithKey}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setNeedsKey(null);
+                  setTypedKey('');
+                  stage.reset();
+                }}
+              >
+                {locale.common.cancel}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {!staged ? (
+          copies.length === 0 ? (
+            <p className="text-sm text-steel">{text.noCopies}</p>
+          ) : (
+            <ul className="divide-y divide-border rounded-md border border-border">
+              {copies.map((copy) => (
+                <li key={`${copy.kind}-${copy.id}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <div className="flex-1">
+                    <p className="font-mono text-sm text-ink">{dateTime(copy.createdAt)}</p>
+                    <p className="text-sm text-steel">
+                      {copy.label} · {megabytes(copy.bytes)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => stage.mutate({ kind: copy.kind, id: copy.id })}
+                  >
+                    {stage.isPending && stage.variables?.id === copy.id ? text.preparing : text.restoreThis}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
+/** What is about to be put back, and what will stop existing — before anything is. */
+function StagedPreview({
+  staged,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  staged: StagedRestore;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const text = locale.backup.restoreCopy;
+  return (
+    <Notice tone="warning" title={text.stagedTitle}>
+      <div className="space-y-2">
+        <p>{text.stagedSource(staged.source.label, dateTime(staged.copyTakenAt))}</p>
+        <p>
+          {text.stagedCounts(
+            staged.copy.customers,
+            staged.copy.transactions,
+            staged.current.customers,
+            staged.current.transactions,
+          )}
+        </p>
+        <p className="font-semibold">
+          {staged.latestActivityAt
+            ? text.stagedLoss(dateTime(staged.latestActivityAt))
+            : text.stagedLossUnknown}
+        </p>
+        {staged.upgraded ? <p className="text-sm">{text.stagedUpgraded}</p> : null}
+        <ul className="list-disc space-y-1 ps-5 text-sm">
+          <li>{text.consequenceSafety}</li>
+          <li>{text.consequenceStations}</li>
+          <li>{text.consequenceLogin}</li>
+        </ul>
+        {staged.applyRequested ? (
+          <p className="text-sm">{text.nextStart}</p>
+        ) : (
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Button onClick={onConfirm} disabled={busy}>
+              {text.confirm}
+            </Button>
+            <Button variant="ghost" onClick={onCancel} disabled={busy}>
+              {text.cancel}
+            </Button>
+          </div>
+        )}
+      </div>
+    </Notice>
+  );
+}
+
+/** The last restore on record — done, or not done and why. */
+function LastRestore({ outcome }: { outcome: RestoreOutcome }) {
+  const text = locale.backup.restoreCopy;
+  return (
+    <Notice
+      tone={outcome.ok ? 'accent' : 'danger'}
+      title={outcome.ok ? text.lastOkTitle(dateTime(outcome.at)) : text.lastFailedTitle(dateTime(outcome.at))}
+    >
+      <div className="space-y-1">
+        {outcome.ok ? (
+          <p>{text.lastOkBody(outcome.source?.label ?? '—', dateTime(outcome.copyTakenAt))}</p>
+        ) : (
+          <p>{outcome.failure ?? locale.failure.unexpected}</p>
+        )}
+        {outcome.ok && outcome.safetyBackupName ? <p className="text-sm">{text.lastOkSafety}</p> : null}
+        {outcome.requestedByName ? (
+          <p className="text-sm text-steel">{text.lastBy(outcome.requestedByName)}</p>
+        ) : null}
+      </div>
+    </Notice>
   );
 }
 

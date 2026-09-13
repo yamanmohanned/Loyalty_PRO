@@ -112,6 +112,63 @@ export interface BackupOverview {
       counts: { customers: number; transactions: number } | null;
     } | null;
   };
+  /** Restoring a copy over the shop's data: what is staged, and what the last one did. */
+  restore: {
+    staged: StagedRestore | null;
+    last: RestoreOutcome | null;
+  };
+}
+
+/* ── Restoring a copy over the shop's data ─────────────────────────────────────── */
+
+/** Why a restore was refused before anything changed — `details.reason` on RESTORE_REFUSED. */
+export type RestoreRefusalReason =
+  | 'KEY_MISMATCH'
+  | 'KEY_INVALID'
+  | 'NOT_FOUND'
+  | 'FETCH_FAILED'
+  | 'DAMAGED'
+  | 'SCHEMA_NEWER'
+  | 'SCHEMA_MISMATCH'
+  | 'NO_SPACE'
+  | 'NOTHING_STAGED'
+  | 'PRE_RESTORE_BACKUP_FAILED';
+
+/**
+ * A copy fetched, decrypted, checked and waiting beside the live database.
+ *
+ * Nothing has been replaced at this point. It exists so the merchant sees exactly what
+ * he is about to put back — how old it is, what is in it against what is in the
+ * program now, and what will no longer exist — before he confirms.
+ */
+export interface StagedRestore {
+  stagedAt: string;
+  stagedByName: string | null;
+  source: { kind: string; label: string; name: string };
+  /** When the copy itself was taken. */
+  copyTakenAt: string;
+  /** The newest activity inside the copy: everything recorded after it is not in it. */
+  latestActivityAt: string | null;
+  copy: { customers: number; transactions: number };
+  current: { customers: number; transactions: number };
+  /** An older copy whose structure was brought up to this build, on the copy. */
+  upgraded: boolean;
+  /** Confirmed, and waiting for the service to restart and apply it. */
+  applyRequested: boolean;
+}
+
+/** What the last restore did — shown until the next one. */
+export interface RestoreOutcome {
+  ok: boolean;
+  at: string;
+  requestedByName: string | null;
+  source: { kind: string; label: string; name: string } | null;
+  copyTakenAt: string | null;
+  copy: { customers: number; transactions: number } | null;
+  /** The backup of the state that was replaced — restorable from the same list. */
+  safetyBackupName: string | null;
+  /** Why it did not happen, or why it was undone. Null on success. */
+  failure: string | null;
 }
 
 /**

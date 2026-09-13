@@ -10,6 +10,14 @@ import {
 } from '../services/backup/key-ceremony.service';
 import { listBackups, runBackup, verifyRestore } from '../services/backup/backup.service';
 import { recentBackupHistory } from '../services/backup/history.service';
+import {
+  cancelStagedRestore,
+  requestApply,
+  restoreStatus,
+  stageRestore,
+  type RestoreActor,
+} from '../services/backup/restore.service';
+import { prisma } from '../lib/prisma';
 import { scheduleStatus } from '../services/backup/schedule.service';
 
 /**
@@ -113,7 +121,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
       scheduleStatus(auth.merchantId),
       recentBackupHistory(auth.merchantId),
     ]);
-    return { key, destinations, schedule, history };
+    return { key, destinations, schedule, history, restore: restoreStatus() };
   });
 
   /**
@@ -140,4 +148,62 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
       return verifyRestore({ merchantId: auth.merchantId, actorUserId: auth.sub });
     },
   );
+
+  /* ── Restoring a copy over the shop's data ──────────────────────────────── */
+
+  /*
+    OWNER only, all three. Replacing the whole ledger is the most consequential thing
+    this program can do, and it signs every other user out.
+  */
+
+  /** Step 1: fetch, decrypt and check a copy beside the live database. Replaces nothing. */
+  app.post(
+    '/restore/stage',
+    {
+      config: { roles: ['OWNER'], rateLimit: { max: 20, timeWindow: '1 hour' } },
+      schema: {
+        body: z
+          .object({
+            kind: z.enum(['local', 'usb', 'drive']),
+            id: z.string().min(1).max(300),
+            // The backup key typed from paper, for a copy made on another machine.
+            // `req.body.key` is redacted from the log (app.ts).
+            key: z.string().max(200).optional(),
+          })
+          .strict(),
+      },
+    },
+    async (request) => {
+      const auth = requireDashboardRole(request);
+      const body = request.body as { kind: string; id: string; key?: string };
+      return stageRestore(await restoreActor(auth), { kind: body.kind, id: body.id }, body.key);
+    },
+  );
+
+  app.delete('/restore/stage', { config: { roles: ['OWNER'] } }, async (request) => {
+    requireDashboardRole(request);
+    cancelStagedRestore();
+    return { staged: null };
+  });
+
+  /** Step 2: confirmed. Backs up the present, then restarts to apply at boot. */
+  app.post(
+    '/restore/apply',
+    {
+      config: { roles: ['OWNER'], rateLimit: { max: 6, timeWindow: '1 hour' } },
+      schema: { body: z.object({ confirm: z.literal(true) }).strict() },
+    },
+    async (request, reply) => {
+      const auth = requireDashboardRole(request);
+      const outcome = await requestApply(await restoreActor(auth));
+      reply.status(202);
+      return outcome;
+    },
+  );
+}
+
+/** Who is restoring, by name — the result outlives the session that asked for it. */
+async function restoreActor(auth: { merchantId: string; sub: string }): Promise<RestoreActor> {
+  const user = await prisma.user.findUnique({ where: { id: auth.sub }, select: { name: true } });
+  return { merchantId: auth.merchantId, actorUserId: auth.sub, actorName: user?.name ?? null };
 }

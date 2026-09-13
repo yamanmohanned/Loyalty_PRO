@@ -1,6 +1,7 @@
 import { hostname } from 'node:os';
 import { buildApp } from './app';
 import { configSource, loadEnv } from './config/env';
+import { liveDatabasePath } from './config/paths';
 import {
   assertMigrationsMatchBuild,
   migrationsMatchBuild,
@@ -8,10 +9,18 @@ import {
 } from './lib/db-identity';
 import { markRunning, markStopped, verifyDatabaseIntegrity } from './lib/db-integrity';
 import { assertDatabaseMatchesBuild, isDemoBuild } from './lib/demo-guard';
+import { onRestartRequested, RESTART_EXIT_CODE } from './lib/lifecycle';
 import { ensureDatabaseReady, installDatabaseTemplateIfAbsent } from './lib/migrate';
 import { checkpointWal, prisma, readSqliteSettings } from './lib/prisma';
+import {
+  applyStagedRestore,
+  confirmRestore,
+  requestRollback,
+  rollbackSentence,
+} from './lib/restore-apply';
 import { supersedeUnusableDatabase } from './lib/supersede-database';
 import { clearStartupFailure } from './lib/startup-error';
+import { recordAppliedRestore } from './services/backup/restore.service';
 import { startBackupScheduler } from './services/backup/schedule.service';
 import { startStorageSampler } from './services/storage.service';
 
@@ -23,6 +32,8 @@ import { startStorageSampler } from './services/storage.service';
  * deploy rolls must not be torn out from under the customer standing at the till.
  */
 const env = loadEnv();
+
+type BootstrapLog = (message: string, extra?: Record<string, unknown>) => void;
 
 export async function main(): Promise<void> {
   /*
@@ -49,7 +60,7 @@ export async function main(): Promise<void> {
     works here and fails in the staged runtime. Eight lines emitting the same shape
     keeps `api.log` in one format for whoever is reading it.
   */
-  const bootstrapLog = (message: string, extra: Record<string, unknown> = {}): void => {
+  const bootstrapLog: BootstrapLog = (message, extra = {}) => {
     process.stdout.write(
       `${JSON.stringify({
         level: 30,
@@ -65,6 +76,40 @@ export async function main(): Promise<void> {
 
   bootstrapLog('configuration loaded', { configFile: configSource ?? '(environment only)' });
 
+  /*
+    ── A restore the owner confirmed is put in place before anything else ───────
+
+    Before the template check and before anything opens a connection: the swap is two
+    renames, and Windows will not rename a file something holds open. The staged copy
+    was fetched, decrypted and checked when the owner chose it; here it only changes
+    places with the live file, which is kept, not deleted (`lib/restore-apply.ts`).
+
+    Confirmed only once the service is actually serving. If this start fails on the
+    restored file, the previous database goes back on the next start and the Backup
+    screen says why.
+  */
+  const livePath = liveDatabasePath(env.DATABASE_URL);
+  const restored = livePath ? applyStagedRestore(livePath, bootstrapLog) : null;
+
+  try {
+    await serve(bootstrapLog);
+  } catch (error) {
+    if (restored) requestRollback(restored, rollbackSentence(error), bootstrapLog);
+    throw error;
+  }
+
+  if (restored) {
+    const result = confirmRestore(restored, bootstrapLog);
+    await recordAppliedRestore(result).catch((error: unknown) => {
+      bootstrapLog('the restore could not be written to the restored database trail', {
+        error: String(error),
+      });
+    });
+  }
+}
+
+/** Everything from placing the database to listening. */
+async function serve(bootstrapLog: BootstrapLog): Promise<void> {
   /*
     ── The database is placed before anything opens it ─────────────────────────
 
@@ -197,7 +242,7 @@ export async function main(): Promise<void> {
   // while a shutdown is already unwinding. Closing twice is not harmful so much as
   // confusing in a log a support call is reading.
   let shuttingDown = false;
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     app.log.info({ signal }, 'shutting down');
@@ -229,7 +274,7 @@ export async function main(): Promise<void> {
       // how the next boot finds out.
       markStopped();
 
-      process.exit(0);
+      process.exit(exitCode);
     } catch (error) {
       app.log.error({ err: error }, 'shutdown failed');
       process.exit(1);
@@ -241,6 +286,13 @@ export async function main(): Promise<void> {
       void shutdown(signal);
     });
   }
+
+  // A restore the owner confirmed ends this process on purpose. The service host sees
+  // RESTART_EXIT_CODE and starts it again at once — not as a failure, with no backoff —
+  // and that start puts the restored copy in place before opening the database.
+  onRestartRequested((reason) => {
+    void shutdown(`restart:${reason}`, RESTART_EXIT_CODE);
+  });
 
   // Supervised by the Windows Service host: shut down when its end of the pipe
   // closes. Windows has no SIGTERM, and a service process has no console, so it

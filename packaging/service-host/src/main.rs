@@ -99,6 +99,13 @@ const HEALTHY_AFTER: Duration = Duration::from_secs(60);
 /// announced as running, short enough that nobody watches a stale word.
 const RUNNING_AFTER: Duration = Duration::from_secs(5);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
+
+/// The API's "restart me" exit code — `apps/api/src/lib/lifecycle.ts` carries the same
+/// number. A restore the owner confirmed is applied at the API's next start, before it
+/// opens the database, so applying one means ending the process on purpose. That is not
+/// a fault: the API is started again at once, with no backoff, and it does not count
+/// towards giving up.
+const RESTART_EXIT_CODE: i32 = 75;
 /// Rotate the API log at this size. A shop runs for years; an unbounded log is a
 /// disk-full outage waiting for a quiet Tuesday.
 const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
@@ -657,6 +664,8 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
     loop {
         let started = Instant::now();
         announced_healthy = false;
+        // Set when THIS attempt ended with RESTART_EXIT_CODE.
+        let mut restart_requested = false;
 
         // A fresh attempt must not inherit the previous attempt's explanation.
         clear_child_startup_error(paths);
@@ -729,8 +738,13 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
 
             match child.try_wait() {
                 Ok(Some(status)) => {
-                    log_line(&paths.logs, &format!("api exited unexpectedly: {status}"));
                     exit_status = status.to_string();
+                    if status.code() == Some(RESTART_EXIT_CODE) {
+                        log_line(&paths.logs, "api asked to be restarted (applying a restore)");
+                        restart_requested = true;
+                        break;
+                    }
+                    log_line(&paths.logs, &format!("api exited unexpectedly: {status}"));
                     break;
                 }
                 Ok(None) => {}
@@ -740,6 +754,15 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
                     break;
                 }
             }
+        }
+
+        if restart_requested {
+            // Deliberate and immediate: a restart the API asked for is not a failure,
+            // and must not inherit the backoff or the count of a real one.
+            identical = 0;
+            last_signature = None;
+            backoff = Duration::from_secs(2);
+            continue;
         }
 
         // The child's own explanation, if it managed to leave one. This is the whole

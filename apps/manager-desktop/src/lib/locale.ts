@@ -1032,6 +1032,46 @@ export const locale = {
     /* An unavailable destination's chip said «لم تُنفَّذ بعد» — "not done yet" — which
        describes a schedule, not a folder or a drive that cannot be reached. */
     unavailable: 'غير متاح',
+
+    /* ── Restoring a copy over the shop's data ───────────────────────────── */
+    restoreCopy: {
+      title: 'استعادة نسخة',
+      subtitle:
+        'يُستبدل محتوى البرنامج بمحتوى النسخة التي تختارها. تُفحص النسخة أولاً، ولا يُستبدل شيء قبل أن تؤكّد.',
+      noCopies: 'لا توجد نسخ محفوظة بعد في أي مكان حفظ متاح. خذ نسخة أولاً من «أخذ نسخة الآن».',
+      restoreThis: 'استعادة هذه النسخة',
+      preparing: 'جارٍ تجهيز النسخة…',
+      keyLabel: 'مفتاح التشفير لهذه النسخة',
+      keyHint: (fingerprint: string | null) =>
+        fingerprint
+          ? `كما هو مكتوب على الورقة — 44 حرفاً ورقماً. بصمة المفتاح المطلوب: ${fingerprint}`
+          : 'كما هو مكتوب على الورقة — 44 حرفاً ورقماً.',
+      openWithKey: 'فتح النسخة بهذا المفتاح',
+      stagedTitle: 'النسخة جاهزة للاستعادة — لم يُستبدل شيء بعد',
+      stagedSource: (source: string, at: string) => `النسخة من ${source}، أُخذت ${at}.`,
+      stagedCounts: (copyCustomers: number, copyInvoices: number, nowCustomers: number, nowInvoices: number) =>
+        `فيها ${copyCustomers} زبون و${copyInvoices} فاتورة؛ وفي البرنامج الآن ${nowCustomers} زبون و${nowInvoices} فاتورة.`,
+      stagedLoss: (at: string) => `كل ما سُجّل بعد ${at} لن يكون موجوداً بعد الاستعادة.`,
+      stagedLossUnknown: 'لا يظهر في النسخة تاريخ آخر عملية — راجع تاريخ أخذها قبل التأكيد.',
+      stagedUpgraded:
+        'أُخذت هذه النسخة بإصدار أقدم، وحُدّثت بنيتها لتعمل مع هذا الإصدار. النسخة الأصلية في مكان حفظها لم تتغيّر.',
+      consequenceSafety:
+        'قبل الاستبدال تُؤخذ نسخة احتياطية من الوضع الحالي، فتظهر في هذه القائمة ويمكن الرجوع إليها بالطريقة نفسها.',
+      consequenceStations: 'يُعاد تشغيل البرنامج لتطبيق الاستعادة، فتتوقف المحطات عن التسجيل لبضع ثوانٍ.',
+      consequenceLogin:
+        'بعد الاستعادة ادخل باسم المستخدم وكلمة المرور الموجودين في هذه النسخة، وقد تحتاج المحطات إلى تسجيل الدخول من جديد.',
+      confirm: 'تأكيد الاستعادة وإعادة التشغيل',
+      cancel: 'إلغاء — لا تستعد',
+      restartingTitle: 'جارٍ إعادة تشغيل البرنامج لتطبيق الاستعادة',
+      restartingBody: 'لا تُغلق النافذة. ستظهر شاشة الدخول حين يعود البرنامج خلال ثوانٍ.',
+      nextStart: 'طُلبت الاستعادة، وستُطبَّق عند تشغيل خدمة ولاء التالي على هذا الجهاز.',
+      lastOkTitle: (at: string) => `آخر استعادة: تمّت — ${at}`,
+      lastFailedTitle: (at: string) => `آخر استعادة: لم تتم — ${at}`,
+      lastOkBody: (source: string, takenAt: string) => `استُعيدت النسخة المأخوذة ${takenAt} من ${source}.`,
+      lastOkSafety:
+        'البيانات التي كانت قبلها محفوظة كنسخة احتياطية في قائمة النسخ أدناه، ويمكن استعادتها بالطريقة نفسها.',
+      lastBy: (who: string) => `طلبها: ${who}`,
+    },
   },
 
   /**

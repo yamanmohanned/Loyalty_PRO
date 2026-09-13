@@ -51,6 +51,13 @@ export const ApiErrorCodeSchema = z.enum([
    * that will fail the same way every time.
    */
   'DATABASE_DAMAGED',
+  /**
+   * A restore was refused before anything changed — a copy made with another key, a
+   * copy from a newer build, too little disk, a damaged copy. `details.reason` says
+   * which (`RestoreRefusalReason`), so the screen can ask for the key written on paper
+   * instead of only showing the sentence.
+   */
+  'RESTORE_REFUSED',
   'INTERNAL_ERROR',
 ]);
 
@@ -106,5 +113,6 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   BACKUP_BLOCKED: 409,
   CARD_NOT_ISSUABLE: 409,
   DATABASE_DAMAGED: 500,
+  RESTORE_REFUSED: 409,
   INTERNAL_ERROR: 500,
 };

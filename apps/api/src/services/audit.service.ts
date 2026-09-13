@@ -96,6 +96,10 @@ export const AUDIT_ACTIONS = {
    */
   BACKUP_SKIPPED: 'backup.skipped',
   BACKUP_RESTORED: 'backup.restored',
+  /** A copy fetched, decrypted and checked beside the live database — nothing replaced. */
+  BACKUP_RESTORE_STAGED: 'backup.restore_staged',
+  /** The owner confirmed a staged restore; applied at the next start. */
+  BACKUP_RESTORE_REQUESTED: 'backup.restore_requested',
   /**
    * The sentinel of the §12.17 recency check.
    *
