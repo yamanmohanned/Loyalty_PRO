@@ -1,6 +1,6 @@
 [package]
 name = "walaa-manager"
-version = "0.2.2"
+version = "0.2.3"
 description = "Walaa — إدارة المتجر"
 authors = ["Walaa"]
 edition = "2021"

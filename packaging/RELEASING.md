@@ -105,11 +105,21 @@ Take the SHA-256 and put it wherever you record releases:
 Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.2.2 (signed, current):** 33,688,310 bytes ·
+**0.2.3 (signed, current):** `ولاء_0.2.3_x64-setup.exe`, 33,700,381 bytes ·
+`2656D60856CDBAC5C4453E72426FF996C6436F3F8A9778E0AC9C9600C25D49D1` — failed screens say
+what failed and why; the restore test runs from its own card and records passes and
+failures; restoring a chosen copy (local, USB, Google Drive) from the Backup screen;
+Google Drive set up from Settings (see `GOOGLE-DRIVE-SETUP.md`). Built by
+`pnpm version:write && pnpm version:check && pnpm package:build && pnpm package:verify &&
+pnpm package:installer`, all exit 0, with the signing variables set as in `SIGNING.md`;
+`verify-signing --post` confirmed the `.sig` (420 bytes,
+`63F50C80155EB9AEE77E7F60EF0CB6DDDB310DB66A904AF6118E30ED693DB24D`) is by key
+`BE2E4C7B42C8D100`, the one compiled into the app. No migration was added, so the update
+feed is safe for this release (§7).
+
+**0.2.2 (signed, superseded):** 33,688,310 bytes ·
 `21930D9A56C60A72E36F2915AD9FF065E92423510E80C658FF0691EEED81D280` — the install-night
-fixes. Built by `pnpm package:build && pnpm package:verify && pnpm package:installer`, all
-three exit 0; `verify-signing --post` confirmed the `.sig` (420 bytes) is by key
-`BE2E4C7B42C8D100`, the one compiled into the app.
+fixes.
 
 **0.2.1 (signed, superseded):** 33,676,439 bytes ·
 `5F4A10580EC8C8867806C38C17A1419F8AD85A1F4707D718A031CAB1A8C109F3`
