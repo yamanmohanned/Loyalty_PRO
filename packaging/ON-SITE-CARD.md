@@ -48,7 +48,7 @@ work down the list.
 |---|---|
 | **Symptom** | «إعداد المتجر لأول مرة» — a form asking for the shop name, branch, owner name and a password. |
 | **Check** | Nothing. This is correct: nothing ships with a password, so the shop creates its own owner. It appears exactly once. |
-| **Fix** | Fill it in **with the merchant**, and let him choose and type the password himself. Minimum 10 characters. Write it down with him — **there is no password reset in this product**. Then the key ceremony follows, which is also mandatory and also once: write that key on paper and take a copy away with you. |
+| **Fix** | Fill it in **with the merchant**, and let him choose and type the password himself. Minimum 10 characters. Write it down with him — **there is no password reset for the owner**. Then the key ceremony, also mandatory and also once: write that key on paper and take a copy away. **Then — before the tablet can do anything — الإعدادات ← حسابات الدخول:** create a **محطة** account for the tablet and a **برنامج الالتقاط** account for the cashier PC. Nothing ships with either; the tablet cannot sign in until you do. If the form refuses a value it marks the field and says the rule — the branch code and usernames are English letters and digits only. |
 
 ---
 
@@ -63,14 +63,17 @@ work down the list.
 
 ---
 
-### 6 · The service will not start and names the database
+### 6 · The service will not start and names the database or the settings file
 *Least likely on a fresh install — but the one where doing the wrong thing is expensive.*
 
 | | |
 |---|---|
-| **Symptom** | A red screen with a specific Arabic sentence about قاعدة البيانات. |
-| **Check** | **Read which sentence it is.** They mean opposite things:<br>· «نسخة البرنامج المثبّتة غير مكتملة» or «ملفات البرنامج المثبّتة غير متطابقة» → **the build**, not his data<br>· «بنية قاعدة البيانات … لا تطابق هذه النسخة» → the database is not from this build<br>· «تحديثات بنية قاعدة البيانات لم تكتمل» → the machine stopped during an upgrade |
-| **Fix** | For the **first**: reinstall from the full installer. His data is untouched — **do not restore a backup**, it will fail identically. For the **other two**: restore the newest backup, or stop and call it a day. **Never delete a file from `C:\ProgramData\Walaa`.** No message in this product will ever ask you to. |
+| **Symptom** | A screen with a specific Arabic sentence about قاعدة البيانات or ملف الإعدادات. On the manager PC there is **no address box** on any of these screens — if you see one, you are on a second PC. |
+| **Check** | **Read which sentence it is.** They need opposite things:<br>· «ملفات البرنامج المثبّتة ناقصة» / «غير متطابقة» / «غير مكتملة» → **the build**, not his data<br>· «قاعدة البيانات الموجودة على هذا الجهاز أنشأها إصدار مختلف» → his data, from another build<br>· «ملف إعدادات البرنامج غير موجود» / «مفقودة» / «لا يمكن قراءته» → `walaa.env`<br>· «ملف قاعدة البيانات تالف» / «تحديث لبنية قاعدة البيانات بدأ ولم يكتمل» → damaged or interrupted |
+| **Fix** | **First:** reinstall from the full installer — it replaces Program Files and never touches data. Do not restore a backup for this. **Second and third:** do **not** reinstall — it changes nothing, and for the settings file the installer refuses on purpose, because new secrets would invalidate every printed card. Copy `C:\ProgramData\Walaa\logs\` and call me. **Fourth:** bring the newest `.walaabk`; restoring is done with `walaa-restore.cjs` from the runtime folder, not from the dashboard, which cannot restore while the service is down. **Never delete a file from `C:\ProgramData\Walaa`.** |
+
+An **empty** database left by an earlier install is no longer a refusal: it is renamed beside
+itself as `walaa.db.superseded-<time>` and the setup screen appears. That is expected.
 
 ---
 
@@ -90,6 +93,9 @@ Stop. Do not improvise on a live shop.
 
 Before you leave, with the merchant watching:
 
+0. The till and capture-agent accounts exist (§4), and the discount rules he agreed to are
+   entered in **قواعد الخصم**. A new shop has **no** rules, so nothing is discounted until
+   you enter them — the sale still records.
 1. Register a customer on the tablet.
 2. Ring a real sale over the discount threshold; capture the invoice.
 3. Scan the card, then the invoice → the slip prints with a discount.

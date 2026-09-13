@@ -150,10 +150,15 @@ To release 0.2.1 to every installed copy:
 `packaging/scripts/make-update-feed.mjs` generates that file from a built release rather
 than having you assemble it by hand.
 
-The installed app checks on launch, and `UpdateNotice` asks the merchant in Arabic
-before doing anything — `dialog: false` in the config is deliberate, because the
-plugin's own prompt is English and unstyled and would appear over a merchant's dashboard
-without warning.
+The installed app checks on launch. If a signed update is available it **downloads it in
+the background without asking**, then shows one Arabic line saying an update is ready;
+it is installed the next time the app closes and reopens, whether or not he presses the
+button (`components/UpdateNotice.tsx`). `dialog: false` is deliberate — the plugin's own
+prompt is English and unstyled.
+
+**Correction:** earlier versions of this document said the merchant is asked before
+anything installs. That was wrong. Nobody is asked. If you want a confirmation step, it
+is a change to `UpdateNotice`, not to the key.
 
 ### What has been proven, and what has not
 
@@ -192,8 +197,11 @@ list, and running an installer by hand is a step a person can see happening. **B
 argument only holds while there is one shop and you are willing to drive to it.** The
 cost of a manual update is a trip; the cost of *not being able to update* is that a
 security fix or a data-corrupting bug sits in the field until you have time to travel.
-Signing does not force auto-update on you — the merchant is still asked in Arabic before
-anything installs — it only preserves the option. And the option cannot be added later:
+Signing does not decide how updates are applied — today a published update downloads
+silently and installs on the next restart, and nobody is asked (see "Publishing an
+update" above; an earlier version of this paragraph said otherwise and was wrong). Not
+publishing a feed is the off switch: a copy that finds nothing never changes. The key
+only preserves the option. And the option cannot be added later:
 the public key is compiled into the copy the merchant installs tomorrow, so a build that
 ships without one can never self-update, ever. That asymmetry is the whole decision:
 signing costs an afternoon now and nothing afterwards, and not signing costs a car

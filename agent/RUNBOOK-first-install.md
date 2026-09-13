@@ -87,6 +87,15 @@ Windows.
 
 ## 3. Install, and let detection choose
 
+**Its account first.** In the manager dashboard, **الإعدادات → حسابات الدخول** → create an
+account of type **برنامج الالتقاط**, bound to this branch. Put that username and password in
+`username` / `password` of `%PROGRAMDATA%\Walaa\agent\agent-settings.json`, and `managerUrl`
+to the manager PC's address. **Never the owner's account** — the owner's password cannot
+be reset and reaches everything; the agent's can capture invoices and nothing else, and
+can be switched off from that screen in one click if this PC is lost. The manager
+dashboard's **التقاط الفواتير** screen shows «وصلت … فاتورة من الصندوق» once captures are
+arriving — that is the confirmation, not the absence of an error.
+
 Install the agent with `Mode` left **null** in
 `%PROGRAMDATA%\Walaa\agent\agent-settings.json`. Null means "run detection at startup";
 once detection picks a winner it is written there and not re-run.

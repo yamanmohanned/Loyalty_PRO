@@ -89,6 +89,18 @@ Open **ولاء** from the Start menu.
 
    This is the one irreversible step. Backups are encrypted with that key. Lose it and
    every archive the shop ever writes is unopenable — by you, by me, by anyone.
+5. **الإعدادات → حسابات الدخول.** Create two accounts, and write both passwords down:
+
+   | Type | For | Branch |
+   |---|---|---|
+   | **محطة** | the tablet at the till | the branch it stands in |
+   | **برنامج الالتقاط** | the Print Capture Agent on the cashier PC | the same branch |
+
+   **Nothing ships with either.** Until you make them the tablet cannot sign in and no
+   invoice can be captured. The agent's account goes in `username` / `password` of its
+   `agent-settings.json` — never the owner's: an agent account can capture invoices and do
+   nothing else, and it can be switched off from this screen in one click if that PC is
+   ever lost. A staff password can be reset here later; the owner's cannot.
 
 ---
 
@@ -100,8 +112,8 @@ On the tablet's browser:
 http://<MANAGER-IP>:4000
 ```
 
-Bookmark it and put the bookmark on the home screen. Sign in with the `station`
-account.
+Bookmark it and put the bookmark on the home screen. Sign in with the **محطة** account
+you created in §4 step 5.
 
 The address is also shown in the dashboard under **الإعدادات → خادم هذا الجهاز**, so
 nobody has to remember where it came from.
@@ -158,6 +170,9 @@ Work down it. Every line was performed during verification.
 - [ ] The login screen afterwards shows **only** a username and a password
 - [ ] Owner can sign in with what he chose
 - [ ] Key ceremony completed, key written down and taken **off site**
+- [ ] **محطة** and **برنامج الالتقاط** accounts created in الإعدادات → حسابات الدخول, passwords written down
+- [ ] The capture agent's `agent-settings.json` holds the **برنامج الالتقاط** account, not the owner's
+- [ ] الالتقاط الفواتير shows «وصلت … فاتورة من الصندوق» after a test print
 - [ ] Tablet reaches `http://<MANAGER-IP>:4000` and the station account signs in
 - [ ] Discount rules match what the merchant actually agreed to
 - [ ] Smoke test below passes end to end
@@ -169,7 +184,9 @@ Work down it. Every line was performed during verification.
 
 ## 9. The smoke test — one real sale, whole chain
 
-Do this with the merchant watching, using a real customer and a real receipt.
+Do this with the merchant watching, using a real customer and a real receipt. It needs
+the two accounts from §4 step 5, and the agreed discount rules entered — a new shop has
+none, so nothing is discounted until you enter them (the sale still records).
 
 1. **Register a customer** on the tablet. Phone number, name. A card prints or is
    assigned.
@@ -199,11 +216,13 @@ need Administrator to read the logs).
 | What he sees | What it means | What to do |
 |---|---|---|
 | «جارٍ تشغيل البرنامج» for more than a minute | The service is not coming up | `services.msc` → WalaaApi → Start. Then read `logs\api.log` |
-| «لم يُعثر على خادم ولاء» | The dashboard found no service on this machine and none configured | If this is the manager PC: restart it. If it is a second PC: **الإعدادات → الاتصال بجهاز مدير آخر** |
-| «تعذّر تشغيل الخدمة: … إعدادات البرنامج ناقصة» | `walaa.env` is missing or damaged | Reinstall from the full installer. The installer writes that file; do not hand-edit it |
-| «بنية قاعدة البيانات … لا تطابق هذه النسخة» | The database is not from this build | **Do not delete anything.** Restore the newest backup, or call me |
+| «لم يُعثر على جهاز المدير» | A PC that does not host the service has no address for the manager PC | Type the manager PC's address in the box on that screen. **This screen cannot appear on the manager PC** — the shell knows the service is installed there |
+| «خدمة ولاء متوقّفة على هذا الجهاز» | Installed and configured, not running | Restart the PC; the service starts with Windows. Then `services.msc` → WalaaApi |
+| «إعدادات البرنامج مفقودة» / «ملف إعدادات البرنامج غير موجود» | `walaa.env` is gone and the shop's data is still there | **Do not reinstall and do not delete anything.** The installer deliberately refuses to write new secrets beside existing data: new ones invalidate every printed card and every session. Put back a copy of `walaa.env` if one exists. If none does, generating a new one is a decision with a cost — every printed card has to be re-issued — so make it deliberately, not by reinstalling |
+| «تعذّر تشغيل الخدمة: … من إعدادات البرنامج ناقصة أو غير صالحة» | A value in `walaa.env` is missing or wrong | Do not reinstall — it never rewrites an existing `walaa.env`. `logs\api.log` names the setting on its `configuration validation failed` line |
+| «قاعدة البيانات الموجودة على هذا الجهاز أنشأها إصدار مختلف» | A database holding the shop's records, made by another build | **Do not delete anything, do not reinstall** — it changes nothing. Note the version the sentence names and call me. (An **empty** database from another build no longer stops the service: it is renamed `walaa.db.superseded-<time>` and the setup screen appears) |
 | «نسخة البرنامج المثبّتة غير مكتملة» | A packaging fault, **not his data** | His database is untouched. Reinstall from the full installer. Never restore a backup for this |
-| «تحديثات بنية قاعدة البيانات لم تكتمل» | The machine stopped during an upgrade | Restore the newest backup. Do not delete files |
+| «تحديث لبنية قاعدة البيانات بدأ ولم يكتمل» / «ملف قاعدة البيانات تالف» | Stopped mid-upgrade, or damaged | Restore the newest `.walaabk` with `walaa-restore.cjs` from the runtime folder — the dashboard's backup screen cannot restore while the service is down. Do not delete files |
 | «تم استخدام هذه القسيمة مسبقاً» | Correct behaviour — the slip was already redeemed | Nothing. This is the protection working |
 | «عدد كبير من المحاولات» | Too many login attempts | Wait a minute. If it repeats without cause, tell me — someone may be guessing passwords |
 | «النسخ الاحتياطي متوقف: لم يتم تأكيد حفظ مفتاح التشفير» | The key ceremony was never completed | Finish it in **النسخ الاحتياطي**. No backup runs until it is done |
@@ -225,6 +244,16 @@ navigation rail.
 3. The service verifies the database against the new build at startup. If it refuses,
    the message says whether it is the data or the build — see §10.
 4. Sign in and check the customer count against what it was before.
+
+### A release that adds a migration — read before publishing one
+
+A merchant's machine **never migrates**: the service verifies the database against the
+build and refuses if it is older, with «قاعدة البيانات تحتاج … تحديثاً لبنيتها». So a
+release that adds a migration will stop every existing shop that installs it. **Do not
+publish one through the update feed** — installed copies download and apply updates on
+the next restart without asking (`components/UpdateNotice.tsx`). Upgrade those shops in
+person, with a backup in hand; the refusal's log line names the override that permits a
+deliberate migration.
 
 ### What the upgrade path has been proven to do
 

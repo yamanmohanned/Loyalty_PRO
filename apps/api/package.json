@@ -1,6 +1,6 @@
 {
   "name": "@walaa/api",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Walaa loyalty backend — Fastify service, Prisma data layer.",
   "type": "module",

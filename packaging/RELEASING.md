@@ -56,14 +56,22 @@ with no schema change produces no diff.
 ## 3. Build
 
 ```bash
-pnpm package:build      # version:check → fingerprint check → template → service host → stage
+pnpm package:build      # version:check → fingerprint check → template → station → service host → stage
 pnpm package:verify     # clean-room boot of the staged runtime + service-host checks
 pnpm package:installer  # the NSIS installer
 ```
 
 `package:build` stages `packaging/dist/runtime` — the exact tree the installer bundles.
-`package:verify` boots that tree in a clean room and runs 20 checks, including that a
-first launch applies **no migration** and installs the shipped template instead.
+`package:verify` boots that tree in a clean room and runs 25 checks, including that a
+first launch applies **no migration** and installs the shipped template instead — and
+then **drives the staged bundle the way a merchant does**: first-run setup, the till and
+capture-agent accounts, a customer, a captured invoice, and the first sale. That last
+part exists because three blockers (no till account, no agent account, a 500 on every
+installation's first sale) passed every earlier check: each check proved the runtime
+booted, and none proved a shop could use it.
+
+`stage` refuses a Station bundle older than its source, the same way it refuses a stale
+service host.
 
 ---
 
@@ -144,6 +152,8 @@ present and is genuinely a public key.
 - **Minor or major** (0.2.x → 0.3.0): every machine must be updated together. A manager
   on 0.3 will refuse a 0.2 server, correctly.
 - **Any release that adds a migration**: the shipped template changes, the fingerprints
-  change, and an existing installation is checked against the new build at startup. If
-  it refuses, the message distinguishes a foreign database from a stale build — they
-  need opposite remedies and only one of them is the merchant's problem.
+  change, and an existing installation is checked against the new build at startup —
+  and **refused**, because a merchant's machine never migrates. **Never publish such a
+  release through the update feed**: installed copies apply updates on the next restart
+  without asking, so it would stop every shop at once. Upgrade those shops in person, with
+  a backup in hand (DEPLOYMENT.md §11).
