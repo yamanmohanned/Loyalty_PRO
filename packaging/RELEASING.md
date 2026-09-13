@@ -1,6 +1,6 @@
 # Releasing ولاء
 
-Every command here was executed as written. Values shown are from the 0.2.0 build.
+Every command here was executed as written. Artefact values are recorded in §5.
 
 ---
 
@@ -105,7 +105,13 @@ Take the SHA-256 and put it wherever you record releases:
 Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.2.1 (signed, current):** 33,676,439 bytes ·
+**0.2.2 (signed, current):** 33,688,310 bytes ·
+`21930D9A56C60A72E36F2915AD9FF065E92423510E80C658FF0691EEED81D280` — the install-night
+fixes. Built by `pnpm package:build && pnpm package:verify && pnpm package:installer`, all
+three exit 0; `verify-signing --post` confirmed the `.sig` (420 bytes) is by key
+`BE2E4C7B42C8D100`, the one compiled into the app.
+
+**0.2.1 (signed, superseded):** 33,676,439 bytes ·
 `5F4A10580EC8C8867806C38C17A1419F8AD85A1F4707D718A031CAB1A8C109F3`
 
 **0.2.0 (signed):** 33,682,447 bytes ·
