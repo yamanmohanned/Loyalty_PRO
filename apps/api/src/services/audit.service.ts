@@ -106,6 +106,14 @@ export const AUDIT_ACTIONS = {
    */
   BACKUP_VERIFICATION_STARTED: 'backup.verification_started',
   BACKUP_VERIFIED: 'backup.verified',
+  /**
+   * A restore test that ran and did not pass — with the reason, in the merchant's words.
+   *
+   * Only passes used to be recorded, so a test that failed left the Backup screen saying
+   * «لم يُجرَ اختبار استعادة بعد»: the one outcome a merchant most needs to see was the
+   * one the screen could not show.
+   */
+  BACKUP_VERIFY_FAILED: 'backup.verify_failed',
 
   /* ── The off-machine copy: Google Drive (§7.3) ────────────────────────── */
 

@@ -92,10 +92,24 @@ export interface BackupOverview {
   schedule: ScheduleStatus;
   history: {
     runs: HistoryEntry[];
+    /**
+     * The most recent restore test, passed OR failed. Null only when none has ever run.
+     *
+     * It used to record passes only, so a failed test left the screen reading «لم يُجرَ
+     * اختبار استعادة بعد» — hiding exactly the result a merchant most needed to see.
+     */
     lastVerification: {
       at: string;
+      /** The archive the test took and restored. */
+      name: string;
+      ok: boolean;
+      /** Which destination the copy was fetched back from; null if none received it. */
       verifiedFrom: string | null;
       actorName: string | null;
+      /** Why it failed, in Arabic, naming the remedy. Null on a pass. */
+      failure: string | null;
+      /** What the restored copy held — the merchant's check that it is his shop. */
+      counts: { customers: number; transactions: number } | null;
     } | null;
   };
 }
@@ -110,10 +124,12 @@ export interface BackupOverview {
 export interface VerificationResult {
   ok: boolean;
   recencyProven: boolean;
-  verifiedFrom: string;
+  /** Null when the test failed before any destination received the copy. */
+  verifiedFrom: string | null;
   failure?: string;
+  /** Null when the test failed before the copy could be opened. */
   restore: {
     integrity: string;
     counts: { customers: number; transactions: number };
-  };
+  } | null;
 }

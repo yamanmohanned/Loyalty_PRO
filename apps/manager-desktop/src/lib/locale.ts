@@ -997,13 +997,41 @@ export const locale = {
     scheduledRun: 'مجدولة',
     outOfSpace: 'مساحة غير كافية',
 
-    verifiedAt: 'آخر اختبار استعادة ناجح',
     neverVerified: 'لم يُجرَ اختبار استعادة بعد',
-    verifyPassed: 'نجح الاختبار — النسخة تحتوي على أحدث العمليات',
-    verifyFailed: 'فشل الاختبار',
-    /** The §12.17 assertion, named on screen so it is not mistaken for "the file opened". */
-    recencyProven: 'تم التحقق من أن النسخة تحتوي على عملية سُجّلت قبل أخذها مباشرة',
-    integrity: 'فحص سلامة قاعدة البيانات',
+    /* ── The restore test's standing result — passes AND failures ───────────
+       Only passes used to be recorded, so a failed test left this card saying
+       «لم يُجرَ اختبار استعادة بعد». The last result, either way, now stays on screen. */
+    neverVerifiedBody:
+      'لا دليل بعد على أن نسخك الاحتياطية تُسترجع فعلاً. اضغط «اختبار الاستعادة الآن» أدناه، وكرّره مرة كل شهر.',
+    verifyExplain:
+      'يأخذ الاختبار نسخة جديدة، ثم يسترجعها من مكان حفظها ويفتحها، ويتأكّد أنها تحتوي على آخر عملية سُجّلت قبل أخذها مباشرة. لا يغيّر شيئاً في بيانات المتجر، ويستغرق ثوانيَ.',
+    lastPassedTitle: (at: string) => `نجح آخر اختبار استعادة — ${at}`,
+    lastFailedTitle: (at: string) => `فشل آخر اختبار استعادة — ${at}`,
+    /** The §12.17 assertion, named so it is not mistaken for "the file opened". */
+    lastPassedBody: (source: string) =>
+      `استُرجعت النسخة من ${source} وفُتحت سليمة، وفيها آخر عملية سُجّلت قبل أخذها مباشرة.`,
+    lastCounts: (customers: number, transactions: number) =>
+      `في النسخة: ${customers} زبون و${transactions} فاتورة.`,
+    lastBy: (who: string) => `أجراه: ${who}`,
+    chipPassed: 'ناجح',
+    chipFailed: 'فشل',
+    chipNever: 'لم يُختبر',
+    /* Beside a greyed button. A disabled control with no reason reads as broken. */
+    blockedByKey: 'متوقف حتى يُثبَّت مفتاح التشفير — انظر التنبيه في أعلى هذه الصفحة.',
+    sources: {
+      local: 'النسخة المحلية على هذا الجهاز',
+      usb: 'القرص الخارجي',
+      drive: 'Google Drive',
+    } as Record<string, string>,
+    /* The history rows printed the internal kind — «local» — in English. */
+    destinationShort: {
+      local: 'نسخة محلية',
+      usb: 'قرص خارجي',
+      drive: 'Google Drive',
+    } as Record<string, string>,
+    /* An unavailable destination's chip said «لم تُنفَّذ بعد» — "not done yet" — which
+       describes a schedule, not a folder or a drive that cannot be reached. */
+    unavailable: 'غير متاح',
   },
 
   /**

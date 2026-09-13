@@ -1,6 +1,7 @@
 import { rm, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { PrismaClient } from '@prisma/client';
+import { AppError } from '../../lib/errors';
 import { prisma } from '../../lib/prisma';
 import { liveDatabasePath } from '../../config/paths';
 import { readFreeSpace } from '../storage.service';
@@ -93,16 +94,28 @@ export interface FreeSpace {
   databaseBytes: number;
 }
 
-export class InsufficientSpaceError extends Error {
+/**
+ * A backup refused for want of disk.
+ *
+ * An `AppError`, and that is a fix: it was a plain `Error`, which the error handler
+ * cannot tell from a bug, so «أخذ نسخة الآن» on a nearly full disk answered «حدث خطأ غير
+ * متوقع» — on exactly the machine whose banner was already saying the disk was full.
+ * No `details.cause`: this sentence carries the numbers, and the dashboard shows it as
+ * written rather than substituting the banner's general one.
+ */
+export class InsufficientSpaceError extends AppError {
   constructor(readonly space: FreeSpace) {
     super(
+      'STORAGE_UNAVAILABLE',
       `لا توجد مساحة كافية لأخذ نسخة احتياطية: ${gib(space.freeBytes)} متاحة، ` +
         `والمطلوب ${gib(space.requiredBytes)} ` +
         // The database size and the multiple, in the message itself. The original said
         // only "2.00 GB required" against a 5 MB database, and the number looked
         // arbitrary because nothing on screen connected it to anything.
         `(حجم قاعدة البيانات ${gib(space.databaseBytes)} × ${REQUIRED_FREE_MULTIPLE}، ` +
-        `بحدٍّ أدنى ${gib(MINIMUM_FREE_BYTES)})`,
+        `بحدٍّ أدنى ${gib(MINIMUM_FREE_BYTES)}). ` +
+        // The banner's own instruction, so the two say the same thing.
+        'فرّغ مساحة على هذا الجهاز الآن، ثم أعد المحاولة — لم يتغيّر شيء في بيانات المتجر.',
     );
     this.name = 'InsufficientSpaceError';
   }

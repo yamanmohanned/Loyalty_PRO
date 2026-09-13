@@ -36,14 +36,31 @@ export interface BackupHistoryEntry {
 export interface VerificationEntry {
   at: string;
   name: string;
+  ok: boolean;
   verifiedFrom: string | null;
   actorName: string | null;
+  failure: string | null;
+  counts: { customers: number; transactions: number } | null;
 }
 
 export interface BackupHistory {
   runs: BackupHistoryEntry[];
-  /** The last time a restore was actually proven, which §7.3 asks for monthly. */
+  /**
+   * The last restore test, passed or failed — §7.3 asks for one monthly.
+   *
+   * Both outcomes, because a failed test is the one result a merchant must not miss; it
+   * used to read as «never tested», which is worse than silence.
+   */
   lastVerification: VerificationEntry | null;
+}
+
+/** `{customers, transactions}` out of an audit payload, or null if it is not that shape. */
+function readCounts(value: unknown): VerificationEntry['counts'] {
+  if (!value || typeof value !== 'object') return null;
+  const { customers, transactions } = value as Record<string, unknown>;
+  return typeof customers === 'number' && typeof transactions === 'number'
+    ? { customers, transactions }
+    : null;
 }
 
 const OUTCOME_BY_ACTION: Record<string, BackupOutcome> = {
@@ -63,6 +80,25 @@ function readPayload(json: string | null): Record<string, unknown> {
     // timestamp still answer the question the manager came here with.
     return {};
   }
+}
+
+function verificationEntry(row: {
+  createdAt: Date;
+  entityId: string;
+  action: string;
+  afterJson: string | null;
+  actor: { name: string } | null;
+}): VerificationEntry {
+  const payload = readPayload(row.afterJson);
+  return {
+    at: row.createdAt.toISOString(),
+    name: row.entityId,
+    ok: row.action === AUDIT_ACTIONS.BACKUP_VERIFIED,
+    verifiedFrom: typeof payload.verifiedFrom === 'string' ? payload.verifiedFrom : null,
+    actorName: row.actor?.name ?? null,
+    failure: typeof payload.failure === 'string' ? payload.failure : null,
+    counts: readCounts(payload.counts),
+  };
 }
 
 export async function recentBackupHistory(
@@ -86,7 +122,10 @@ export async function recentBackupHistory(
       include: { actor: { select: { name: true } } },
     }),
     prisma.auditLog.findFirst({
-      where: { merchantId, action: AUDIT_ACTIONS.BACKUP_VERIFIED },
+      where: {
+        merchantId,
+        action: { in: [AUDIT_ACTIONS.BACKUP_VERIFIED, AUDIT_ACTIONS.BACKUP_VERIFY_FAILED] },
+      },
       orderBy: { createdAt: 'desc' },
       include: { actor: { select: { name: true } } },
     }),
@@ -112,14 +151,6 @@ export async function recentBackupHistory(
 
   return {
     runs,
-    lastVerification: verification
-      ? {
-          at: verification.createdAt.toISOString(),
-          name: verification.entityId,
-          verifiedFrom:
-            (readPayload(verification.afterJson).verifiedFrom as string | undefined) ?? null,
-          actorName: verification.actor?.name ?? null,
-        }
-      : null,
+    lastVerification: verification ? verificationEntry(verification) : null,
   };
 }

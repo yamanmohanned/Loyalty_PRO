@@ -6,6 +6,7 @@ import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
 import { EXPECTED_SCHEMA_HASH } from '../../config/schema-fingerprint';
 import { computeSchemaHash } from '../../lib/db-identity';
 import { AppError, backupBlocked } from '../../lib/errors';
+import { storageFailureCause } from '../../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { readArchive, writeArchive, type ArchiveHeader } from './archive';
 import {
@@ -547,10 +548,15 @@ export async function restoreArchive(
 
 export interface RestoreVerification {
   ok: boolean;
-  /** Where the archive was fetched back from — the whole chain, not just the local copy. */
-  verifiedFrom: string;
-  run: BackupRun;
-  restore: RestoreResult;
+  /**
+   * Where the archive was fetched back from — the whole chain, not just the local copy.
+   * Null when the test failed before any destination received it.
+   */
+  verifiedFrom: string | null;
+  /** Null when the backup step itself failed. */
+  run: BackupRun | null;
+  /** Null when the test failed before the copy could be opened. */
+  restore: RestoreResult | null;
   /** The §12.17 assertion: was the row written just before the backup actually in it. */
   recencyProven: boolean;
   sentinelId: string;
@@ -597,9 +603,9 @@ async function verifyRestoreUnlocked(
   destinations: BackupDestination[],
   now: Date,
 ): Promise<RestoreVerification> {
+  // The one precondition that still throws: with backups blocked there is no test to
+  // run, and BACKUP_BLOCKED sends the dashboard to the key ceremony.
   await assertBackupsEnabled(context.merchantId);
-
-  const staging = await prepareStaging();
 
   const sentinelId = `verify-${now.toISOString()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -614,70 +620,178 @@ async function verifyRestoreUnlocked(
     after: { startedAt: now.toISOString() },
   });
 
-  // (2) A real backup to the real destinations. The unlocked form: this function
-  // already holds the lock, and calling the public one would deadlock against itself.
-  const run = await runBackupUnlocked(context, destinations, now);
+  /*
+    ── Every failure from here on is a RESULT, recorded and shown ───────────────
 
-  const landed = run.destinations.find((o) => o.ok && o.id);
-  if (!landed?.id) {
-    throw new Error('لم تصل النسخة الاحتياطية إلى أي وجهة — لا يمكن التحقق منها');
-  }
-
-  const fetchedPath = join(staging.path, `verify-${run.name}`);
-  const restoredPath = join(staging.path, `verify-${run.name}.db`);
+    It used to be an exception: "no destination received the copy" and "could not fetch
+    it back" were thrown as plain `Error`s, which the error handler turns into a flat
+    «حدث خطأ غير متوقع», and nothing was recorded — so the Backup screen went on saying
+    «لم يُجرَ اختبار استعادة بعد» after a test that had run and failed. A failed test is
+    the most important thing this screen can report. So each stage's failure becomes a
+    sentence naming what failed and what to do, and it is written to the trail exactly
+    like a pass.
+  */
+  let run: BackupRun | null = null;
+  let verifiedFrom: string | null = null;
+  let restore: RestoreResult | null = null;
+  let recencyProven = false;
+  let failure: string | undefined;
+  const scratch: string[] = [];
 
   try {
+    // The backup folder first, and inside the recorded stages: a folder that cannot be
+    // made — an external drive not plugged in, a mistyped path — is a failed test the
+    // merchant must see on the screen, not an exception thrown before anything was
+    // written down.
+    const staging = await stage('BACKUP', prepareStaging);
+
+    // (2) A real backup to the real destinations. The unlocked form: this function
+    // already holds the lock, and calling the public one would deadlock against itself.
+    run = await stage('BACKUP', () => runBackupUnlocked(context, destinations, now));
+
+    const landed = run.destinations.find((o) => o.ok && o.id);
+    if (!landed?.id) throw new VerificationFailure(noCopyLanded(run.destinations));
+    verifiedFrom = landed.kind;
+
+    const fetchedPath = join(staging.path, `verify-${run.name}`);
+    const restoredPath = join(staging.path, `verify-${run.name}.db`);
+    scratch.push(fetchedPath, restoredPath, `${restoredPath}-wal`, `${restoredPath}-shm`);
+
     // (3) Back down from a destination, so the transport is part of what is proven.
     const source = destinations.find((d) => d.kind === landed.kind);
-    if (!source) throw new Error('تعذّر تحديد وجهة النسخة الاحتياطية');
-    await source.fetch(landed.id, fetchedPath);
+    if (!source) throw new VerificationFailure(VERIFY_TEXT.unknown);
+    await stage('FETCH', () => source.fetch(landed.id!, fetchedPath), landed.label);
 
     // (4) and (5).
-    const restore = await restoreArchive(fetchedPath, restoredPath);
-    const recencyProven = await sentinelPresent(restoredPath, sentinelId);
-    const integrityOk = restore.integrity === 'ok';
-    const ok = recencyProven && integrityOk;
+    restore = await stage('RESTORE', () => restoreArchive(fetchedPath, restoredPath));
+    recencyProven = await sentinelPresent(restoredPath, sentinelId);
 
-    const failure = ok
-      ? undefined
-      : !integrityOk
-        ? `فحص السلامة أعاد: ${restore.integrity}`
-        // «تحقّق من إعداد النسخ الاحتياطي» — no setting makes a snapshot miss the write
-        // made just before it. This is a defect, and the honest instruction is not to
-        // trust this archive.
-        : 'النسخة الاحتياطية لا تحتوي على آخر عملية سُجّلت قبلها مباشرة — لا تعتمد عليها، وتواصل مع الدعم الفني.';
-
-    if (ok) {
-      await recordAudit({
-        merchantId: context.merchantId,
-        actorUserId: context.actorUserId,
-        action: AUDIT_ACTIONS.BACKUP_VERIFIED,
-        entityType: 'backup',
-        entityId: run.name,
-        after: {
-          verifiedFrom: landed.kind,
-          sentinelId,
-          counts: restore.counts,
-          integrity: restore.integrity,
-        },
-      });
+    if (restore.integrity !== 'ok') {
+      failure = VERIFY_TEXT.integrity(restore.integrity);
+    } else if (!recencyProven) {
+      // «تحقّق من إعداد النسخ الاحتياطي» — no setting makes a snapshot miss the write
+      // made just before it. This is a defect, and the honest instruction is not to
+      // trust this archive.
+      failure = VERIFY_TEXT.recency;
     }
-
-    return {
-      ok,
-      verifiedFrom: landed.kind,
-      run,
-      restore,
-      recencyProven,
-      sentinelId,
-      failure,
-    };
+  } catch (error) {
+    failure = error instanceof VerificationFailure ? error.message : VERIFY_TEXT.unknown;
   } finally {
-    await rm(fetchedPath, { force: true });
-    await rm(restoredPath, { force: true });
-    await rm(`${restoredPath}-wal`, { force: true });
-    await rm(`${restoredPath}-shm`, { force: true });
+    for (const path of scratch) await rm(path, { force: true });
   }
+
+  const ok = failure === undefined;
+
+  try {
+    await recordAudit({
+      merchantId: context.merchantId,
+      actorUserId: context.actorUserId,
+      action: ok ? AUDIT_ACTIONS.BACKUP_VERIFIED : AUDIT_ACTIONS.BACKUP_VERIFY_FAILED,
+      entityType: 'backup',
+      entityId: run?.name ?? sentinelId,
+      after: {
+        verifiedFrom,
+        sentinelId,
+        ...(restore ? { counts: restore.counts, integrity: restore.integrity } : {}),
+        ...(failure ? { failure } : {}),
+      },
+    });
+  } catch {
+    // A disk that has just refused the test may refuse this row too. The result still
+    // goes back to the screen that asked; only the lasting record is lost, and the
+    // storage banner is already saying why.
+  }
+
+  return { ok, verifiedFrom, run, restore, recencyProven, sentinelId, failure };
+}
+
+/** A stage failure already phrased for the merchant. */
+class VerificationFailure extends Error {}
+
+type VerifyStage = 'BACKUP' | 'FETCH' | 'RESTORE';
+
+/** Runs one stage, turning whatever it throws into a sentence that names the stage. */
+async function stage<T>(which: VerifyStage, work: () => Promise<T>, label?: string): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    throw new VerificationFailure(verificationSentence(which, error, label));
+  }
+}
+
+/** A driver's or the OS's words, kept only if they are already Arabic — never a path. */
+function arabicDetail(message: string | undefined): string {
+  if (!message || /[A-Za-z]/.test(message)) return '';
+  return ` (${message})`;
+}
+
+const VERIFY_TEXT = {
+  diskFull:
+    'المساحة الحرة على القرص شبه منتهية، فتوقّف اختبار الاستعادة. فرّغ مساحة على هذا الجهاز الآن، ثم أعد الاختبار — لم يتغيّر شيء في بيانات المتجر.',
+  readOnly:
+    'لا يستطيع البرنامج الكتابة في مجلد بياناته على هذا الجهاز — صلاحيات الملفات تمنع ذلك، فتوقّف اختبار الاستعادة. لم يتغيّر شيء في بيانات المتجر. لا يُصلَح هذا من داخل البرنامج: تواصل مع الدعم الفني.',
+  ioError:
+    'القرص على هذا الجهاز أعاد خطأ أثناء اختبار الاستعادة، وقد يكون يتعطّل. أعد الاختبار؛ وإن تكرّر فتواصل مع الدعم الفني لفحص القرص.',
+  backup: (detail: string) =>
+    `تعذّر أخذ نسخة الاختبار${detail}. لم يتغيّر شيء في بيانات المتجر. أعد الاختبار؛ وإن تكرّر فتواصل مع الدعم الفني.`,
+  fetch: (label: string, detail: string) =>
+    `أُخذت النسخة لكن تعذّر استرجاعها من «${label}»${detail} — أي أن النسخة المحفوظة هناك قد لا تُسترجع وقت الحاجة. أعد الاختبار؛ وإن تكرّر فتواصل مع الدعم الفني.`,
+  restore: (detail: string) =>
+    `استُرجعت النسخة لكنها لم تُفتح${detail} — لا تعتمد عليها، وتواصل مع الدعم الفني.`,
+  noCopy: (lines: string) =>
+    `لم تصل نسخة الاختبار إلى أي مكان حفظ: ${lines}. لم يتغيّر شيء في بيانات المتجر؛ عالج السبب ثم أعد الاختبار.`,
+  integrity: (verdict: string) =>
+    `النسخة استُرجعت لكن فحص السلامة لم ينجح${arabicDetail(verdict)} — لا تعتمد عليها، وتواصل مع الدعم الفني.`,
+  recency:
+    'النسخة الاحتياطية لا تحتوي على آخر عملية سُجّلت قبلها مباشرة — لا تعتمد عليها، وتواصل مع الدعم الفني.',
+  unknown:
+    'تعذّر إكمال اختبار الاستعادة. لم يتغيّر شيء في بيانات المتجر. أعد الاختبار؛ وإن تكرّر فتواصل مع الدعم الفني.',
+  unwritable: 'تعذّرت الكتابة فيه',
+};
+
+/**
+ * What a failed stage means, for the person reading the Backup screen.
+ *
+ * The environment first: a full disk, a folder the service may not write, a disk that
+ * returns errors. Those are the likeliest causes on the machine this was reported from
+ * — 1.3 GB free — and each has a remedy that is not "try again".
+ */
+function verificationSentence(which: VerifyStage, error: unknown, label?: string): string {
+  // Already a full sentence, with the numbers and the remedy.
+  if (error instanceof InsufficientSpaceError) return error.message;
+
+  switch (storageFailureCause(error)) {
+    case 'DISK_FULL':
+      return VERIFY_TEXT.diskFull;
+    case 'READ_ONLY':
+      return VERIFY_TEXT.readOnly;
+    case 'IO_ERROR':
+      return VERIFY_TEXT.ioError;
+    default:
+      break;
+  }
+
+  // Our own refusals already speak Arabic and name their remedy.
+  if (error instanceof AppError) return error.message;
+
+  const detail = arabicDetail(error instanceof Error ? error.message : undefined);
+  if (which === 'FETCH') return VERIFY_TEXT.fetch(label ?? '—', detail);
+  if (which === 'RESTORE') return VERIFY_TEXT.restore(detail);
+  return VERIFY_TEXT.backup(detail);
+}
+
+/** Why no destination took the copy, one clause per destination. */
+function noCopyLanded(outcomes: DestinationOutcome[]): string {
+  if (outcomes.some((o) => storageFailureCause(new Error(o.error ?? '')) === 'DISK_FULL')) {
+    return VERIFY_TEXT.diskFull;
+  }
+  const lines = outcomes
+    .map((o) => {
+      const said = o.error && !/[A-Za-z]/.test(o.error) ? o.error : VERIFY_TEXT.unwritable;
+      return `«${o.label}» — ${said}`;
+    })
+    .join('؛ ');
+  return VERIFY_TEXT.noCopy(lines || '—');
 }
 
 /** Looks for the sentinel row in a restored database file. */

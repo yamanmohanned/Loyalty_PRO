@@ -155,21 +155,16 @@ export function BackupScreen() {
                 <p className="font-mono text-base text-ink">{dateTime(schedule?.nextRunAt ?? null)}</p>
               </div>
             </div>
-            <div className="flex gap-3 border-t border-border p-6">
+            <div className="flex flex-wrap items-center gap-3 border-t border-border p-6">
               <Button
                 onClick={() => run.mutate()}
                 disabled={run.isPending || verify.isPending || !data.key.backupsEnabled}
               >
                 {run.isPending ? locale.backup.running : locale.backup.runNow}
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => verify.mutate()}
-                disabled={run.isPending || verify.isPending || !data.key.backupsEnabled}
-              >
-                <RotateCcw size={18} aria-hidden />
-                {verify.isPending ? locale.backup.verifying : locale.backup.verifyNow}
-              </Button>
+              {!data.key.backupsEnabled ? (
+                <p className="text-sm text-danger">{locale.backup.blockedByKey}</p>
+              ) : null}
             </div>
             {run.error ? (
               <div className="px-6 pb-6">
@@ -178,40 +173,36 @@ export function BackupScreen() {
             ) : null}
           </Card>
 
-          {/* The restore test — §7.3's most commonly skipped step. */}
+          {/*
+            The restore test — §7.3's most commonly skipped step.
+
+            Its button now lives HERE, beside the result it produces. It used to sit in
+            the schedule card above, while this card showed only «لم يُجرَ اختبار استعادة
+            بعد» — a statement with nothing on it to act on. And the result shown is the
+            last one on record, passed or failed, not only what this session happened to
+            run: a failed test used to vanish on reload and read as «never tested».
+          */}
           <Card>
             <CardHeader
               title={locale.backup.restoreTitle}
               subtitle={locale.backup.restoreHint}
+              action={<VerificationChip entry={data.history.lastVerification} />}
             />
-            <div className="space-y-3 p-6">
-              <p className="text-sm text-steel">
-                {locale.backup.verifiedAt}:{' '}
-                <span className="font-mono text-ink">
-                  {data.history.lastVerification
-                    ? dateTime(data.history.lastVerification.at)
-                    : locale.backup.neverVerified}
-                </span>
-              </p>
-
-              {verify.data ? (
-                <Notice tone={verify.data.ok ? 'accent' : 'danger'}>
-                  <div className="space-y-1">
-                    <p className="font-semibold">
-                      {verify.data.ok ? locale.backup.verifyPassed : locale.backup.verifyFailed}
-                    </p>
-                    {/* Named explicitly. "The file opened" would pass against a backup
-                        missing the most recent day of sales, which is the whole of
-                        §12.17. */}
-                    {verify.data.recencyProven ? <p>{locale.backup.recencyProven}</p> : null}
-                    <p className="text-sm">
-                      {locale.backup.integrity}: {verify.data.restore.integrity}
-                    </p>
-                    {verify.data.failure ? <p className="text-sm">{verify.data.failure}</p> : null}
-                  </div>
-                </Notice>
-              ) : null}
-
+            <div className="space-y-4 p-6">
+              <LastVerification entry={data.history.lastVerification} />
+              <p className="text-sm leading-relaxed text-steel">{locale.backup.verifyExplain}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={() => verify.mutate()}
+                  disabled={run.isPending || verify.isPending || !data.key.backupsEnabled}
+                >
+                  <RotateCcw size={18} aria-hidden />
+                  {verify.isPending ? locale.backup.verifying : locale.backup.verifyNow}
+                </Button>
+                {!data.key.backupsEnabled ? (
+                  <p className="text-sm text-danger">{locale.backup.blockedByKey}</p>
+                ) : null}
+              </div>
               {verify.error ? (
                 <Notice tone="danger">{failureSentence(verify.error)}</Notice>
               ) : null}
@@ -230,7 +221,7 @@ export function BackupScreen() {
                     title={destination.label}
                     action={
                       <Chip tone={destination.available ? 'success' : 'danger'}>
-                        {destination.available ? locale.common.enabled : locale.backup.never}
+                        {destination.available ? locale.common.enabled : locale.backup.unavailable}
                       </Chip>
                     }
                   />
@@ -285,7 +276,12 @@ export function BackupScreen() {
                         </p>
                       ) : (
                         <p className="text-sm text-steel">
-                          {entry.destinations.map((d) => `${d.kind}${d.ok ? '' : ' ✕'}`).join(' · ')}
+                          {entry.destinations
+                            .map(
+                              (d) =>
+                                `${locale.backup.destinationShort[d.kind] ?? d.kind}${d.ok ? '' : ' ✕'}`,
+                            )
+                            .join(' · ')}
                         </p>
                       )}
                     </div>
@@ -311,6 +307,55 @@ export function BackupScreen() {
         </div>
       ) : null}
     </>
+  );
+}
+
+type LastVerificationEntry = BackupOverview['history']['lastVerification'];
+
+function VerificationChip({ entry }: { entry: LastVerificationEntry }) {
+  if (!entry) return <Chip tone="warning">{locale.backup.chipNever}</Chip>;
+  return (
+    <Chip tone={entry.ok ? 'success' : 'danger'}>
+      {entry.ok ? locale.backup.chipPassed : locale.backup.chipFailed}
+    </Chip>
+  );
+}
+
+/** The last restore test on record — when, by whom, from where, and what it found. */
+function LastVerification({ entry }: { entry: LastVerificationEntry }) {
+  if (!entry) {
+    return (
+      <Notice tone="warning" title={locale.backup.neverVerified}>
+        {locale.backup.neverVerifiedBody}
+      </Notice>
+    );
+  }
+
+  const source = entry.verifiedFrom
+    ? (locale.backup.sources[entry.verifiedFrom] ?? entry.verifiedFrom)
+    : '—';
+
+  return (
+    <Notice
+      tone={entry.ok ? 'accent' : 'danger'}
+      title={
+        entry.ok
+          ? locale.backup.lastPassedTitle(dateTime(entry.at))
+          : locale.backup.lastFailedTitle(dateTime(entry.at))
+      }
+    >
+      <div className="space-y-1">
+        <p>{entry.ok ? locale.backup.lastPassedBody(source) : (entry.failure ?? locale.failure.unexpected)}</p>
+        {entry.counts ? (
+          <p className="text-sm">
+            {locale.backup.lastCounts(entry.counts.customers, entry.counts.transactions)}
+          </p>
+        ) : null}
+        <p className="text-sm text-steel">
+          {locale.backup.lastBy(entry.actorName ?? locale.backup.scheduledRun)}
+        </p>
+      </div>
+    </Notice>
   );
 }
 

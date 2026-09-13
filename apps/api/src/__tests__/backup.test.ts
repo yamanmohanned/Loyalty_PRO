@@ -23,6 +23,7 @@ import {
 import { LocalDirectoryDestination, archiveName } from '../services/backup/destinations';
 import { generateBackupKey, keyFingerprint, parseBackupKey } from '../services/backup/key';
 import { confirmKey } from '../services/backup/key-ceremony.service';
+import { recentBackupHistory } from '../services/backup/history.service';
 import { liveDatabasePath } from '../config/paths';
 import { checkFreeSpace, takeSnapshot } from '../services/backup/snapshot';
 import { resetDatabase } from './helpers/db';
@@ -332,8 +333,8 @@ describe('the failure §12.17 is about', () => {
     // Everything about the archive is valid. It decrypts, its checksum matches, SQLite
     // is happy with it. Only the recency assertion catches it — which is the entire
     // argument of §12.17 for making that assertion mandatory.
-    expect(verification.restore.integrity).toBe('ok');
-    expect(verification.restore.counts.customers).toBe(1);
+    expect(verification.restore?.integrity).toBe('ok');
+    expect(verification.restore?.counts.customers).toBe(1);
     expect(verification.recencyProven).toBe(false);
     expect(verification.ok).toBe(false);
     expect(verification.failure).toMatch(/آخر عملية سُجّلت قبلها/);
@@ -342,6 +343,14 @@ describe('the failure §12.17 is about', () => {
     expect(
       await prisma.auditLog.count({ where: { action: AUDIT_ACTIONS.BACKUP_VERIFIED } }),
     ).toBe(0);
+
+    // It IS recorded — as a failed test, carrying the sentence the Backup screen shows.
+    // Only passes used to be written, so this outcome left the screen saying «لم يُجرَ
+    // اختبار استعادة بعد».
+    const failed = await prisma.auditLog.findFirstOrThrow({
+      where: { action: AUDIT_ACTIONS.BACKUP_VERIFY_FAILED },
+    });
+    expect(JSON.parse(failed.afterJson ?? '{}').failure).toMatch(/آخر عملية سُجّلت قبلها/);
   });
 });
 
@@ -486,14 +495,14 @@ describe('verifyRestore — the monthly test of §7.3, as one call', () => {
     // The assertion §12.17 requires by name. Not "the file opened" — that would pass
     // against a backup missing the most recent day of sales.
     expect(verification.recencyProven).toBe(true);
-    expect(verification.restore.integrity).toBe('ok');
+    expect(verification.restore?.integrity).toBe('ok');
     expect(verification.failure).toBeUndefined();
 
     // Verified from a destination, not from the staging file that never left the machine.
     expect(verification.verifiedFrom).toBe('local');
 
     const audited = await prisma.auditLog.count({
-      where: { action: AUDIT_ACTIONS.BACKUP_VERIFIED, entityId: verification.run.name },
+      where: { action: AUDIT_ACTIONS.BACKUP_VERIFIED, entityId: verification.run?.name },
     });
     expect(audited).toBe(1);
   });
@@ -511,6 +520,86 @@ describe('verifyRestore — the monthly test of §7.3, as one call', () => {
       },
     });
     expect(started).toBe(1);
+  });
+
+  /** A destination that refuses every write, in the words the OS would use. */
+  class RefusingDestination extends LocalDirectoryDestination {
+    constructor(private readonly osError: string) {
+      super('local', tempDir('walaa-refuse-'), 'نسخة محلية');
+    }
+
+    override async put(): Promise<never> {
+      throw Object.assign(new Error(this.osError), { code: this.osError.split(':')[0] });
+    }
+  }
+
+  it('a test that fails is a recorded result with a reason, not an unrecorded 500', async () => {
+    // This threw a plain Error — «لم تصل النسخة الاحتياطية إلى أي وجهة» — which the API
+    // answered as «حدث خطأ غير متوقع», and nothing was written to the trail.
+    const verification = await verifyRestore(context(), [
+      new RefusingDestination("EACCES: permission denied, open 'C:\\ProgramData\\Walaa\\backups\\x'"),
+    ]);
+
+    expect(verification.ok).toBe(false);
+    expect(verification.verifiedFrom).toBeNull();
+    // Names the destination and the remedy; never the OS's English, never a path.
+    expect(verification.failure).toMatch(/«نسخة محلية»/);
+    expect(verification.failure).not.toMatch(/[A-Za-z]/);
+
+    const history = await recentBackupHistory(world.merchantId);
+    expect(history.lastVerification).toMatchObject({ ok: false, failure: verification.failure });
+  });
+
+  it("a disk that fills during the test says so in the storage banner's words", async () => {
+    const verification = await verifyRestore(context(), [
+      new RefusingDestination('ENOSPC: no space left on device, write'),
+    ]);
+
+    expect(verification.ok).toBe(false);
+    expect(verification.failure).toMatch(/المساحة الحرة على القرص شبه منتهية/);
+    expect(verification.failure).toMatch(/فرّغ مساحة على هذا الجهاز الآن/);
+  });
+
+  it('a pass is the last result on record, with what the restored copy held', async () => {
+    const verification = await verifyRestore(context(), destinations());
+
+    const history = await recentBackupHistory(world.merchantId);
+    expect(history.lastVerification).toMatchObject({
+      ok: true,
+      verifiedFrom: 'local',
+      failure: null,
+      name: verification.run?.name,
+    });
+    expect(history.lastVerification?.counts?.customers).toBe(
+      verification.restore?.counts.customers,
+    );
+  });
+
+  it('a backup folder that cannot be made is a recorded failed test, not an exception', async () => {
+    // An external drive that is not plugged in, a mistyped path. Made concrete by
+    // pointing the folder at a path under a FILE, which no mkdir can satisfy. This used
+    // to throw before the test started, so nothing was recorded and the screen went on
+    // saying «لم يُجرَ اختبار استعادة بعد».
+    const blocker = join(tempDir('walaa-blocked-'), 'not-a-folder');
+    writeFileSync(blocker, 'x');
+    const previous = process.env.BACKUP_LOCAL_DIR;
+    process.env.BACKUP_LOCAL_DIR = join(blocker, 'backups');
+    resetEnvCache();
+
+    try {
+      const verification = await verifyRestore(context(), destinations());
+
+      expect(verification.ok).toBe(false);
+      expect(verification.run).toBeNull();
+      expect(verification.failure).toMatch(/تعذّر تجهيز مجلد النسخ الاحتياطي/);
+
+      const history = await recentBackupHistory(world.merchantId);
+      expect(history.lastVerification).toMatchObject({ ok: false, failure: verification.failure });
+    } finally {
+      if (previous === undefined) delete process.env.BACKUP_LOCAL_DIR;
+      else process.env.BACKUP_LOCAL_DIR = previous;
+      resetEnvCache();
+    }
   });
 });
 
