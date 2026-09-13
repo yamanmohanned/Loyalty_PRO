@@ -127,13 +127,18 @@ firewall profile or the address.
 
 **An untested backup is not a backup.** Do this on the day, not later.
 
-1. **الإعدادات → النسخ الاحتياطي** → «نسخ احتياطي الآن». It should report success and a
-   size.
-2. Press «اختبار الاستعادة». This takes a real archive, decrypts it, restores it to a
-   scratch file and reports what it found — customers, invoices, vouchers. If those
-   numbers look like the shop, the backup is real.
+1. **النسخ الاحتياطي** (in the rail) → «أخذ نسخة الآن». «آخر نسخة» should show today.
+2. In the «اختبار الاستعادة» card, press «اختبار الاستعادة الآن». It takes a real backup,
+   fetches it back from where it is kept, restores it to a scratch file and checks that the
+   last operation recorded before it is inside. The card then shows «نجح آخر اختبار
+   استعادة — <date>» and «في النسخة: N زبون وM فاتورة». If those numbers look like the
+   shop, the backup is real. A failure is shown in the same place, with its reason, until
+   the next test.
 3. Copy the newest `.walaabk` from `C:\ProgramData\Walaa\backups` onto a USB stick and
    take it away with you. Along with the key from §4, that is a complete recovery.
+4. **Google Drive** — the off-machine copy. Set it up from **الإعدادات → النسخ الاحتياطي
+   إلى Google Drive** following [`GOOGLE-DRIVE-SETUP.md`](GOOGLE-DRIVE-SETUP.md), then
+   press «اختبار الاتصال» and «ارفع نسخة الآن» before you leave.
 
 Backups run daily at 23:30 and after every 500 transactions.
 

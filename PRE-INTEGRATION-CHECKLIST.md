@@ -31,13 +31,16 @@ the run itself.
   simulated keyboard input. This is what proves the 16-digit card number (§12.12) survives
   the print → paper → scanner round trip, and that the scan field's three submit paths
   (Enter, Tab, sixteen digits — §12.13) match the shop's actual device.
-- [ ] **BLOCKED — Google Drive OAuth credentials.** A Google Cloud project and OAuth
-  client, which §7.3 names as a prerequisite. The Drive destination **has never run
-  against the real API** (§12.18); its logic is tested against a fake transport only. Until
-  this lands, 3-2-1 has two legs, not three, and the restore test cannot cover the offsite
-  copy. **First check when credentials arrive:** that Drive's real responses match the
-  shapes those fake-transport tests assume. Scope stays `drive.file` — requesting wider is
-  prohibited, not merely discouraged (§12.18, operator ruling).
+- [ ] **Google Drive against the real Google.** The owner now sets Drive up entirely from
+  Settings — client id and secret (stored encrypted), consent, account shown, a round-trip
+  test, upload now, restore from Drive — following
+  [`packaging/GOOGLE-DRIVE-SETUP.md`](packaging/GOOGLE-DRIVE-SETUP.md). All of it has run
+  on the packaged build against a local stand-in for Google only; **it has never run
+  against Google's servers.** That page's last section lists exactly what the first real
+  connection must prove (loopback redirect for a Desktop client, real error bodies,
+  about.get, a real upload/download/delete, the 7-day Testing expiry). Until it has, 3-2-1
+  has two legs, not three. Scope stays `drive.file` — requesting wider is prohibited, not
+  merely discouraged (§12.18, operator ruling).
 - [ ] **Real Al-Bayan captured bytes.** §12.6 ruled this non-blocking for *building*, and
   it was. It blocks *integration with the real POS*: the parser is proven only against the
   synthetic ESC/POS fixtures in `agent/fixtures/`. Put the real capture beside them and
