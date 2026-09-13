@@ -9,7 +9,17 @@ import {
 import { api } from '../../lib/api';
 import { useFormErrors } from '../../lib/form';
 import { locale } from '../../lib/locale';
-import { Button, Card, CardHeader, Chip, Field, Input, Notice, Select } from '../../components/ui';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Chip,
+  Field,
+  InlineFailure,
+  Input,
+  Notice,
+  Select,
+} from '../../components/ui';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -141,7 +151,11 @@ export function StaffSection() {
         {staff.isLoading ? (
           <p className="text-steel">{locale.common.loading}</p>
         ) : staff.isError ? (
-          <Notice tone="danger">{locale.common.errorBody}</Notice>
+          <InlineFailure
+            what={locale.failure.what.staff}
+            error={staff.error}
+            onRetry={() => void staff.refetch()}
+          />
         ) : (
           <ul className="divide-y divide-border">
             {(staff.data?.users ?? []).map((user) => (

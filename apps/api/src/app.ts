@@ -238,6 +238,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // balancer rather than on the balancer itself.
     trustProxy: true,
     /*
+      Eight hex characters rather than Fastify's `req-1`, `req-2`…
+
+      The id is now shown to the merchant as «الرقم المرجعي» for support to look up, and
+      Fastify's counter restarts at `req-1` with every service start — so the same
+      reference would name a different request after each reboot. Random ids stay
+      distinct across restarts, and eight characters are short enough to read aloud.
+    */
+    genReqId: () => globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 8),
+    /*
       Passed ONLY in test, and that is what silences FSTDEP023 in production.
 
       Fastify 5 warns on the top-level `disableRequestLogging` and removes it in 6, so

@@ -58,7 +58,7 @@ export function ModulesScreen() {
       <Card>
         <CardHeader title={locale.modules.title} />
         {isError ? (
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.modules} error={loadError} onRetry={() => void refetch()} />
         ) : isLoading || !data ? (
           <SkeletonTable rows={6} columns={2} />
         ) : (

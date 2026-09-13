@@ -134,7 +134,7 @@ export function DiscountsScreen() {
           subtitle={locale.discounts.subtitle}
         />
         <Card>
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.discounts} error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

@@ -239,7 +239,11 @@ function PaperWidthPanel(): JSX.Element {
     return (
       <Card className="mt-6">
         <CardHeader title={locale.capture.paperTitle} />
-        <ErrorState error={printing.error} onRetry={() => void printing.refetch()} />
+        <ErrorState
+          what={locale.failure.what.capturePrinting}
+          error={printing.error}
+          onRetry={() => void printing.refetch()}
+        />
       </Card>
     );
   }

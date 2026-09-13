@@ -123,6 +123,18 @@ function present(status: StorageStatus): Presentation | null {
   }
 }
 
+/**
+ * The drive letter, and nothing else of the path.
+ *
+ * The whole path was printed here — `C:/Users/<account>/…` on a development layout,
+ * `C:\ProgramData\Walaa` on a shop's — which disclosed the Windows account name and
+ * gave the merchant nothing to act on. The disk is the useful fact: it is what he
+ * frees space on.
+ */
+function volumeOf(path: string | null): string | null {
+  return path ? (/^[A-Za-z]:/.exec(path)?.[0].toUpperCase() ?? null) : null;
+}
+
 export function StorageBanner({ status }: { status: StorageStatus | undefined }) {
   if (!status) return null;
 
@@ -156,9 +168,14 @@ export function StorageBanner({ status }: { status: StorageStatus | undefined })
               </p>
             </>
           )}
-          <p className="font-mono text-xs text-steel" dir="ltr">
-            {status.path}
-          </p>
+          {volumeOf(status.path) ? (
+            <p className="text-xs text-steel">
+              {locale.storage.volumeLabel}{' '}
+              <bdi className="font-mono" dir="ltr">
+                {volumeOf(status.path)}
+              </bdi>
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

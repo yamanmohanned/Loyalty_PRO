@@ -139,6 +139,20 @@ const NAV_ITEMS = [
 ];
 
 /**
+ * The name of the screen at `pathname`, as the rail spells it.
+ *
+ * Handed to the route boundary so a crash says WHICH screen failed — «تعذّر عرض شاشة
+ * «بطاقات الولاء»» — rather than the anonymous «حدث خطأ» the merchant reported.
+ */
+function screenName(pathname: string): string {
+  if (pathname.startsWith('/customers/')) return locale.failure.customerDetailScreen;
+  const item = NAV_ITEMS.find((nav) =>
+    nav.end ? pathname === nav.to : pathname === nav.to || pathname.startsWith(`${nav.to}/`),
+  );
+  return item?.label ?? locale.nav.overview;
+}
+
+/**
  * Does the window have room for the rail's labels?
  *
  * `useSyncExternalStore` over a `matchMedia` list rather than a resize listener with
@@ -466,7 +480,7 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
             subsequent route renders the error card — the fix for one screen would
             break all of them.
           */}
-          <RouteErrorBoundary key={pathname}>
+          <RouteErrorBoundary key={pathname} screen={screenName(pathname)}>
           <Routes>
             <Route path="/" element={<OverviewScreen />} />
             <Route path="/customers" element={<CustomersScreen />} />

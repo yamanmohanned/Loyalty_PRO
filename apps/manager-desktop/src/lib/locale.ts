@@ -1236,6 +1236,59 @@ export const locale = {
     unknownTitle: 'تعذّرت قراءة المساحة الحرة',
     unknownBody: 'لم يستطع البرنامج قياس المساحة الفارغة على هذا الجهاز. التسجيل مستمر، لكن لن يصلك تنبيه إذا امتلأ القرص — تواصل مع الدعم الفني.',
     freeLabel: 'المساحة المتبقية',
+    /* Beside the drive letter. The banner used to print the full data path —
+       «C:/Users/<name>/…» — which named the Windows account and told the merchant
+       nothing he could use. Which disk is the useful fact. */
+    volumeLabel: 'القرص',
+  },
+
+  /**
+   * What a screen says when it could not do its job — see `lib/failure.ts`.
+   *
+   * Every sentence here passes one test: if the merchant does exactly what it says, the
+   * situation resolves. Where only support can resolve it, the sentence says so and the
+   * screen shows the reference that finds the log line.
+   */
+  failure: {
+    loadTitle: (what: string) => `تعذّر تحميل ${what}`,
+    crashTitle: (screen: string) => `تعذّر عرض شاشة «${screen}»`,
+    crashBody:
+      'هذا خلل في البرنامج نفسه، وليس في بياناتك ولا في هذا الجهاز — لم يُحفظ ولم يُحذف شيء بسببه، وبقية الشاشات تعمل. اختر شاشة أخرى من القائمة لمتابعة عملك، وأبلغ الدعم الفني باسم هذه الشاشة وبالرقم المرجعي أدناه ليصلك تحديث يصلحها.',
+    reference: 'الرقم المرجعي',
+    network:
+      'لم يستجب خادم ولاء. إن كان قد أُعيد تشغيله للتو فاضغط «إعادة المحاولة» بعد لحظات؛ وإن تكرّر فأغلق البرنامج وافتحه من جديد لتظهر لك حالة الخدمة وما يجب فعله.',
+    /* Appended to `storage.criticalTitle`, so the first half is the banner's own title
+       and «فرّغ مساحة على هذا الجهاز الآن» is the banner's own instruction. */
+    diskFullSuffix: '، ولهذا لم يكتمل هذا الطلب. فرّغ مساحة على هذا الجهاز الآن، ثم اضغط «إعادة المحاولة».',
+    readOnly:
+      'لا يستطيع البرنامج الكتابة في ملف قاعدة بيانات المتجر على هذا الجهاز — صلاحيات الملف أو مجلده تمنع ذلك. البيانات المحفوظة سليمة، لكن لن يُحفظ شيء جديد حتى يُصلَح هذا، ولا يُصلَح من داخل البرنامج: تواصل مع الدعم الفني الآن.',
+    ioError:
+      'القرص على هذا الجهاز أعاد خطأ عند القراءة أو الكتابة، وقد يكون يتعطّل. خذ نسخة احتياطية الآن من شاشة «النسخ الاحتياطي»، وتواصل مع الدعم الفني لفحص القرص.',
+    databaseDamaged:
+      'ملف قاعدة البيانات تالف في الجزء الذي يحوي هذه البيانات. لا تحذف أي ملف. استعد آخر نسخة سليمة من شاشة «النسخ الاحتياطي» ← «استعادة هذه النسخة»، أو تواصل مع الدعم الفني.',
+    forbiddenRemedy: 'ادخل بحساب المالك إن كنت تحتاج هذا.',
+    unexpected:
+      'خلل غير متوقع في البرنامج — لم يتغيّر شيء في بياناتك. اضغط «إعادة المحاولة»؛ وإن تكرّر فتواصل مع الدعم الفني.',
+    unexpectedWithReference:
+      'خلل غير متوقع في البرنامج — لم يتغيّر شيء في بياناتك. اضغط «إعادة المحاولة»؛ وإن تكرّر فأبلغ الدعم الفني بالرقم المرجعي أدناه.',
+    /** The one routed screen with no rail entry of its own. */
+    customerDetailScreen: 'تفاصيل الزبون',
+    /** What each screen or panel was loading — the noun in «تعذّر تحميل …». */
+    what: {
+      overview: 'ملخّص المتجر',
+      customers: 'قائمة الزبائن',
+      customer: 'بيانات هذا الزبون',
+      customerRules: 'قواعد الخصم المطبّقة على هذا الزبون',
+      discounts: 'قواعد الخصم',
+      reports: 'التقارير',
+      capturePrinting: 'إعداد ورق الطباعة',
+      cards: 'دفعات بطاقات الولاء',
+      backup: 'حالة النسخ الاحتياطي',
+      modules: 'الوحدات',
+      staff: 'قائمة الموظفين',
+      drive: 'حالة Google Drive',
+      keyStatus: 'حالة مفتاح التشفير',
+    },
   },
 
   roles: { OWNER: 'مالك', MANAGER: 'مدير', STATION: 'محطة', AGENT: 'وكيل الالتقاط' },

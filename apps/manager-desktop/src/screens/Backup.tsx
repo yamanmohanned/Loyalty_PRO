@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, CheckCircle2, CloudOff, DatabaseBackup, HardDrive, MinusCircle, RotateCcw, Usb } from 'lucide-react';
-import { api, ApiRequestError } from '../lib/api';
+import { api } from '../lib/api';
+import { failureSentence } from '../lib/failure';
 import { locale, formatDateTime } from '../lib/locale';
 import {
   Button,
@@ -95,7 +96,11 @@ export function BackupScreen() {
           — a screen that looks finished and is empty. */}
       {overview.isError ? (
         <Card>
-          <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
+          <ErrorState
+            what={locale.failure.what.backup}
+            error={overview.error}
+            onRetry={() => void overview.refetch()}
+          />
         </Card>
       ) : overview.isLoading ? (
         <div className="space-y-4">
@@ -168,9 +173,7 @@ export function BackupScreen() {
             </div>
             {run.error ? (
               <div className="px-6 pb-6">
-                <Notice tone="danger">
-                  {run.error instanceof ApiRequestError ? run.error.message : locale.common.error}
-                </Notice>
+                <Notice tone="danger">{failureSentence(run.error)}</Notice>
               </div>
             ) : null}
           </Card>
@@ -210,11 +213,7 @@ export function BackupScreen() {
               ) : null}
 
               {verify.error ? (
-                <Notice tone="danger">
-                  {verify.error instanceof ApiRequestError
-                    ? verify.error.message
-                    : locale.common.error}
-                </Notice>
+                <Notice tone="danger">{failureSentence(verify.error)}</Notice>
               ) : null}
             </div>
           </Card>

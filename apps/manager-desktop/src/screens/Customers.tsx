@@ -30,6 +30,7 @@ import {
   tableRow,
   td,
   th,
+  InlineFailure,
 } from '../components/ui';
 
 
@@ -193,11 +194,11 @@ export function CustomersScreen() {
             also true while the very first request is in flight, so a slow response
             rendered the failure card before it had failed. */}
         {isError ? (
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.customers} error={loadError} onRetry={() => void refetch()} />
         ) : isLoading ? (
           <SkeletonTable rows={6} columns={6} />
         ) : !data ? (
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.customers} error={loadError} onRetry={() => void refetch()} />
         ) : data.customers.length === 0 ? (
           <EmptyState
             icon={<Users size={22} aria-hidden />}
@@ -364,7 +365,7 @@ export function CustomerDetailScreen() {
   if (isError) {
     return (
       <Card>
-        <ErrorState error={loadError} onRetry={() => void refetch()} />
+        <ErrorState what={locale.failure.what.customer} error={loadError} onRetry={() => void refetch()} />
       </Card>
     );
   }
@@ -380,7 +381,7 @@ export function CustomerDetailScreen() {
   if (!data) {
     return (
       <Card>
-        <ErrorState error={loadError} onRetry={() => void refetch()} />
+        <ErrorState what={locale.failure.what.customer} error={loadError} onRetry={() => void refetch()} />
       </Card>
     );
   }
@@ -481,7 +482,13 @@ export function CustomerDetailScreen() {
           }
         />
         <div className="space-y-2 p-6">
-          {rules.isLoading || !rules.data ? (
+          {rules.isError ? (
+            <InlineFailure
+              what={locale.failure.what.customerRules}
+              error={rules.error}
+              onRetry={() => void rules.refetch()}
+            />
+          ) : rules.isLoading || !rules.data ? (
             <SkeletonTable rows={3} columns={2} />
           ) : rules.data.rules.length === 0 ? (
             <p className="text-base text-steel">{locale.reports.tierEmpty}</p>

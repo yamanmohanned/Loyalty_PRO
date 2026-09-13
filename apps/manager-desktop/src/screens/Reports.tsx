@@ -66,7 +66,7 @@ import {
 export function ReportsScreen() {
   const [range, setRange] = useState<ReportRange>('30d');
 
-  const { data, isLoading, isError, isFetching, refetch } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch, error: loadError } = useQuery({
     // The range is part of the key, so each window caches rather than refetching.
     queryKey: ['programme-report', range],
     queryFn: () => api.get<ProgrammeReportResponse>(`/reports/programme?range=${range}`),
@@ -94,7 +94,7 @@ export function ReportsScreen() {
       <>
         {header}
         <Card>
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.reports} error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

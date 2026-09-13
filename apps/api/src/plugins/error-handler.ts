@@ -1,8 +1,25 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
+import type { StorageFailureCause } from '@walaa/shared-types';
 import { AppError } from '../lib/errors';
-import { isStorageFailure, isUniqueViolation } from '../lib/prisma';
+import { isDatabaseDamaged, isUniqueViolation, storageFailureCause } from '../lib/prisma';
 import { isContentionError } from '../lib/write-transaction';
+import { lastStorageLevel } from '../services/storage.service';
+
+/**
+ * Why a write could not be stored, settled by measurement where the words are ambiguous.
+ *
+ * SQLite answers a WAL it cannot extend with «attempt to write a readonly database» —
+ * the same words as a permissions fault — so the driver's message alone would tell a
+ * merchant with a full disk to call support about file permissions. The sampler's last
+ * reading is the tiebreak: if the disk is CRITICAL, the disk is the cause. A cause the
+ * words do not name at all is left null, and the dashboard shows the API's own sentence.
+ */
+function storageCause(error: unknown): StorageFailureCause | null {
+  const cause = storageFailureCause(error);
+  if (lastStorageLevel() === 'CRITICAL' && cause !== null) return 'DISK_FULL';
+  return cause;
+}
 
 /**
  * The single exit point for every failure (CLAUDE.md §9).
@@ -42,7 +59,14 @@ export function registerErrorHandler(app: FastifyInstance): void {
       } else {
         request.log.info({ code: error.code }, 'request rejected');
       }
-      reply.status(error.statusCode).send(error.toEnvelope(request.id));
+      const envelope = error.toEnvelope(request.id);
+      // A service that caught a storage failure and rethrew it as STORAGE_UNAVAILABLE
+      // (the core loop does) still owes the dashboard its cause.
+      if (error.code === 'STORAGE_UNAVAILABLE' && envelope.error.details === undefined) {
+        const cause = storageCause(error.cause);
+        if (cause) envelope.error.details = { cause };
+      }
+      reply.status(error.statusCode).send(envelope);
       return;
     }
 
@@ -82,12 +106,30 @@ export function registerErrorHandler(app: FastifyInstance): void {
     // raise the alarm is the operator looking at this response (§12.15, §12.16).
     // Logged at error with the cause, because the message the client gets deliberately
     // does not carry it.
-    if (isStorageFailure(error)) {
-      request.log.error({ err: error }, 'datastore could not accept a write');
+    const cause = storageCause(error);
+    if (cause) {
+      request.log.error({ err: error, cause }, 'datastore could not accept a write');
       reply.status(507).send({
         error: {
           code: 'STORAGE_UNAVAILABLE',
+          // The Station's sentence, unchanged: a cashier's move is the same for all
+          // three causes. The dashboard reads `details.cause` and says which it is.
           message: 'تعذّر حفظ العملية — أبلغ الإدارة فوراً',
+          details: { cause },
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    // The file itself no longer parses. Its own code, because the remedy — restore a
+    // backup — is unlike any other failure's, and retrying cannot help.
+    if (isDatabaseDamaged(error)) {
+      request.log.error({ err: error }, 'database file is damaged');
+      reply.status(500).send({
+        error: {
+          code: 'DATABASE_DAMAGED',
+          message: 'تعذّر إتمام العملية — أبلغ الإدارة فوراً',
           requestId: request.id,
         },
       });

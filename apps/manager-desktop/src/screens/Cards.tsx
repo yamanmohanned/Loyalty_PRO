@@ -133,7 +133,7 @@ export function CardsScreen() {
       <>
         {header}
         <Card>
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.cards} error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );
@@ -267,7 +267,11 @@ export function CardsScreen() {
           </div>
         ) : data.batches.length === 0 ? (
           <Card>
-            <EmptyState icon={CreditCard} title={locale.cards.empty} body={locale.cards.emptyBody} />
+            <EmptyState
+              icon={<CreditCard size={22} aria-hidden />}
+              title={locale.cards.empty}
+              body={locale.cards.emptyBody}
+            />
           </Card>
         ) : (
           <div className="space-y-6">

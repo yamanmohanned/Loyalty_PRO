@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import type { StorageFailureCause } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
 
 /**
@@ -227,30 +228,62 @@ export const isBusyError = (error: unknown): boolean => {
  * treats any failed write as unsaved (§12.16). Matching only sharpens the wording
  * and the server-side log; missing a signature costs precision, not safety.
  */
-const STORAGE_FAILURE_SIGNATURES = [
-  'SQLITE_FULL',
-  'database or disk is full',
-  'SQLITE_IOERR',
-  'disk I/O error',
-  'ENOSPC',
-  'no space left on device',
+const STORAGE_FAILURE_SIGNATURES: Readonly<Record<StorageFailureCause, readonly string[]>> = {
+  DISK_FULL: ['SQLITE_FULL', 'database or disk is full', 'ENOSPC', 'no space left on device'],
   // SQLite reports a database it cannot write to — including one whose WAL cannot be
-  // extended — as readonly. A permissions fault produces the same words, and both
-  // mean the same thing to a cashier: this sale was not saved.
-  'attempt to write a readonly database',
-  'SQLITE_READONLY',
-];
+  // extended — as readonly. A permissions fault produces the same words. The words
+  // alone therefore cannot tell a full disk from a locked-down file; the error handler
+  // settles it with the measured free space, which can.
+  READ_ONLY: ['attempt to write a readonly database', 'SQLITE_READONLY'],
+  IO_ERROR: ['SQLITE_IOERR', 'disk I/O error'],
+};
 
-/** True when a write failed because the datastore could not store it (§12.15). */
-export function isStorageFailure(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
+/** Most specific first: a message naming both a full disk and an I/O error is a full disk. */
+const CAUSE_PRECEDENCE: readonly StorageFailureCause[] = ['DISK_FULL', 'READ_ONLY', 'IO_ERROR'];
 
-  const haystack = [
+/** The driver's message and code, lowercased, or null for something that is not an error. */
+function errorHaystack(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  return [
     error instanceof Error ? error.message : '',
     String((error as { code?: unknown }).code ?? ''),
   ]
     .join(' ')
     .toLowerCase();
+}
 
-  return STORAGE_FAILURE_SIGNATURES.some((signature) => haystack.includes(signature.toLowerCase()));
+/** Why the datastore could not store a write, by the driver's own words — or null. */
+export function storageFailureCause(error: unknown): StorageFailureCause | null {
+  const haystack = errorHaystack(error);
+  if (!haystack) return null;
+  return (
+    CAUSE_PRECEDENCE.find((cause) =>
+      STORAGE_FAILURE_SIGNATURES[cause].some((signature) =>
+        haystack.includes(signature.toLowerCase()),
+      ),
+    ) ?? null
+  );
+}
+
+/** True when a write failed because the datastore could not store it (§12.15). */
+export function isStorageFailure(error: unknown): boolean {
+  return storageFailureCause(error) !== null;
+}
+
+/**
+ * The database file itself is damaged.
+ *
+ * Distinct from a storage failure: the disk has room and accepts writes, and the file
+ * on it no longer parses. Retrying does nothing; restoring a backup does.
+ */
+const DAMAGE_SIGNATURES = [
+  'SQLITE_CORRUPT',
+  'database disk image is malformed',
+  'SQLITE_NOTADB',
+  'file is not a database',
+];
+
+export function isDatabaseDamaged(error: unknown): boolean {
+  const haystack = errorHaystack(error);
+  return haystack !== null && DAMAGE_SIGNATURES.some((s) => haystack.includes(s.toLowerCase()));
 }

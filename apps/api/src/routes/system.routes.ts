@@ -14,6 +14,14 @@ import { buildDemoShop, isDemoBuild } from '../services/demo.service';
 
 const UpdatePrintingRequestSchema = z.object({ paperWidth: PaperWidthSchema }).strict();
 
+const ClientErrorReportSchema = z
+  .object({
+    screen: z.string().trim().min(1).max(80),
+    message: z.string().max(500),
+    stack: z.string().max(4000).optional(),
+  })
+  .strict();
+
 /**
  * Host telemetry the manager needs to act on (CLAUDE_v3.md §12.15).
  *
@@ -50,6 +58,31 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
     requireDashboardRole(request);
     return currentStorageStatus();
   });
+
+  /**
+   * A dashboard screen that crashed while drawing, reported into this service's log.
+   *
+   * The dashboard's console is a place nobody will ever look on a shop PC; this log is
+   * the one file support can be sent. The response is the request id, which the screen
+   * shows as «الرقم المرجعي» and which is the `reqId` on the log line — so "the Cards
+   * screen shows 3f9a1c2b" finds the stack in one search.
+   *
+   * Bounded and rate-limited: a render loop must not be able to fill the disk this
+   * product spends so much effort protecting.
+   */
+  app.post(
+    '/client-errors',
+    {
+      config: { roles: DASHBOARD_ROLES, rateLimit: { max: 30, timeWindow: '1 minute' } },
+      schema: { body: ClientErrorReportSchema },
+    },
+    async (request) => {
+      requireDashboardRole(request);
+      const report = request.body as z.infer<typeof ClientErrorReportSchema>;
+      request.log.error({ clientError: report }, 'dashboard screen failed to render');
+      return { reference: request.id };
+    },
+  );
 
   /**
    * The Loyalty Station's thermal roll width (§5).

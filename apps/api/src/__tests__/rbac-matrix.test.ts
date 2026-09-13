@@ -209,6 +209,10 @@ const CASES: Case[] = [
   // shop rather than about an operator's shift.
   { method: 'GET', path: '/system/printing', allowed: DASHBOARD },
   { method: 'PUT', path: '/system/printing', allowed: DASHBOARD },
+  // A dashboard screen that crashed while drawing, into the service log (the
+  // «الرقم المرجعي» on the crash card). Dashboard-only: the Station has its own UI and
+  // an unauthenticated caller must not be able to write to the log at all.
+  { method: 'POST', path: '/system/client-errors', allowed: DASHBOARD },
 
   /* ── Staff accounts ─────────────────────────────────────────────────────────
 
@@ -429,6 +433,7 @@ describe('the route inventory', () => {
         'POST /api/v1/scan/card',
         'POST /api/v1/scan/identify',
         'POST /api/v1/sync/batch',
+        'POST /api/v1/system/client-errors',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',
         'PUT /api/v1/discount/rules',

@@ -9,7 +9,16 @@ import type {
 import { api } from '../../lib/api';
 import { useFormErrors } from '../../lib/form';
 import { locale } from '../../lib/locale';
-import { Button, Card, CardHeader, Chip, Field, Input, Notice } from '../../components/ui';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Chip,
+  Field,
+  InlineFailure,
+  Input,
+  Notice,
+} from '../../components/ui';
 
 /**
  * Google Drive, as the merchant sees it.
@@ -93,7 +102,7 @@ export function DriveSection() {
             } else if (progress.state === 'FAILED') {
               stopPolling();
               setNotice(null);
-              errors.rejectForm(progress.failure?.message ?? locale.common.error);
+              errors.rejectForm(progress.failure?.message ?? locale.failure.unexpected);
             }
           })
           .catch(() => {
@@ -134,7 +143,13 @@ export function DriveSection() {
     <Card>
       <CardHeader title={locale.settings.drive.title} />
       <div className="space-y-5 p-6">
-        {status.isLoading || !data ? (
+        {status.isError ? (
+          <InlineFailure
+            what={locale.failure.what.drive}
+            error={status.error}
+            onRetry={() => void status.refetch()}
+          />
+        ) : status.isLoading || !data ? (
           <p className="text-steel">{locale.common.loading}</p>
         ) : (
           <>

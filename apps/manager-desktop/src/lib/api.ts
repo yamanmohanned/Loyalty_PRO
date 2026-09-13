@@ -52,9 +52,23 @@ export class ApiRequestError extends Error {
     readonly code: string,
     message: string,
     readonly fields?: Array<{ path: string; message: string }>,
+    /**
+     * The envelope's extras. `requestId` is what a merchant reads to support as «الرقم
+     * المرجعي» and what support finds in the service log; `details` carries, among other
+     * things, why a write could not be stored — see `lib/failure.ts`.
+     */
+    readonly extra: { requestId?: string; details?: unknown } = {},
   ) {
     super(message);
     this.name = 'ApiRequestError';
+  }
+
+  get requestId(): string | undefined {
+    return this.extra.requestId;
+  }
+
+  get details(): unknown {
+    return this.extra.details;
   }
 }
 
@@ -90,6 +104,7 @@ async function parse<T>(response: Response): Promise<T> {
     envelope?.error?.code ?? 'INTERNAL_ERROR',
     envelope?.error?.message ?? 'حدث خطأ غير متوقع',
     envelope?.error?.fields,
+    { requestId: envelope?.error?.requestId, details: envelope?.error?.details },
   );
 }
 

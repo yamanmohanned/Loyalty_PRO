@@ -1,8 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { createContext, useContext, useId, type ReactNode } from 'react';
+import { createContext, useContext, useId, type ReactElement, type ReactNode } from 'react';
 import { AlertTriangle, Minus, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react';
-import { ApiRequestError } from '../lib/api';
+import { describeFailure } from '../lib/failure';
 import { locale } from '../lib/locale';
 
 /**
@@ -1142,7 +1142,15 @@ export function EmptyState({
   body,
   action,
 }: {
-  icon?: ReactNode;
+  /**
+   * An element — `<CreditCard size={22} aria-hidden />` — never the component itself.
+   *
+   * Typed `ReactNode` it accepted `icon={CreditCard}`: a lucide icon is a forwardRef
+   * object, which React refuses to render as a child, so the Cards screen crashed on
+   * every visit with no batches yet — the merchant's «حدث خطأ». `ReactElement` makes
+   * that a compile error.
+   */
+  icon?: ReactElement;
   title: string;
   body?: string;
   action?: ReactNode;
@@ -1188,22 +1196,85 @@ export function EmptyState({
  * never completed (status 0 — the backend went away mid-session, and reopening routes to
  * `BackendGate`) and a failure that is not an API error at all.
  */
-export function ErrorState({ onRetry, error }: { onRetry?: () => void; error?: unknown }) {
-  const body =
-    error instanceof ApiRequestError && error.status !== 0 ? error.message : locale.common.errorBody;
+/*
+ * ── And it now says WHAT failed and WHY, which is the class fix ──────────────
+ *
+ * The title was «حدث خطأ» on every screen. `what` is required — a call site cannot
+ * render this without naming what it was loading — and the body comes from
+ * `describeFailure`, which names the cause and its remedy: the banner's own words for
+ * a full disk, the file's permissions, a failing disk, a damaged database, a service
+ * that stopped answering, or — for a defect of ours — the reference support looks up.
+ * `error` is required too, because a failure rendered without its cause is the generic
+ * message by another route (Reports did exactly that).
+ */
+export function ErrorState({
+  what,
+  error,
+  onRetry,
+}: {
+  what: string;
+  error: unknown;
+  onRetry?: () => void;
+}) {
+  const failure = describeFailure(error);
   return (
     <EmptyState
       icon={<AlertTriangle size={22} aria-hidden />}
-      title={locale.common.error}
-      body={body}
+      title={locale.failure.loadTitle(what)}
+      body={failure.body}
       action={
-        onRetry ? (
+        <div className="flex flex-col items-center gap-3">
+          {failure.reference ? <FailureReference value={failure.reference} /> : null}
+          {onRetry ? (
+            <Button variant="ghost" onClick={onRetry}>
+              {locale.common.retry}
+            </Button>
+          ) : null}
+        </div>
+      }
+    />
+  );
+}
+
+/**
+ * The same, sized for a panel inside a screen that otherwise loaded — the staff list in
+ * Settings, the rules card on a customer. A full-height empty state there would push the
+ * working half of the screen out of view.
+ */
+export function InlineFailure({
+  what,
+  error,
+  onRetry,
+}: {
+  what: string;
+  error: unknown;
+  onRetry?: () => void;
+}) {
+  const failure = describeFailure(error);
+  return (
+    <Notice tone="danger" title={locale.failure.loadTitle(what)}>
+      <div className="space-y-2">
+        <p>{failure.body}</p>
+        {failure.reference ? <FailureReference value={failure.reference} /> : null}
+        {onRetry ? (
           <Button variant="ghost" onClick={onRetry}>
             {locale.common.retry}
           </Button>
-        ) : undefined
-      }
-    />
+        ) : null}
+      </div>
+    </Notice>
+  );
+}
+
+/** «الرقم المرجعي: 3f9a1c2b» — the server's request id, which finds the log line. */
+export function FailureReference({ value }: { value: string }) {
+  return (
+    <p className="text-sm text-steel">
+      {locale.failure.reference}:{' '}
+      <bdi className="font-mono text-ink" dir="ltr">
+        {value}
+      </bdi>
+    </p>
   );
 }
 

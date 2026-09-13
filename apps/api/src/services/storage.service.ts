@@ -152,6 +152,17 @@ export function readFreeSpace(path: string): { freeBytes: number; totalBytes: nu
 
 let current: StorageStatus | null = null;
 
+/**
+ * The last verdict, without taking a new reading. Null before the first sample.
+ *
+ * Synchronous on purpose: the error handler uses it to tell a full disk from a
+ * permissions fault while it is answering a failed write, and must not start disk I/O
+ * of its own on a volume that has just refused some.
+ */
+export function lastStorageLevel(): StorageLevel | null {
+  return current?.level ?? null;
+}
+
 export interface SampleOptions {
   logger?: FastifyBaseLogger;
   /**

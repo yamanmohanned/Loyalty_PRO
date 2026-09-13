@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { registerErrorHandler } from '../plugins/error-handler';
-import { isStorageFailure } from '../lib/prisma';
+import { isStorageFailure, storageFailureCause } from '../lib/prisma';
 
 /**
  * A datastore that cannot store must not answer like a bug (CLAUDE_v3.md §12.15,
@@ -81,6 +81,45 @@ describe('the response a failed write produces', () => {
     expect(response.body).not.toContain('SQLITE_FULL');
     expect(response.body).not.toContain('/data/x.db');
     expect(response.json().error.requestId).toBeTruthy();
+
+    await app.close();
+  });
+
+  it.each([
+    ['SQLITE_FULL: database or disk is full', 'DISK_FULL'],
+    ['ENOSPC: no space left on device, write', 'DISK_FULL'],
+    ['attempt to write a readonly database', 'READ_ONLY'],
+    ['Error writing to the database: disk I/O error', 'IO_ERROR'],
+  ])('carries the cause of %s so the manager is told which remedy applies', async (message, cause) => {
+    // The Station's sentence stays one sentence; the dashboard needs to know which of
+    // three different things to tell the manager to do.
+    const app = await appThrowing(new Error(message));
+
+    const body = (await app.inject({ method: 'GET', url: '/boom' })).json();
+
+    expect(body.error.code).toBe('STORAGE_UNAVAILABLE');
+    expect(body.error.details).toEqual({ cause });
+
+    await app.close();
+  });
+
+  it('prefers the full-disk cause when a message names an I/O error and a full disk', () => {
+    expect(storageFailureCause(new Error('SQLITE_IOERR: write failed: ENOSPC'))).toBe('DISK_FULL');
+  });
+
+  it.each([
+    ['database disk image is malformed'],
+    ['SQLITE_NOTADB: file is not a database'],
+  ])('answers DATABASE_DAMAGED for %s, never INTERNAL_ERROR', async (message) => {
+    // A damaged file is not a bug of ours and retrying cannot fix it; its remedy is a
+    // restore, and the dashboard can only say so if the code tells it.
+    const app = await appThrowing(new Error(message));
+
+    const response = await app.inject({ method: 'GET', url: '/boom' });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json().error.code).toBe('DATABASE_DAMAGED');
+    expect(response.body).not.toContain('malformed');
 
     await app.close();
   });

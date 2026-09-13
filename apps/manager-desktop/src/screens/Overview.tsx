@@ -289,7 +289,7 @@ export function OverviewScreen() {
       <>
         {header}
         <Card>
-          <ErrorState error={loadError} onRetry={() => void refetch()} />
+          <ErrorState what={locale.failure.what.overview} error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

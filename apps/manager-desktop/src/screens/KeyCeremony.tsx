@@ -4,7 +4,8 @@ import { AlertOctagon, KeyRound, LogOut, Printer, ShieldCheck } from 'lucide-rea
 import { api, ApiRequestError } from '../lib/api';
 import type { KeyStatus } from '@walaa/shared-types';
 import { locale, formatDate, formatDateTime } from '../lib/locale';
-import { Button, Card, Field, Input, Notice } from '../components/ui';
+import { Button, Card, ErrorState, Field, Input, Notice } from '../components/ui';
+import { failureSentence } from '../lib/failure';
 
 /**
  * The backup key ceremony (CLAUDE_v3.md §7.3, §12.19).
@@ -97,7 +98,7 @@ export function KeyCeremonyScreen({
   const reveal = useMutation({
     mutationFn: () => api.post<{ key: string }>('/backup/key/reveal'),
     onSuccess: ({ key }) => setRevealed(key),
-    onError: (e) => setError(e instanceof ApiRequestError ? e.message : locale.common.error),
+    onError: (e) => setError(failureSentence(e)),
   });
 
   const confirm = useMutation({
@@ -115,11 +116,25 @@ export function KeyCeremonyScreen({
       setError(
         e instanceof ApiRequestError && e.code === 'VALIDATION_FAILED'
           ? locale.keyCeremony.mismatch
-          : e instanceof ApiRequestError
-            ? e.message
-            : locale.common.error,
+          : failureSentence(e),
       ),
   });
+
+  /* Without this a failed status request fell through to the ceremony with no key
+     status at all — a page of instructions about a key the screen could not describe. */
+  if (status.isError) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center px-8">
+        <Card className="w-full max-w-xl">
+          <ErrorState
+            what={locale.failure.what.keyStatus}
+            error={status.error}
+            onRetry={() => void status.refetch()}
+          />
+        </Card>
+      </div>
+    );
+  }
 
   if (status.isLoading) {
     return (

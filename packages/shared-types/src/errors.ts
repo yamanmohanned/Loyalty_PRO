@@ -44,10 +44,28 @@ export const ApiErrorCodeSchema = z.enum([
    * showing a generic failure to somebody standing at a counter.
    */
   'CARD_NOT_ISSUABLE',
+  /**
+   * SQLite found the database file itself damaged — «database disk image is malformed»,
+   * «file is not a database». Not a bug of ours and not a full disk: the remedy is a
+   * restore, and a screen that called it «حدث خطأ» sent the merchant to retry a read
+   * that will fail the same way every time.
+   */
+  'DATABASE_DAMAGED',
   'INTERNAL_ERROR',
 ]);
 
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
+
+/**
+ * Why a STORAGE_UNAVAILABLE write failed, carried as `details.cause`.
+ *
+ * The code alone was one sentence for three situations with three different remedies:
+ * free some space, get the file's permissions fixed, or get the disk looked at. The
+ * Station keeps one message for all three — a cashier's move is the same — but the
+ * manager's screen must say which, because the manager is the one who acts on it.
+ */
+export const StorageFailureCauseSchema = z.enum(['DISK_FULL', 'READ_ONLY', 'IO_ERROR']);
+export type StorageFailureCause = z.infer<typeof StorageFailureCauseSchema>;
 
 export const ApiErrorSchema = z.object({
   error: z.object({
@@ -87,5 +105,6 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   STORAGE_UNAVAILABLE: 507,
   BACKUP_BLOCKED: 409,
   CARD_NOT_ISSUABLE: 409,
+  DATABASE_DAMAGED: 500,
   INTERNAL_ERROR: 500,
 };
