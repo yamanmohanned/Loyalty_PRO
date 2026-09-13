@@ -41,7 +41,7 @@ export function DiscountsScreen() {
   const [saved, setSaved] = useState(false);
   const errors = useFormErrors();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, error: loadError } = useQuery({
     queryKey: ['discount-config'],
     queryFn: () => api.get<DiscountConfigResponse>('/discount'),
   });
@@ -134,7 +134,7 @@ export function DiscountsScreen() {
           subtitle={locale.discounts.subtitle}
         />
         <Card>
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

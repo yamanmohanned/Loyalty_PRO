@@ -196,7 +196,9 @@ export const locale = {
     cardVoid: 'هذه البطاقة متلَفة ولا تُستخدم',
     cardVoidHint: 'استخدم بطاقة أخرى من الدفعة',
     inactiveCustomer: 'حساب الزبون موقوف',
-    inactiveCustomerHint: 'راجع الإدارة',
+    /* «راجع الإدارة» — management has no control that reactivates a customer; the state
+       can only be made outside the product. Said so, with where it goes next. */
+    inactiveCustomerHint: 'لا يمكن تفعيله من البرنامج — أبلغ الإدارة لتتواصل مع الدعم الفني',
     findCustomer: 'بحث عن الزبون',
 
     noInvoice: 'لا توجد فاتورة بانتظار الربط',
@@ -352,7 +354,9 @@ export const locale = {
   notSaved: {
     title: 'لم تُحفظ العملية',
     detail: 'وصل الطلب إلى الخادم ولم يُسجَّل. لم تُحتسب المشتريات ولن تُحتسب لاحقاً.',
-    instruction: 'أبلغ الإدارة فوراً — المشكلة في الخادم وليست في هذا الجهاز.',
+    /* The manager has no screen that explains a server fault, so «أبلغ الإدارة» alone
+       ended at a person with nothing to do. It now says who the manager passes it to. */
+    instruction: 'أبلغ الإدارة فوراً — المشكلة في جهاز المدير وليست في هذا الجهاز، وتحتاج إلى الدعم الفني.',
     /** Shown when the server named storage as the cause: actionable for the manager. */
     storageHint: 'الخادم غير قادر على الحفظ — تحقّق من المساحة الفارغة على قرص جهاز الإدارة.',
   },

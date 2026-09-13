@@ -65,7 +65,7 @@ export function CardsScreen() {
   */
   const errors = useFormErrors();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, error: loadError } = useQuery({
     queryKey: ['card-batches'],
     queryFn: () => api.get<CardBatchListResponse>('/cards/batches'),
   });
@@ -133,7 +133,7 @@ export function CardsScreen() {
       <>
         {header}
         <Card>
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

@@ -95,7 +95,7 @@ export function BackupScreen() {
           — a screen that looks finished and is empty. */}
       {overview.isError ? (
         <Card>
-          <ErrorState onRetry={() => void overview.refetch()} />
+          <ErrorState error={overview.error} onRetry={() => void overview.refetch()} />
         </Card>
       ) : overview.isLoading ? (
         <div className="space-y-4">

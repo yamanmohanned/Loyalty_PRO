@@ -255,6 +255,120 @@ try {
     argon2Output.trim().slice(0, 120),
   );
 
+  /*
+    ── Can the staged runtime be SET UP, and can it TRADE? ──────────────────────
+
+    Every check above asks whether the runtime boots correctly. None asked whether a
+    merchant can use what booted, and that gap is where three blockers lived: the
+    till's account, the capture agent's account and the shop's discount settings were
+    all created by `prisma/seed.ts` and by nothing in the product, so the first sale of
+    every installation was a 500 while this script printed "all clean-room checks
+    passed". A clean boot was standing in for a working shop.
+
+    So the shipped bundle is now driven through the endpoints a merchant's screens and
+    the agent call — setup, staff accounts, a customer, a captured invoice, the scan —
+    against the database the installer ships. Nothing here writes to SQLite directly.
+  */
+  {
+    const base = `http://127.0.0.1:${PORT}/api/v1`;
+    const call = async (method, path, body, token) => {
+      const response = await fetch(`${base}${path}`, {
+        method,
+        headers: {
+          ...(body ? { 'content-type': 'application/json' } : {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const text = await response.text();
+      let json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        /* not JSON */
+      }
+      return { status: response.status, json, text };
+    };
+    const signIn = async (username, password) =>
+      (await call('POST', '/auth/login', { username, password })).json?.tokens?.accessToken ?? null;
+
+    const setup = await call('POST', '/auth/bootstrap', {
+      merchantName: 'متجر فحص التثبيت',
+      branchName: 'الفرع الرئيسي',
+      branchCode: 'CLN-01',
+      ownerName: 'مالك الفحص',
+      username: 'cleanowner',
+      password: 'Clean-room!2026',
+    });
+    check(setup.status === 201, 'a new installation can be set up from its first-run screen', `HTTP ${setup.status}`);
+
+    const owner = await signIn('cleanowner', 'Clean-room!2026');
+    const staff = owner ? await call('GET', '/users', undefined, owner) : { json: null };
+    const branchId = staff.json?.branches?.[0]?.id ?? null;
+
+    const till = await call(
+      'POST',
+      '/users',
+      { name: 'محطة', username: 'station', password: 'Till!2026', role: 'STATION', branchId },
+      owner,
+    );
+    const agentAccount = await call(
+      'POST',
+      '/users',
+      { name: 'التقاط', username: 'agent', password: 'Capture!2026', role: 'AGENT', branchId },
+      owner,
+    );
+    check(
+      till.status === 201 && agentAccount.status === 201,
+      'the owner can create the till and capture-agent accounts',
+      `station ${till.status} · agent ${agentAccount.status}`,
+    );
+
+    const station = await signIn('station', 'Till!2026');
+    const agent = await signIn('agent', 'Capture!2026');
+
+    const customer = await call('POST', '/customers', { name: 'زبون الفحص', phone: '07701234567' }, station);
+    const cardNumber = customer.json?.customer?.cardNumber ?? null;
+    check(
+      customer.status === 201 && Boolean(cardNumber),
+      'the till can register a customer and issue a card',
+      `HTTP ${customer.status}`,
+    );
+
+    const now = new Date().toISOString();
+    const capture = await call(
+      'POST',
+      '/ingest/invoice',
+      {
+        agentId: 'verify-runtime',
+        invoice: {
+          invoice_id: 'INV-CLEAN-1',
+          amount_gross: 50000,
+          currency: 'IQD',
+          branch_id: 'CLN-01',
+          occurred_at: now,
+          captured_at: now,
+          capture_mode: 'SPOOL_WATCH',
+        },
+      },
+      agent,
+    );
+    check(capture.status === 201, 'the capture agent can deliver an invoice', `HTTP ${capture.status}`);
+
+    const identify = await call('POST', '/scan/identify', { barcodeToken: cardNumber }, station);
+    const sale = await call(
+      'POST',
+      '/scan/card',
+      { barcodeToken: cardNumber, invoiceId: 'INV-CLEAN-1' },
+      station,
+    );
+    check(
+      identify.status === 200 && sale.status < 300,
+      'the first sale of a new installation is attributed, not refused',
+      `identify ${identify.status} · scan ${sale.status} ${sale.status >= 300 ? sale.text.slice(0, 160) : ''}`,
+    );
+  }
+
   // Second boot: the migrator must find nothing to do.
   child.kill();
   await sleep(1500);
@@ -315,9 +429,20 @@ try {
 
   if (existsSync(recorded)) {
     const reason = JSON.parse(readFileSync(recorded, 'utf8').replace(/^﻿/, '')).reason ?? '';
+    /*
+      This asserted `reason.includes('WALAA_ENV_FILE')` — that the sentence the merchant
+      reads contained an English environment-variable name. A check that REQUIRES the
+      leak is the clearest kind of proxy: it measured "the message is specific" by the
+      presence of a token nobody at the counter can read, and it would have failed the
+      moment the sentence was fixed.
+
+      What is actually wanted: the reason names the real cause in Arabic, and carries no
+      variable name and no Windows path.
+    */
     check(
-      reason.includes('WALAA_ENV_FILE'),
-      'the recorded reason is the real one, not a generic failure',
+      reason.includes('ملف إعدادات البرنامج') &&
+        !/WALAA_|[A-Za-z]:[\\/]/.test(reason),
+      'the recorded reason names the real cause in Arabic, with no variable name or path',
       reason,
     );
     // The merchant reads this file through the dashboard. A BOM-less UTF-8 file is

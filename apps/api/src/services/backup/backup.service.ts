@@ -225,11 +225,12 @@ async function prepareStaging(): Promise<{ path: string; reclaimedBytes: number 
     const code = (error as { code?: string }).code;
     throw new AppError(
       'STORAGE_UNAVAILABLE',
-      `تعذّر تجهيز مجلد النسخ الاحتياطي (${code ?? 'خطأ'}): ${staging}. ` +
-        'المطلوب مجلد موجود وقابل للكتابة. ' +
-        'تحقّق من أن القرص متصل ومن صلاحيات الوصول إلى هذا المسار، ثم أعد المحاولة. ' +
-        'لم تُؤخذ أي نسخة احتياطية، وقاعدة البيانات لم تتغيّر.',
-      { cause: error },
+      // The errno code and the path were in the sentence, and «صلاحيات الوصول إلى هذا
+      // المسار» is an ACL on ProgramData that a merchant cannot change. Both go to the
+      // log through `cause`; the sentence keeps the one thing he can check.
+      'تعذّر تجهيز مجلد النسخ الاحتياطي، فلم تُؤخذ أي نسخة. قاعدة البيانات لم تتغيّر. ' +
+        'إن كان مجلد النسخ على قرص خارجي فتأكّد أنه موصول وأعد المحاولة؛ وإلا فتواصل مع الدعم الفني.',
+      { cause: new Error(`${code ?? 'unknown'}: ${staging}`, { cause: error }) },
     );
   }
 
@@ -641,7 +642,10 @@ async function verifyRestoreUnlocked(
       ? undefined
       : !integrityOk
         ? `فحص السلامة أعاد: ${restore.integrity}`
-        : 'النسخة الاحتياطية لا تحتوي على أحدث العمليات — تحقّق من إعداد النسخ الاحتياطي';
+        // «تحقّق من إعداد النسخ الاحتياطي» — no setting makes a snapshot miss the write
+        // made just before it. This is a defect, and the honest instruction is not to
+        // trust this archive.
+        : 'النسخة الاحتياطية لا تحتوي على آخر عملية سُجّلت قبلها مباشرة — لا تعتمد عليها، وتواصل مع الدعم الفني.';
 
     if (ok) {
       await recordAudit({

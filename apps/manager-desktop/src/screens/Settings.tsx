@@ -70,7 +70,14 @@ export function SettingsScreen() {
     restart a thing that exists; saying it about a machine that never had a service
     sends them looking for something that was never there.
   */
-  const hosts = local !== null;
+  /*
+    From the shell's report of what is INSTALLED, not from whether a port resolved.
+    `local !== null` was a proxy: a manager PC whose service had not published its port
+    — the missing-`walaa.env` case — read as "this machine hosts nothing", which is the
+    same wrong inference `BackendGate` used to make. The port is the fallback only where
+    there is no shell to ask.
+  */
+  const hosts = status?.hostsService ?? local !== null;
   const running = status?.state === 'running' || status?.state === 'starting';
 
   return (

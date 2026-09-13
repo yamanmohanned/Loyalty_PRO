@@ -197,7 +197,7 @@ describe('provisioning a database that does not exist yet', () => {
     const tampered = join(copy, migrations[0]?.name ?? '', 'migration.sql');
     writeFileSync(tampered, `${readFileSync(tampered, 'utf8')}\n-- edited after the fact\n`);
 
-    await expect(applyPendingMigrations({ client, directory: copy })).rejects.toThrow(/البصمة/);
+    await expect(applyPendingMigrations({ client, directory: copy })).rejects.toThrow(/ملفات تحديث قاعدة البيانات في هذه النسخة تختلف/);
   });
 
   it('rolls the whole migration back when one statement fails', async () => {

@@ -76,7 +76,7 @@ export function CustomersScreen() {
     ...(category ? { category } : {}),
   });
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, error: loadError } = useQuery({
     queryKey: ['customers', params.toString()],
     queryFn: () => api.get<CustomerListResponse>(`/customers?${params.toString()}`),
   });
@@ -193,11 +193,11 @@ export function CustomersScreen() {
             also true while the very first request is in flight, so a slow response
             rendered the failure card before it had failed. */}
         {isError ? (
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         ) : isLoading ? (
           <SkeletonTable rows={6} columns={6} />
         ) : !data ? (
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         ) : data.customers.length === 0 ? (
           <EmptyState
             icon={<Users size={22} aria-hidden />}
@@ -355,7 +355,7 @@ export function CustomerDetailScreen() {
     on every visit to this screen — on a healthy backend. The shared type plus the
     handler's return annotation is what turns that into a compile error.
   */
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, error: loadError } = useQuery({
     queryKey: ['customer', id],
     queryFn: () => api.get<CustomerDetailResponse>(`/customers/${id}`),
     enabled: Boolean(id),
@@ -364,7 +364,7 @@ export function CustomerDetailScreen() {
   if (isError) {
     return (
       <Card>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={loadError} onRetry={() => void refetch()} />
       </Card>
     );
   }
@@ -380,7 +380,7 @@ export function CustomerDetailScreen() {
   if (!data) {
     return (
       <Card>
-        <ErrorState onRetry={() => void refetch()} />
+        <ErrorState error={loadError} onRetry={() => void refetch()} />
       </Card>
     );
   }

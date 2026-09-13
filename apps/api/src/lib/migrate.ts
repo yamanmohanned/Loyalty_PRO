@@ -184,8 +184,15 @@ export async function applyPendingMigrations(
 
   const directory = options.directory ?? resolveMigrationsDir();
   if (!directory) {
+    /*
+      This told a shop owner to set an environment variable. The directory lives in
+      Program Files, so its absence is a damaged installation — which a reinstall
+      genuinely repairs, because it replaces the program and never the data.
+    */
     throw new Error(
-      'تعذّر العثور على مجلد الترحيلات (migrations). حدّد WALAA_MIGRATIONS_DIR أو شغّل الخدمة من مجلد التثبيت.',
+      'تعذّر تشغيل الخدمة: ملفات البرنامج المثبّتة ناقصة — مجلد تحديثات قاعدة البيانات غير موجود. ' +
+        'هذه مشكلة في التثبيت وليست في بياناتك. أعد تثبيت البرنامج من ملف التثبيت الكامل — ' +
+        'التثبيت يستبدل ملفات البرنامج ولا يمسّ بيانات المتجر. التفاصيل التقنية مسجّلة في ملف السجل.',
     );
   }
 
@@ -204,14 +211,25 @@ export async function applyPendingMigrations(
 
     if (record) {
       if (record.checksum !== checksum) {
+        /*
+          «أوقف التشغيل وراجع الترحيلات» — review the migrations — was an instruction to
+          a developer, printed at a shop owner, with an English directory name in it.
+          Nothing a merchant can do resolves a changed migration file; support can. The
+          name travels as the cause, into the log.
+        */
         throw new Error(
-          `الترحيل «${migration.name}» تغيّر بعد تطبيقه (اختلاف البصمة). ` +
-            'قاعدة البيانات لا تطابق المخطط المتوقع — أوقف التشغيل وراجع الترحيلات.',
+          'تعذّر تشغيل الخدمة: ملفات تحديث قاعدة البيانات في هذه النسخة تختلف عن التي ' +
+            'أُنشئت بها قاعدة بياناتك. بياناتك لم تتغيّر. تواصل مع الدعم الفني ولا تحذف أي ملف. ' +
+            'التفاصيل التقنية مسجّلة في ملف السجل.',
+          { cause: new Error(`migration ${migration.name}: checksum differs from the ledger`) },
         );
       }
       if (record.rolled_back_at !== null && record.rolled_back_at !== undefined) {
         throw new Error(
-          `الترحيل «${migration.name}» مسجّل كمُتراجَع عنه. يلزم إصلاح يدوي قبل التشغيل.`,
+          'تعذّر تشغيل الخدمة: سجلّ تحديثات قاعدة البيانات يحتاج إصلاحاً لا يُجرى من داخل ' +
+            'البرنامج. بياناتك لم تتغيّر. تواصل مع الدعم الفني ولا تحذف أي ملف. ' +
+            'التفاصيل التقنية مسجّلة في ملف السجل.',
+          { cause: new Error(`migration ${migration.name}: recorded as rolled back`) },
         );
       }
       if (record.finished_at === null || record.finished_at === undefined) {
@@ -232,11 +250,12 @@ export async function applyPendingMigrations(
           So the dangerous half is gone. Nothing here tells anybody to delete anything.
         */
         throw new Error(
-          `تعذّر تشغيل الخدمة: تحديث بنية قاعدة البيانات «${migration.name}» بدأ ولم يكتمل، ` +
+          'تعذّر تشغيل الخدمة: تحديث لبنية قاعدة البيانات بدأ ولم يكتمل، ' +
             'على الأرجح لأنّ الجهاز توقّف أثناء التحديث. ' +
-            'لم تُفتح قاعدة البيانات ولم تتغيّر الآن. ' +
-            '**لا تحذف أي ملف** — أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، ' +
-            'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+            'لم تُفتح قاعدة البيانات ولم تتغيّر الآن. **لا تحذف أي ملف.** ' +
+            'أحضر أحدث نسخة احتياطية (ملف ‎.walaabk من ذاكرة USB أو من Google Drive) وتواصل مع الدعم الفني لاستعادتها — لا يمكن الاستعادة من داخل البرنامج ما دامت الخدمة متوقفة. ' +
+            'التفاصيل التقنية مسجّلة في ملف السجل.',
+          { cause: new Error(`migration ${migration.name}: started and not finished`) },
         );
       }
       outcome.skipped.push(migration.name);
@@ -303,20 +322,26 @@ function explainCorruption(error: unknown, databaseUrl: string): Error {
     : [];
 
   if (sidecars.length === 0) {
+    /*
+      The SQLite message (English) and «راجع إجراء الاستعادة في دليل التشغيل» both went
+      to the merchant. The first he cannot read; the second names a procedure that is in
+      nothing he was given — the restore steps are in DEPLOYMENT.md, for support. The
+      driver's words go with the error as its cause.
+    */
     return new Error(
-      `قاعدة البيانات تالفة أو غير قابلة للقراءة (${message}). ` +
-        'استعد من أحدث نسخة احتياطية — راجع إجراء الاستعادة في دليل التشغيل.',
+      'تعذّر تشغيل الخدمة: ملف قاعدة البيانات لا يُقرأ. **لا تحذف أي ملف.** ' +
+        'أحضر أحدث نسخة احتياطية (ملف ‎.walaabk من ذاكرة USB أو من Google Drive) وتواصل مع الدعم الفني لاستعادتها — لا يمكن الاستعادة من داخل البرنامج ما دامت الخدمة متوقفة. ' +
+        'التفاصيل التقنية مسجّلة في ملف السجل.',
+      { cause: error },
     );
   }
 
   return new Error(
-    'قاعدة البيانات لا تُفتح. من الأسباب المحتملة وجود ملفات مرافقة لا تطابقها — ' +
-      'وقد لا يكون تلفاً فعلياً في البيانات. ' +
-      `الملفات الموجودة: ${sidecars.join('، ')}. ` +
-      'يحدث هذا عندما يُستبدَل ملف قاعدة البيانات بينما تبقى ملفاته المرافقة بجانبه. ' +
-      '**لا تحذفها قبل التأكد**: إن كانت تخص قاعدة البيانات الحالية فهي تحتوي أحدث ' +
-      'العمليات، وحذفها يفقدها. أوقف الخدمة، خذ نسخة من مجلد البيانات كاملاً، ' +
-      `ثم راجع إجراء الاستعادة في دليل التشغيل. (${message})`,
+    'تعذّر تشغيل الخدمة: قاعدة البيانات لا تُفتح، ويوجد بجانبها ملفات مرافقة قد لا تطابقها — ' +
+      'وقد لا يكون ذلك تلفاً فعلياً في البيانات. **لا تحذف أي ملف**: قد تحتوي هذه الملفات ' +
+      'على أحدث العمليات، وحذفها يفقدها. تواصل مع الدعم الفني قبل أي خطوة أخرى. ' +
+      'التفاصيل التقنية مسجّلة في ملف السجل.',
+    { cause: new Error(`${message}; sidecars: ${sidecars.join(', ')}`) },
   );
 }
 
@@ -401,8 +426,9 @@ export async function assertMigrationLedgerIsSound(
     `تعذّر تشغيل الخدمة: ${count} من تحديثات بنية قاعدة البيانات لم تكتمل — ` +
       'على الأرجح توقّف الجهاز أثناء تحديث البرنامج. ' +
       'لم تُفتح قاعدة البيانات ولم تتغيّر الآن. ' +
-      '**لا تحذف أي ملف** — أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، ' +
-      'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+      '**لا تحذف أي ملف.** ' +
+      'أحضر أحدث نسخة احتياطية (ملف ‎.walaabk من ذاكرة USB أو من Google Drive) وتواصل مع الدعم الفني لاستعادتها — لا يمكن الاستعادة من داخل البرنامج ما دامت الخدمة متوقفة. ' +
+      'التفاصيل التقنية مسجّلة في ملف السجل.',
   );
 }
 
@@ -557,9 +583,12 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
     throw new Error(
       `تعذّر تشغيل الخدمة: قاعدة البيانات تحتاج ${pending.length} تحديثاً لبنيتها، ` +
         'والبرنامج لا يُحدّث بنية قاعدة البيانات من تلقاء نفسه على جهاز المتجر. ' +
-        'المطلوب أن تكون قاعدة البيانات والبرنامج من نفس الإصدار. ' +
-        'لم يُكتب أي شيء في قاعدة البيانات. أعد تثبيت البرنامج من ملف التثبيت الكامل، ' +
-        'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+        // «أعد تثبيت البرنامج» was the advice, and reinstalling the same build changes
+        // nothing: production never migrates, so the database is exactly as old
+        // afterwards. Support performs the update deliberately, with a backup in hand;
+        // `WALAA_ALLOW_MIGRATIONS=1` is named in the log line above for them.
+        'لم يُكتب أي شيء في قاعدة البيانات. إعادة التثبيت لن تغيّر شيئاً. ' +
+        'تواصل مع الدعم الفني لإجراء التحديث مع نسخة احتياطية. التفاصيل التقنية مسجّلة في ملف السجل.',
     );
   }
 

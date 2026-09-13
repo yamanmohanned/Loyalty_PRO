@@ -115,7 +115,7 @@ export function OverviewScreen() {
   // The window was hardcoded to 30 days while the API had accepted four all along.
   const [range, setRange] = useState<ReportRange>('30d');
 
-  const { data, isLoading, isError, isFetching, refetch, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isError, isFetching, refetch, dataUpdatedAt, error: loadError } = useQuery({
     // The range is part of the key, so switching windows caches each one rather than
     // refetching the same month every time a manager glances back at it.
     queryKey: ['overview', range],
@@ -289,7 +289,7 @@ export function OverviewScreen() {
       <>
         {header}
         <Card>
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         </Card>
       </>
     );

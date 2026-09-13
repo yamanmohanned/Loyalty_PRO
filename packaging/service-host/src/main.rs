@@ -476,7 +476,16 @@ fn rotate_running_if_large(path: &Path, limit: u64) {
 fn spawn_api(paths: &Paths) -> Result<Child, String> {
     let node = paths.program.join("node.exe");
     if !node.exists() {
-        return Err(format!("node runtime missing: {}", node.display()));
+        log_line(&paths.logs, &format!("node runtime missing: {}", node.display()));
+        // The sentence reaches the merchant verbatim through `status.json`; the path
+        // goes to the log line above. A reinstall genuinely repairs this one: it
+        // replaces the program and never touches the data.
+        return Err(concat!(
+            "تعذّر تشغيل الخدمة: ملفات البرنامج المثبّتة ناقصة — محرّك التشغيل غير موجود. ",
+            "هذه مشكلة في التثبيت وليست في بياناتك. أعد تثبيت البرنامج من ملف التثبيت الكامل؛ ",
+            "التثبيت يستبدل ملفات البرنامج ولا يمسّ بيانات المتجر."
+        )
+        .to_string());
     }
 
     // Before the API opens the file: a demo build carries its shop with it, and the
@@ -537,8 +546,20 @@ fn spawn_api(paths: &Paths) -> Result<Child, String> {
     // Through `open_log`, so node's Arabic stack traces are readable in PowerShell and
     // Notepad rather than mojibake.
     let out = open_log(&api_log)
-        .ok_or_else(|| format!("open {}", api_log.display()))?;
-    let err = out.try_clone().map_err(|e| format!("clone log handle: {e}"))?;
+        .ok_or_else(|| {
+            concat!(
+                "تعذّر تشغيل الخدمة: لا يمكن فتح ملف سجلّ البرنامج. ",
+                "أعد تشغيل الجهاز، وإن تكرّر فتواصل مع الدعم الفني."
+            )
+            .to_string()
+        })?;
+    let err = out.try_clone().map_err(|_| {
+            concat!(
+                "تعذّر تشغيل الخدمة: لا يمكن فتح ملف سجلّ البرنامج. ",
+                "أعد تشغيل الجهاز، وإن تكرّر فتواصل مع الدعم الفني."
+            )
+            .to_string()
+        })?;
 
     Command::new(node)
         .arg("walaa-api.cjs")
@@ -885,10 +906,16 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         */
         if let Err(error) = fs::read_to_string(&paths.env_file) {
             if !paths.is_demo() {
-                return Err(format!(
-                    "cannot read {}: {error}. The API cannot start without it.                      Fix the file's permissions, or delete it to have a new one generated                      (this rotates the QR token secret and invalidates printed cards).",
-                    paths.env_file.display()
-                ));
+                log_line(
+                    &paths.logs,
+                    &format!("cannot read {}: {error}", paths.env_file.display()),
+                );
+                return Err(concat!(
+                    "تعذّر تشغيل الخدمة: ملف إعدادات البرنامج موجود لكن لا يمكن قراءته. ",
+                    "بيانات المتجر لم تتغيّر. لا تحذف الملف — حذفه يُبطل كل بطاقات الولاء المطبوعة. ",
+                    "تواصل مع الدعم الفني."
+                )
+                .to_string());
             }
 
             log_line(
@@ -905,7 +932,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
             // so precisely is worth more than a generic failure downstream.
             if let Err(remove) = fs::remove_file(&paths.env_file) {
                 return Err(format!(
-                    "الملف «{}» غير قابل للقراءة ولا للحذف من هذا الحساب ({remove}).                      أغلق البرنامج، احذف هذا الملف يدوياً بصلاحيات المدير، ثم افتح البرنامج من جديد.",
+                    "الملف «{}» غير قابل للقراءة ولا للحذف من هذا الحساب ({remove}). أغلق البرنامج، احذف هذا الملف يدوياً بصلاحيات المدير، ثم افتح البرنامج من جديد.",
                     paths.env_file.display()
                 ));
             }
@@ -952,7 +979,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
             ),
         );
         return Err(
-            "تعذّر تشغيل الخدمة: ملف إعدادات البرنامج مفقود، لكن قاعدة بيانات المتجر موجودة على هذا الجهاز.              لم يُنشأ ملف جديد ولم تتغيّر بياناتك.              إنشاء إعدادات جديدة هنا سيُبطل كل بطاقات الولاء المطبوعة وكل الجلسات المفتوحة، ولا يمكن التراجع عنه.              تواصل مع الدعم الفني لاستعادة ملف الإعدادات — إعادة تثبيت البرنامج لن تعيده."
+            "تعذّر تشغيل الخدمة: ملف إعدادات البرنامج مفقود، لكن قاعدة بيانات المتجر موجودة على هذا الجهاز. لم يُنشأ ملف جديد ولم تتغيّر بياناتك. إنشاء إعدادات جديدة هنا سيُبطل كل بطاقات الولاء المطبوعة وكل الجلسات المفتوحة، ولا يمكن التراجع عنه. تواصل مع الدعم الفني لاستعادة ملف الإعدادات — إعادة تثبيت البرنامج لن تعيده."
                 .to_string(),
         );
     }
@@ -1063,7 +1090,7 @@ fn repair_database_url(paths: &Paths) {
             log_line(
                 &paths.logs,
                 &format!(
-                    "cannot read {}: {error} — the API will not be able to read it either.                      Delete the file and restart to have it regenerated.",
+                    "cannot read {}: {error} — the API will not be able to read it either.                      Do not delete it: a regenerated file rotates QR_TOKEN_SECRET and invalidates every printed card. Restore read access for SYSTEM instead.",
                     paths.env_file.display()
                 ),
             );

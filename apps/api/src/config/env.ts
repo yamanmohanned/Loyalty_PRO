@@ -276,10 +276,26 @@ function configFailure(merchantMessage: string, detail: Record<string, unknown>)
 const settingsLocation = (): string =>
   envFile ? 'في ملف إعدادات البرنامج' : 'ولم يُعثر على ملف إعدادات البرنامج أصلاً';
 
-/** The one thing a merchant can do about any of these. Stated the same way every time. */
+/**
+ * The one thing a merchant can do about any of these. Stated the same way every time.
+ *
+ * ── It used to say "reinstall", and that was false two times in three ────────
+ *
+ * «أعد تثبيت البرنامج من ملف التثبيت الكامل — المُثبِّت هو من يكتب ملف الإعدادات».
+ * The installer does write the file — once. It never overwrites an existing one
+ * (rotating `QR_TOKEN_SECRET` would invalidate every printed card), so a file with a
+ * wrong value in it is exactly as wrong after a reinstall. And a file that has been
+ * LOST beside a shop's database is now refused rather than regenerated, for the same
+ * reason. The one case a reinstall did fix — a missing file on a machine with no shop
+ * on it — is the case this message is least likely to be shown for.
+ *
+ * So the sentence says what is true in all three: nothing was changed, a reinstall
+ * will not help, and the person who can restore the file is support.
+ */
 const CONFIG_REMEDY =
-  'أعد تثبيت البرنامج من ملف التثبيت الكامل — المُثبِّت هو من يكتب ملف الإعدادات — ' +
-  'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.';
+  'بيانات المتجر لم تتغيّر. إعادة تثبيت البرنامج لن تحل هذا — التثبيت لا يستبدل ملف ' +
+  'الإعدادات الموجود، ولا يُنشئ ملفاً جديداً ما دامت بيانات المتجر على هذا الجهاز حتى لا ' +
+  'تتلف بطاقات الولاء المطبوعة. تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.';
 
 /** Parses and caches the environment. Throws a readable error listing every problem. */
 export function loadEnv(): Env {

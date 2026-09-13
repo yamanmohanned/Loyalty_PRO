@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES, PaperWidthSchema, type PaperWidth } from '@walaa/shared-types';
+import {
+  DASHBOARD_ROLES,
+  PaperWidthSchema,
+  type CaptureStatus,
+  type PaperWidth,
+} from '@walaa/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import { AUDIT_ACTIONS, recordAudit } from '../services/audit.service';
 import { prisma } from '../lib/prisma';
@@ -56,6 +61,33 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
    * Audited, because it changes what comes out of a printer and "why did the slips
    * start printing narrow" is a question somebody asks a week later.
    */
+  /**
+   * Whether captured invoices are reaching this machine — measured, not assumed.
+   *
+   * Replaces a constant on the Capture screen that said the agent was "not installed
+   * yet, built in a later phase" on every installation, whatever was happening. The
+   * question a manager actually has is whether sales are arriving, and the answer is in
+   * the captures themselves.
+   */
+  app.get('/capture', { config: { roles: DASHBOARD_ROLES } }, async (request): Promise<CaptureStatus> => {
+    const auth = requireDashboardRole(request);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [last, recent] = await Promise.all([
+      prisma.transaction.findFirst({
+        where: { merchantId: auth.merchantId },
+        orderBy: { capturedAt: 'desc' },
+        select: { capturedAt: true },
+      }),
+      prisma.transaction.count({
+        where: { merchantId: auth.merchantId, capturedAt: { gte: since } },
+      }),
+    ]);
+    return {
+      lastCapturedAt: last?.capturedAt.toISOString() ?? null,
+      capturedLast24h: recent,
+    };
+  });
+
   app.get('/printing', { config: { roles: DASHBOARD_ROLES } }, async (request) => {
     const auth = requireDashboardRole(request);
     const merchant = await prisma.merchant.findUniqueOrThrow({

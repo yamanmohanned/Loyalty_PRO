@@ -269,7 +269,12 @@ export const locale = {
     enabled: 'مفعّل',
     disabled: 'غير مفعّل',
     error: 'حدث خطأ',
-    errorBody: 'تعذّر تحميل البيانات. تحقّق من الاتصال بالخادم وأعد المحاولة.',
+    /* Shown only when a screen's own request failed and the server gave no sentence of
+       its own. It said «تحقّق من الاتصال بالخادم» — the guess `BackendGate` exists to
+       stop making: by the time a screen is rendering, the backend was answering. Reopening
+       the program is what routes the person to the gate, which says what is actually
+       wrong. */
+    errorBody: 'تعذّر تحميل هذه الصفحة. اضغط «إعادة المحاولة»، وإذا تكرّر الأمر أغلق البرنامج وافتحه من جديد.',
     comingSoon: 'قيد التطوير',
     /* Beside a label, not as an asterisk — the asterisk needs a legend, and every
        form that uses one forgets to render it. */
@@ -293,7 +298,10 @@ export const locale = {
      */
     networkError: 'تعذّر الاتصال بالخادم. تأكّد من تشغيل جهاز المدير ومن اتصال الشبكة، ثم أعد المحاولة.',
     badResponse: 'وصل ردّ غير مفهوم من الخادم. أعد المحاولة، وإذا تكرّر الأمر أعد تشغيل الجهاز.',
-    noServer: 'لم يُعثر على خادم ولاء. افتح «الإعدادات» لتحديد جهاز المدير، أو أعد تشغيل الجهاز.',
+    /* «افتح الإعدادات لتحديد جهاز المدير» sent a manager-PC user to set an address on
+       the machine that is the server — and Settings is behind the login this state
+       blocks. Reopening routes to `BackendGate`, which names the real state. */
+    noServer: 'لم يتمكّن البرنامج من تحديد جهاز المدير. أغلق البرنامج وافتحه من جديد لعرض السبب.',
   },
 
   /**
@@ -318,10 +326,12 @@ export const locale = {
     terminalBody: 'تكرّر الخطأ نفسه عدّة مرّات، لذلك توقّفت المحاولات. عالِج السبب أدناه ثم أعد فتح البرنامج.',
 
     stoppedTitle: 'البرنامج متوقّف',
-    stoppedBody: 'أعد فتح البرنامج.',
+    /* «أعد فتح البرنامج» — reopening the dashboard does not start a Windows service.
+       Restarting the machine does, and it is what `notRunningBody` already says. */
+    stoppedBody: 'أعد تشغيل الجهاز — تبدأ الخدمة مع النظام تلقائياً.',
 
     unknownTitle: 'لا يمكن الوصول إلى البرنامج',
-    unknownBody: 'البرنامج لا يستجيب ولم يترك سبباً. أعد فتحه، وإذا تكرّر الأمر تواصل مع الدعم الفني.',
+    unknownBody: 'البرنامج لا يستجيب ولم يترك سبباً. أعد تشغيل الجهاز، وإذا تكرّر الأمر تواصل مع الدعم الفني.',
 
     /**
      * ── No backend at all, which is different from a backend that failed ─────
@@ -875,7 +885,7 @@ export const locale = {
     assessmentSafe: (min: number, max: number) => `ضمن النطاق الآمن (${min}–${max}٪).`,
     inactiveRule: 'غير مفعّلة',
     inactiveRuleHint:
-      'هذا المستوى مخزّن كغير مفعّل، فلا يطبّقها المحرّك. لا يمكن إنشاء هذه الحالة من هذه الشاشة — راجع من كتبها مباشرةً في قاعدة البيانات.',
+      'هذا المستوى مخزّن كغير مفعّل، فلا يطبّقها المحرّك. لا يمكن إنشاء هذه الحالة من هذه الشاشة — تواصل مع الدعم الفني.',
     removeRule: 'حذف',
     safeBand: 'النطاق الآمن الموصى به: 1–3٪',
     marginTitle: 'تحذير الهامش',
@@ -899,7 +909,13 @@ export const locale = {
     smsFallback: 'رسائل SMS بديلة',
     smsFallbackHint: 'إرسال رسالة نصية عند تعذّر واتساب.',
     autoUpdate: 'التحديث التلقائي',
-    autoUpdateHint: 'خارج نطاق الإصدار الحالي — يُثبّت المطوّر التحديثات يدوياً.',
+    /* It said «خارج نطاق الإصدار الحالي — يُثبّت المطوّر التحديثات يدوياً». Signed
+       updates ship in this release (packaging/SIGNING.md), so the sentence was false —
+       and it matters, because it is what a merchant reads when a restart installs
+       something. This is what `UpdateNotice` actually does. */
+    autoUpdateHint:
+      'يعمل دائماً: يُفحص عند فتح البرنامج، ويُنزَّل التحديث الموقَّع في الخلفية، ويُثبَّت عند إغلاق البرنامج وفتحه من جديد.',
+    autoUpdateLocked: 'مفعّل دائماً',
   },
 
   capture: {
@@ -915,9 +931,20 @@ export const locale = {
     codepageHint:
       'طابعات السوق العربي تستخدم CP864 أو Windows-1256 غالباً — وليس UTF-8.',
     agentStatus: 'حالة الوكيل',
-    agentNotInstalled: 'الوكيل غير مثبّت بعد',
-    agentNotInstalledHint:
-      'يُبنى وكيل الالتقاط في مرحلة لاحقة. لا يمكن التقاط الفواتير تلقائياً حتى ذلك الحين.',
+    /*
+      These were constants — «الوكيل غير مثبّت بعد — يُبنى في مرحلة لاحقة» — shown on every
+      installation whatever was happening. The agent exists, and the screen now says what
+      the captures themselves say.
+    */
+    captureNever: 'لم تصل أي فاتورة من برنامج الالتقاط بعد',
+    captureNeverHint:
+      'ثبّت برنامج الالتقاط على جهاز الصندوق، وأنشئ له حساباً من نوع «برنامج الالتقاط» من «الإعدادات ← حسابات الدخول»، ثم اطبع فاتورة من الصندوق. تظهر هنا خلال ثوانٍ.',
+    captureStale: 'لم تصل فواتير من الصندوق منذ أكثر من يوم',
+    captureStaleHint: (at: string) =>
+      `آخر فاتورة وصلت: ${at}. إن كان المتجر يبيع اليوم، فتأكّد أن جهاز الصندوق يعمل وأن برنامج الالتقاط شغّال عليه.`,
+    captureLive: (count: number) => `وصلت ${count} فاتورة من الصندوق خلال آخر 24 ساعة`,
+    captureLiveHint: (at: string) => `آخر فاتورة وصلت: ${at}.`,
+    calibrationUnavailable: 'المعايرة من هذه الشاشة غير متاحة في هذا الإصدار.',
     calibrationTitle: 'معايرة قراءة الفاتورة',
     calibrationHint:
       'اطبع فاتورة تجريبية، ثم اختر من النص الملتقط موضع رقم الفاتورة والإجمالي. يُنشئ النظام قالب القراءة تلقائياً.',
@@ -1207,7 +1234,7 @@ export const locale = {
     criticalBody:
       'تسجيل المبيعات قد يتوقف في أي لحظة. فرّغ مساحة على هذا الجهاز الآن — الفواتير التي لا تُسجَّل لا يمكن استرجاعها لاحقاً.',
     unknownTitle: 'تعذّرت قراءة المساحة الحرة',
-    unknownBody: 'لم يستطع الخادم قياس المساحة على قرص قاعدة البيانات. تحقّق من الجهاز.',
+    unknownBody: 'لم يستطع البرنامج قياس المساحة الفارغة على هذا الجهاز. التسجيل مستمر، لكن لن يصلك تنبيه إذا امتلأ القرص — تواصل مع الدعم الفني.',
     freeLabel: 'المساحة المتبقية',
   },
 

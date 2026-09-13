@@ -110,7 +110,11 @@ export async function bootstrapInstallation(
       */
       throw new AppError(
         'FORBIDDEN',
-        'تم إعداد هذا التثبيت مسبقاً. سجّل الدخول بحساب المالك، وإذا نسيت كلمة المرور تواصل مع الدعم الفني.',
+        // The second clause promised a recovery that does not exist: there is no owner
+        // password reset in this product, by design, and support has no tool for one. A
+        // sentence that sends somebody to support for something support cannot do is the
+        // defect this pass is about.
+        'تم إعداد هذا التثبيت مسبقاً — سجّل الدخول بحساب المالك من شاشة الدخول.',
       );
     }
 

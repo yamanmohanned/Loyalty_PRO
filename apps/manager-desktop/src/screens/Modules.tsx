@@ -26,14 +26,17 @@ const MODULES: Array<{ key: FeatureFlagKey; label: string; hint: string; locked?
     key: 'auto_update',
     label: locale.modules.autoUpdate,
     hint: locale.modules.autoUpdateHint,
-    locked: 'خارج النطاق',
+    /* Not a toggle: nothing reads the `auto_update` flag, so a switch here would be a
+       control that changes nothing. It said «خارج النطاق», which was false once signed
+       updates shipped — now it says what is true. */
+    locked: locale.modules.autoUpdateLocked,
   },
 ];
 
 export function ModulesScreen() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch, error: loadError } = useQuery({
     queryKey: ['flags'],
     queryFn: () => api.get<{ flags: Record<FeatureFlagKey, boolean> }>('/flags'),
   });
@@ -55,7 +58,7 @@ export function ModulesScreen() {
       <Card>
         <CardHeader title={locale.modules.title} />
         {isError ? (
-          <ErrorState onRetry={() => void refetch()} />
+          <ErrorState error={loadError} onRetry={() => void refetch()} />
         ) : isLoading || !data ? (
           <SkeletonTable rows={6} columns={2} />
         ) : (

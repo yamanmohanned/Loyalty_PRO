@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { createContext, useContext, useId, type ReactNode } from 'react';
 import { AlertTriangle, Minus, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react';
+import { ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
 
 /**
@@ -1175,12 +1176,26 @@ export function EmptyState({
  * this product the overwhelmingly likely cause is that the API on the manager PC has
  * not started yet.
  */
-export function ErrorState({ onRetry }: { onRetry?: () => void }) {
+/**
+ * A screen whose data could not be loaded.
+ *
+ * ── It renders the server's sentence when there is one ───────────────────────
+ *
+ * It rendered one fixed body for every failure — «تحقّق من الاتصال بالخادم» — while the
+ * `ApiRequestError` it was handed usually carried the API's own Arabic explanation:
+ * a role refusal, a missing record, a full disk. Ten screens threw that away. The fixed
+ * body is now the fallback for the two cases with nothing better to say: a request that
+ * never completed (status 0 — the backend went away mid-session, and reopening routes to
+ * `BackendGate`) and a failure that is not an API error at all.
+ */
+export function ErrorState({ onRetry, error }: { onRetry?: () => void; error?: unknown }) {
+  const body =
+    error instanceof ApiRequestError && error.status !== 0 ? error.message : locale.common.errorBody;
   return (
     <EmptyState
       icon={<AlertTriangle size={22} aria-hidden />}
       title={locale.common.error}
-      body={locale.common.errorBody}
+      body={body}
       action={
         onRetry ? (
           <Button variant="ghost" onClick={onRetry}>

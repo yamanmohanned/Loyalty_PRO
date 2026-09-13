@@ -52,3 +52,26 @@ export const StorageStatusSchema = z.object({
 });
 
 export type StorageStatus = z.infer<typeof StorageStatusSchema>;
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  IS ANYTHING ACTUALLY ARRIVING FROM THE TILL
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * The Capture screen answered this with a constant: «الوكيل غير مثبّت بعد — يُبنى وكيل
+ * الالتقاط في مرحلة لاحقة». The Print Capture Agent exists (`agent/`), the constant was
+ * shown on every installation whether it was capturing or not, and so the one screen
+ * whose job is "are sales reaching the system" measured nothing at all.
+ *
+ * The honest measurement is the one the shop depends on: when did the last captured
+ * invoice land, and how many in the last day. An agent that is installed and silent
+ * looks exactly like one that is not installed, and both are the same problem to a
+ * merchant — sales are not being recorded.
+ */
+export const CaptureStatusSchema = z.object({
+  /** When the most recent capture arrived, ISO-8601 UTC. Null when none ever has. */
+  lastCapturedAt: z.string().nullable(),
+  /** Captures in the last 24 hours. */
+  capturedLast24h: z.number().int().nonnegative(),
+});
+export type CaptureStatus = z.infer<typeof CaptureStatusSchema>;

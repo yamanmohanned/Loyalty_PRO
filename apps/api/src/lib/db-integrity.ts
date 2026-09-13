@@ -247,11 +247,24 @@ export async function verifyDatabaseIntegrity(options: {
       problemCount: problems.length,
       ms: Math.round(pageCheckMs),
     });
+    /*
+      Two things changed, both found by asking whether following the sentence resolves
+      the situation.
+
+      The PATH is gone — it is in the log line above, and a Windows path inside an RTL
+      sentence is neither readable nor usable by the person reading it.
+
+      The remedy said «استعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي». That screen is
+      inside the dashboard, behind a login, behind the service this very refusal has
+      just stopped. The one person who can restore while the service is down is support,
+      with `walaa-restore.cjs` and the archive in hand — so that is where it sends him,
+      with the archive.
+    */
     throw new Error(
-      `تعذّر تشغيل الخدمة: ملف قاعدة البيانات «${file}» تالف — فحص السلامة وجد ${problems.length} خطأ. ` +
-        'المطلوب ملف سليم يجتاز الفحص. ' +
-        'لم يُكتب أي شيء في الملف. أوقف الخدمة، واستعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي، ' +
-        'ولا تحذف الملف الحالي ولا الملفات المجاورة له قبل ذلك. التفاصيل التقنية مسجّلة في ملف السجل.',
+      `تعذّر تشغيل الخدمة: ملف قاعدة البيانات تالف — فحص السلامة وجد ${problems.length} خطأ. ` +
+        'لم يُكتب أي شيء في الملف. **لا تحذف أي ملف.** ' +
+        'أحضر أحدث نسخة احتياطية (ملف ‎.walaabk من ذاكرة USB أو من Google Drive) وتواصل مع الدعم الفني لاستعادتها — لا يمكن الاستعادة من داخل البرنامج ما دامت الخدمة متوقفة. ' +
+        'التفاصيل التقنية مسجّلة في ملف السجل.',
     );
   }
 

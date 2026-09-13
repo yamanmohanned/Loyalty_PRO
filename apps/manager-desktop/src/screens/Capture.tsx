@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Printer, ShieldCheck } from 'lucide-react';
-import { PAPER_WIDTHS, type PaperWidth } from '@walaa/shared-types';
+import { PAPER_WIDTHS, type CaptureStatus, type PaperWidth } from '@walaa/shared-types';
 import { api } from '../lib/api';
-import { locale } from '../lib/locale';
+import { formatDate, locale } from '../lib/locale';
 import {
   Button,
   Card,
@@ -99,9 +99,7 @@ export function CaptureScreen() {
         <DemoHardwareNotice className="mb-6" />
       ) : (
         <div className="mb-6">
-          <Notice tone="warning" title={locale.capture.agentStatus}>
-            {locale.capture.agentNotInstalledHint}
-          </Notice>
+          <CaptureHealth />
         </div>
       )}
 
@@ -196,7 +194,7 @@ export function CaptureScreen() {
               <Printer size={18} aria-hidden />
               {locale.capture.calibrationStart}
             </Button>
-            <p className="text-xs text-steel">{locale.capture.agentNotInstalled}</p>
+            <p className="text-xs text-steel">{locale.capture.calibrationUnavailable}</p>
           </div>
         </Card>
       </div>
@@ -241,7 +239,7 @@ function PaperWidthPanel(): JSX.Element {
     return (
       <Card className="mt-6">
         <CardHeader title={locale.capture.paperTitle} />
-        <ErrorState onRetry={() => void printing.refetch()} />
+        <ErrorState error={printing.error} onRetry={() => void printing.refetch()} />
       </Card>
     );
   }
@@ -271,5 +269,47 @@ function PaperWidthPanel(): JSX.Element {
         <p className="text-xs text-steel">{locale.capture.paperPropagation}</p>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Whether sales are reaching this machine, from the captures themselves.
+ *
+ * Three states, and each tells the manager something different to do: nothing has ever
+ * arrived (set the agent up), nothing has arrived for a day (the till or the agent has
+ * stopped), or captures are flowing. Amber for the first two — the shop believes it is
+ * recording sales and is not.
+ */
+function CaptureHealth() {
+  const status = useQuery({
+    queryKey: ['capture-status'],
+    queryFn: () => api.get<CaptureStatus>('/system/capture'),
+    refetchInterval: 60_000,
+  });
+
+  if (!status.data) return null;
+  const { lastCapturedAt, capturedLast24h } = status.data;
+
+  if (!lastCapturedAt) {
+    return (
+      <Notice tone="warning" title={locale.capture.captureNever}>
+        {locale.capture.captureNeverHint}
+      </Notice>
+    );
+  }
+
+  const at = formatDate(lastCapturedAt);
+  if (capturedLast24h === 0) {
+    return (
+      <Notice tone="warning" title={locale.capture.captureStale}>
+        {locale.capture.captureStaleHint(at)}
+      </Notice>
+    );
+  }
+
+  return (
+    <Notice tone="accent" title={locale.capture.captureLive(capturedLast24h)}>
+      {locale.capture.captureLiveHint(at)}
+    </Notice>
   );
 }

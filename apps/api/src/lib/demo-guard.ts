@@ -134,9 +134,18 @@ export async function assertDatabaseMatchesBuild(
     // A production build must never open a demo file. The reverse direction of the
     // same guarantee, and the cheap half — there is no marker to consult.
     if (/demo/i.test(name)) {
+      /*
+        «صحّح مسار قاعدة البيانات في ملف الإعدادات» asked a merchant to edit a file
+        locked to SYSTEM, and printed the path. A reinstall genuinely fixes this one:
+        `walaa-service.exe install` finds the existing `walaa.env` and
+        `repair_database_url` points it at the database this build opens, without
+        touching the secrets or the data. The path goes to the log.
+      */
+      log('production build found a demo database', { file });
       throw new Error(
-        `هذه نسخة الإنتاج ولا يمكنها فتح قاعدة بيانات تجريبية. الملف المفتوح: «${file}». ` +
-          `أعد تثبيت البرنامج أو صحّح مسار قاعدة البيانات في ملف الإعدادات.`,
+        'تعذّر تشغيل الخدمة: إعدادات البرنامج تشير إلى قاعدة البيانات التجريبية، وهذه نسخة المتجر. ' +
+          'لم يُفتح أي شيء ولم يتغيّر. أعد تثبيت البرنامج من ملف التثبيت الكامل — المُثبِّت يصحّح ' +
+          'هذا الإعداد تلقائياً ولا يمسّ بيانات المتجر. إن تكرّر، تواصل مع الدعم الفني.',
       );
     }
     log('database checked', { file, build: 'production' });

@@ -336,7 +336,7 @@ describe('the failure §12.17 is about', () => {
     expect(verification.restore.counts.customers).toBe(1);
     expect(verification.recencyProven).toBe(false);
     expect(verification.ok).toBe(false);
-    expect(verification.failure).toMatch(/أحدث العمليات/);
+    expect(verification.failure).toMatch(/آخر عملية سُجّلت قبلها/);
 
     // And it is not recorded as a verified backup.
     expect(

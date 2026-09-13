@@ -114,7 +114,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
       reply.status(status).send({
         error: {
           code: 'VALIDATION_FAILED',
-          message: 'الطلب غير صالح',
+          // A body the parser could not read — malformed JSON, a wrong content type.
+          // Never something a person typed; almost always a page older than the server
+          // it is talking to, which a reload fixes. «الطلب غير صالح» said only that
+          // something was wrong.
+          message: 'تعذّر فهم الطلب — أعد تحميل الصفحة، وإذا تكرّر الأمر حدّث البرنامج على هذا الجهاز.',
           requestId: request.id,
         },
       });

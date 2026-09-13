@@ -202,6 +202,8 @@ const CASES: Case[] = [
   { method: 'GET', path: '/reports/overview', allowed: DASHBOARD },
   { method: 'GET', path: '/reports/programme', allowed: DASHBOARD },
   { method: 'GET', path: '/system/storage', allowed: DASHBOARD },
+  // Whether captures are arriving: a manager's question, not the till's.
+  { method: 'GET', path: '/system/capture', allowed: DASHBOARD },
   // The station's roll width (§5). Dashboard-only on purpose: the Station has no
   // settings screen by design (§6.4), and which paper is loaded is a fact about the
   // shop rather than about an operator's shift.
@@ -391,6 +393,7 @@ describe('the route inventory', () => {
         'GET, HEAD /api/v1/reports/overview',
         'GET, HEAD /api/v1/reports/programme',
         // One node, both verbs — Fastify collapses same-path routes in its tree.
+        'GET, HEAD /api/v1/system/capture',
         'GET, HEAD, PUT /api/v1/system/printing',
         'GET, HEAD /api/v1/system/storage',
         // Both nodes, as `/discount` and `/flags` also produce: Fastify registers the

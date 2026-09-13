@@ -82,10 +82,27 @@ export async function registerStation(app: FastifyInstance): Promise<void> {
   // whole story on a failed one.
   app.log.info({ root }, 'loyalty station route registered');
 
-  await app.register(fastifyStatic, { root, serve: false });
+  /*
+    ── Caching is set by hand, and the difference is an upgrade that does not land ──
+
+    `@fastify/static` answered `index.html` with `public, max-age=0`. That permits a
+    browser to reuse the page it already has in more situations than it sounds —
+    back/forward, a tab restored with the session — and the page names the bundle by
+    hash. Driving the Station after rebuilding it, the tab kept loading the previous
+    bundle: a message changed an hour earlier was still the old one.
+
+    On a tablet at a till that means an upgraded manager PC and a Station still running
+    last month's code, until somebody thinks to clear a browser cache. So the page is
+    `no-cache` — always revalidated — and the hashed assets are `immutable`, because a
+    file named by its content can never be stale.
+  */
+  await app.register(fastifyStatic, { root, serve: false, cacheControl: false });
 
   app.get('/', { config: { public: true } }, async (_request, reply) => {
-    return reply.type('text/html; charset=utf-8').sendFile('index.html');
+    return reply
+      .header('cache-control', 'no-cache')
+      .type('text/html; charset=utf-8')
+      .sendFile('index.html');
   });
 
   app.get<{ Params: { '*': string } }>(
@@ -94,14 +111,17 @@ export async function registerStation(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const name = request.params['*'];
       if (!ASSET_NAME.test(name)) return reply.callNotFound();
-      return reply.sendFile(join('assets', name));
+      return reply
+        .header('cache-control', 'public, max-age=31536000, immutable')
+        .sendFile(join('assets', name));
     },
   );
 
   const served = rootFiles(root);
   for (const file of served) {
+    // Not content-hashed, so revalidated like the page.
     app.get(`/${file}`, { config: { public: true } }, async (_request, reply) =>
-      reply.sendFile(file),
+      reply.header('cache-control', 'no-cache').sendFile(file),
     );
   }
   app.log.info({ rootFiles: served }, 'station root files served');

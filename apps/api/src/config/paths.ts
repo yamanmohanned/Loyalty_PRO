@@ -91,7 +91,21 @@ export function resolveEnvFile(): string | null {
   if (explicit && explicit.trim()) {
     const path = resolve(explicit.trim());
     if (!existsSync(path)) {
-      throw new Error(`${ENV_FILE_VAR} يشير إلى ملف غير موجود: ${path}`);
+      /*
+        This is the reason the merchant reads — it travels through `startup-error.json`
+        and `status.json` to the dashboard verbatim — and it was
+        «WALAA_ENV_FILE يشير إلى ملف غير موجود: C:\ProgramData\Walaa\walaa.env»: an
+        environment variable name and a Windows path, in a sentence with no remedy. The
+        variable and the path go with the error as its cause, which `server.ts` writes
+        to stderr and so to the log.
+      */
+      throw new Error(
+        'تعذّر تشغيل الخدمة: ملف إعدادات البرنامج غير موجود. بيانات المتجر لم تتغيّر. ' +
+          'إعادة تثبيت البرنامج لن تحل هذا ما دامت بيانات المتجر على هذا الجهاز — التثبيت لا يُنشئ ' +
+          'ملف إعدادات جديداً بجانبها حتى لا تتلف بطاقات الولاء المطبوعة. تواصل مع الدعم الفني. ' +
+          'التفاصيل التقنية مسجّلة في ملف السجل.',
+        { cause: new Error(`${ENV_FILE_VAR} points at a file that does not exist: ${path}`) },
+      );
     }
     return path;
   }
