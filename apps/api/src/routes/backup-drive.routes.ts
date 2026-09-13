@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES } from '@walaa/shared-types';
+import { DASHBOARD_ROLES, DriveClientUpdateSchema, type DriveClientUpdate } from '@walaa/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import {
   beginConnect,
   connectProgress,
   disconnect,
 } from '../services/backup/drive-connect.service';
-import { driveStatus, updateDriveSettings } from '../services/backup/drive-status.service';
+import {
+  clearDriveClient,
+  driveStatus,
+  saveDriveClient,
+  testDriveConnection,
+  updateDriveSettings,
+} from '../services/backup/drive-status.service';
 import { DriveError } from '../services/backup/drive-errors';
 import { AppError } from '../lib/errors';
 
@@ -128,20 +134,48 @@ export async function backupDriveRoutes(app: FastifyInstance): Promise<void> {
   );
 
   /**
-   * Tries Drive now and reports what happened.
+   * «اختبار الاتصال»: authorise, upload a small file, read it back, delete it.
    *
-   * The same probe the status call performs, exposed as an action so a merchant who has
-   * just fixed their internet — or just reconnected — gets an answer on demand instead of
-   * waiting for 23:30 to find out.
+   * It was the status probe — a list call — which passes on a full Drive and on a
+   * folder the app cannot write, the two cases in which the nightly upload fails. Each
+   * step now reports for itself, so a merchant who has just fixed something gets an
+   * answer on demand instead of waiting for 23:30 to find out.
    */
   app.post(
     '/test',
     { config: { roles: DASHBOARD_ROLES, rateLimit: { max: 30, timeWindow: '1 hour' } } },
     async (request) => {
-      const auth = requireDashboardRole(request);
-      return driveStatus(auth.merchantId, { probe: true });
+      requireDashboardRole(request);
+      return testDriveConnection();
     },
   );
+
+  /**
+   * The OAuth client — typed into Settings by the owner, the secret stored encrypted.
+   *
+   * OWNER only, like connecting: this is what lets the installation ask Google for
+   * access at all. `req.body.clientSecret` is redacted from the log (app.ts), and the
+   * response carries the id only.
+   */
+  app.put(
+    '/client',
+    {
+      config: { roles: ['OWNER'], rateLimit: { max: 20, timeWindow: '1 hour' } },
+      schema: { body: DriveClientUpdateSchema },
+    },
+    async (request) => {
+      const auth = requireDashboardRole(request);
+      return saveDriveClient(
+        { merchantId: auth.merchantId, actorUserId: auth.sub },
+        request.body as DriveClientUpdate,
+      );
+    },
+  );
+
+  app.delete('/client', { config: { roles: ['OWNER'] } }, async (request) => {
+    const auth = requireDashboardRole(request);
+    return clearDriveClient({ merchantId: auth.merchantId, actorUserId: auth.sub });
+  });
 }
 
 /**

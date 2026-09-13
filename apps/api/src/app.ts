@@ -229,6 +229,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           // directory, which is a wider set than the people who may hold the key.
           'req.body.key',
           'req.body.backupKey',
+          // The Google OAuth client secret typed into Settings (§7.6).
+          'req.body.clientSecret',
           'res.headers["set-cookie"]',
         ],
         remove: true,

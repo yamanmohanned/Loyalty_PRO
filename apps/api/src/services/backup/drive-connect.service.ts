@@ -13,7 +13,7 @@ import {
   safeJson,
 } from './drive-errors';
 import { clearConnection, readConnection, writeConnection } from './drive-store';
-import { driveEndpoints, DRIVE_SCOPE, type DriveEndpoints } from './drive';
+import { driveClient, driveEndpoints, DRIVE_SCOPE, type DriveEndpoints } from './drive';
 
 /**
  * Connecting a Google account from inside the manager app (CLAUDE_v3.md §7.3).
@@ -82,15 +82,14 @@ let outcome: DriveConnectProgress = { state: 'IDLE', failure: null };
 const base64url = (buffer: Buffer): string =>
   buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-/** The OAuth client from configuration, or a NOT_CONFIGURED failure. */
+/** The OAuth client entered in Settings, or a NOT_CONFIGURED failure. */
 function requireClient(): { clientId: string; clientSecret: string; endpoints: DriveEndpoints } {
   const env = loadEnv();
-  if (!env.GOOGLE_DRIVE_CLIENT_ID || !env.GOOGLE_DRIVE_CLIENT_SECRET) {
-    throw new DriveError('NOT_CONFIGURED', 'no OAuth client in configuration');
-  }
+  const client = driveClient(env);
+  if (!client) throw new DriveError('NOT_CONFIGURED', 'no OAuth client has been entered in Settings');
   return {
-    clientId: env.GOOGLE_DRIVE_CLIENT_ID,
-    clientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+    clientId: client.clientId,
+    clientSecret: client.clientSecret,
     endpoints: driveEndpoints(env),
   };
 }
@@ -249,8 +248,8 @@ async function handleCallback(
 
 /** Detail for the log only — never for the merchant's screen (§7.6). */
 function consentLog(detail: string): void {
-  // eslint-disable-next-line no-console -- the connect flow runs outside a request, so
-  // there is no Fastify logger in scope here; the service host captures stdout.
+  // The connect flow runs outside a request, so there is no Fastify logger in scope
+  // here; the service host captures stdout.
   console.warn(`[drive] consent did not complete: ${detail}`);
 }
 
@@ -285,12 +284,14 @@ async function completeConnect(current: Pending, code: string): Promise<void> {
   const folderId =
     env.GOOGLE_DRIVE_FOLDER_ID ??
     (body.access_token ? await createFolder(endpoints, body.access_token) : null);
+  const account = body.access_token ? await fetchAccount(endpoints, body.access_token) : null;
 
   const existing = readConnection();
   writeConnection({
     connectedAt: new Date().toISOString(),
     refreshToken: body.refresh_token,
     folderId: folderId ?? null,
+    account,
     // Reconnecting after a revocation keeps the merchant's retention and on/off choice;
     // a fresh install takes the shared default.
     enabled: true,
@@ -340,6 +341,33 @@ async function createFolder(endpoints: DriveEndpoints, accessToken: string): Pro
     return created.id ?? null;
   } catch (error) {
     consentLog(asDriveError(error, 'create folder').detail);
+    return null;
+  }
+}
+
+/**
+ * Which account just granted access, best effort — the Settings panel shows it so the
+ * owner can see his backups are going to the shop's account and not somebody's own.
+ * A failure here costs a name on a screen, never the connection.
+ */
+async function fetchAccount(
+  endpoints: DriveEndpoints,
+  accessToken: string,
+): Promise<{ email: string | null; name: string | null } | null> {
+  try {
+    const url = new URL(`${endpoints.apiBase}/drive/v3/about`);
+    url.searchParams.set('fields', 'user(displayName,emailAddress)');
+    const response = await fetch(url.toString(), {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      consentLog(classifyDriveApiError(response.status, await safeJson(response)).detail);
+      return null;
+    }
+    const body = (await response.json()) as { user?: { displayName?: string; emailAddress?: string } };
+    return { email: body.user?.emailAddress ?? null, name: body.user?.displayName ?? null };
+  } catch (error) {
+    consentLog(asDriveError(error, 'about').detail);
     return null;
   }
 }

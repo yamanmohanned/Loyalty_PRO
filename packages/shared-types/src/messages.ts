@@ -94,6 +94,10 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   tiers: 'مستويات الخصم',
   mode: 'نوع الخصم',
 
+  /* Google Drive — the OAuth client, as the Google Cloud console labels it */
+  clientId: 'معرّف العميل (Client ID)',
+  clientSecret: 'سرّ العميل (Client secret)',
+
   /* cards */
   code: 'الرمز',
   cardNumber: 'رقم البطاقة',

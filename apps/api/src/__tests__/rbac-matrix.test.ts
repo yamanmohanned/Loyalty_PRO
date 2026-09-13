@@ -197,6 +197,10 @@ const CASES: Case[] = [
   { method: 'POST', path: '/backup/drive/disconnect', allowed: ['OWNER'] },
   { method: 'PATCH', path: '/backup/drive/settings', allowed: DASHBOARD },
   { method: 'POST', path: '/backup/drive/test', allowed: DASHBOARD },
+  // The OAuth client lets this installation ask Google for access at all: owner only,
+  // like connecting.
+  { method: 'PUT', path: '/backup/drive/client', allowed: ['OWNER'] },
+  { method: 'DELETE', path: '/backup/drive/client', allowed: ['OWNER'] },
   // Restoring a copy replaces the whole ledger and signs everyone out: the owner only.
   { method: 'POST', path: '/backup/restore/stage', allowed: ['OWNER'] },
   { method: 'DELETE', path: '/backup/restore/stage', allowed: ['OWNER'] },
@@ -441,6 +445,7 @@ describe('the route inventory', () => {
         // Registration order, not alphabetical — Fastify lists a node's methods as added.
         'POST, DELETE /api/v1/backup/restore/stage',
         'POST /api/v1/backup/restore/apply',
+        'PUT, DELETE /api/v1/backup/drive/client',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',
         'PUT /api/v1/discount/rules',

@@ -135,6 +135,9 @@ export const AUDIT_ACTIONS = {
   BACKUP_DRIVE_DISCONNECTED: 'backup.drive_disconnected',
   /** Drive was paused/resumed, or its retention changed — how many copies survive. */
   BACKUP_DRIVE_SETTINGS_UPDATED: 'backup.drive_settings_updated',
+  /** The OAuth client entered in Settings. Carries the id, never the secret. */
+  BACKUP_DRIVE_CLIENT_SAVED: 'backup.drive_client_saved',
+  BACKUP_DRIVE_CLIENT_CLEARED: 'backup.drive_client_cleared',
 
   /* ── The key ceremony (§12.19) ────────────────────────────────────────── */
 

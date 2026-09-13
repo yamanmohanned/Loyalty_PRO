@@ -342,6 +342,19 @@ export async function startFakeGoogle(options: { port?: number } = {}): Promise<
       return;
     }
 
+    /* ── Whose account this is ────────────────────────────────────────── */
+    if (path === '/drive/v3/about' && request.method === 'GET') {
+      const refusal = apiRefusal();
+      if (refusal) {
+        json(response, refusal.status, refusal.body);
+        return;
+      }
+      json(response, 200, {
+        user: { displayName: 'حساب المتجر التجريبي', emailAddress: 'shop.owner@example.test' },
+      });
+      return;
+    }
+
     /* ── Files ────────────────────────────────────────────────────────── */
     if (path === '/drive/v3/files' && request.method === 'POST') {
       const refusal = apiRefusal();

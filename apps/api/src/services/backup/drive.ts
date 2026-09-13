@@ -1,6 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { Readable } from 'node:stream';
+import type { DriveAccount, DriveTestStep } from '@walaa/shared-types';
 import type { BackupDestination, DestinationKind, StoredBackup } from './destinations';
 import {
   asDriveError,
@@ -9,7 +12,7 @@ import {
   DriveError,
   safeJson,
 } from './drive-errors';
-import { readConnection, recordAttempt, type DriveConnection } from './drive-store';
+import { readClient, readConnection, recordAttempt, type DriveConnection } from './drive-store';
 
 /**
  * Google Drive as a backup destination (CLAUDE_v3.md §7.3).
@@ -276,15 +279,107 @@ export class GoogleDriveDestination implements BackupDestination {
   }
 
   async fetch(id: string, localPath: string): Promise<void> {
+    await writeFile(localPath, await this.download(id));
+  }
+
+  private async download(id: string): Promise<Buffer> {
     const token = await this.token();
     const response = await this.send(
       `${this.endpoints.apiBase}/drive/v3/files/${encodeURIComponent(id)}?alt=media`,
       { headers: { authorization: `Bearer ${token}` } },
     );
-
     if (!response.ok) throw classifyDriveApiError(response.status, await safeJson(response));
+    return Buffer.from(await response.arrayBuffer());
+  }
 
-    await writeFile(localPath, Buffer.from(await response.arrayBuffer()));
+  /** Deletes one file this app created, and says so if Google refused. */
+  private async remove(id: string): Promise<void> {
+    const token = await this.token();
+    const response = await this.send(
+      `${this.endpoints.apiBase}/drive/v3/files/${encodeURIComponent(id)}`,
+      { method: 'DELETE', headers: { authorization: `Bearer ${token}` } },
+    );
+    if (!response.ok) throw classifyDriveApiError(response.status, await safeJson(response));
+  }
+
+  /**
+   * The Google account this grant belongs to.
+   *
+   * `about.get` is readable under `drive.file`, so no broader scope is needed to tell the
+   * merchant WHICH account is holding his backups — the one fact that stops a shop's
+   * copies quietly going to somebody's personal account.
+   */
+  async account(): Promise<DriveAccount> {
+    const token = await this.token();
+    const url = new URL(`${this.endpoints.apiBase}/drive/v3/about`);
+    url.searchParams.set('fields', 'user(displayName,emailAddress)');
+    const response = await this.send(url.toString(), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw classifyDriveApiError(response.status, await safeJson(response));
+    const body = (await response.json()) as {
+      user?: { displayName?: string; emailAddress?: string };
+    };
+    return { email: body.user?.emailAddress ?? null, name: body.user?.displayName ?? null };
+  }
+
+  /**
+   * The whole chain, proven rather than assumed: authorise, write a small file, read it
+   * back byte for byte, delete it.
+   *
+   * A list call — what "test" used to be — proves the token works and nothing about
+   * whether a backup would land: it passes on a Drive that is full, and on a folder the
+   * app may read but not write. Each step reports for itself, with the same classified
+   * failure the backups use; a step not reached says so rather than passing by default.
+   * The test file is deleted even when the read-back fails: it must not be left in the
+   * merchant's Drive. It never looks like a backup — listings only see `.walaabk`.
+   */
+  async roundTrip(scratchDirectory: string, now: Date = new Date()): Promise<DriveTestStep[]> {
+    const steps: DriveTestStep[] = (['AUTHORISE', 'UPLOAD', 'READ_BACK', 'DELETE'] as const).map(
+      (step) => ({ step, ok: null, failure: null }),
+    );
+    const stamp = now.toISOString().replace(/[:.]/g, '-');
+    const name = `walaa-connection-test-${stamp}.txt`;
+    const content = Buffer.from(
+      `walaa connection test ${now.toISOString()} ${randomBytes(8).toString('hex')}`,
+      'utf8',
+    );
+    const local = join(scratchDirectory, name);
+    let fileId: string | null = null;
+
+    const run = async (index: number, work: () => Promise<void>): Promise<boolean> => {
+      const current = steps[index]!;
+      try {
+        await work();
+        steps[index] = { ...current, ok: true };
+        return true;
+      } catch (error) {
+        steps[index] = {
+          ...current,
+          ok: false,
+          failure: asDriveError(error, `connection test ${current.step}`).toFailure(now),
+        };
+        return false;
+      }
+    };
+
+    try {
+      if (!(await run(0, async () => void (await this.token())))) return steps;
+      await writeFile(local, content);
+      if (!(await run(1, async () => void (fileId = (await this.upload(local, name)).id)))) {
+        return steps;
+      }
+      await run(2, async () => {
+        const back = await this.download(fileId!);
+        if (!back.equals(content)) {
+          throw new DriveError('UNKNOWN', 'read-back bytes differ from what was uploaded');
+        }
+      });
+      await run(3, async () => this.remove(fileId!));
+      return steps;
+    } finally {
+      await rm(local, { force: true });
+    }
   }
 
   /**
@@ -370,6 +465,49 @@ export class GoogleDriveDestination implements BackupDestination {
   }
 }
 
+/** The OAuth client this installation uses, and where it came from. */
+export interface DriveClient {
+  clientId: string;
+  clientSecret: string;
+  /** Typed into Settings and stored encrypted, or — outside production — the environment. */
+  source: 'settings' | 'environment';
+  savedAt: string | null;
+}
+
+/**
+ * The OAuth client, or null when none is set up.
+ *
+ * **The encrypted store first; the environment only outside production.** A client
+ * secret in `walaa.env` is a secret in a plain configuration file, and on a shop's
+ * machine it is ignored — the owner enters it in Settings, where it is stored sealed
+ * (`drive-store.ts`). The environment remains for the test suite and a developer's
+ * stand-in for Google, which is the only place it was ever meant to be.
+ */
+export function driveClient(env: {
+  NODE_ENV?: string;
+  GOOGLE_DRIVE_CLIENT_ID?: string;
+  GOOGLE_DRIVE_CLIENT_SECRET?: string;
+}): DriveClient | null {
+  const stored = readClient();
+  if (stored) {
+    return {
+      clientId: stored.clientId,
+      clientSecret: stored.clientSecret,
+      source: 'settings',
+      savedAt: stored.savedAt,
+    };
+  }
+  if (env.NODE_ENV !== 'production' && env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET) {
+    return {
+      clientId: env.GOOGLE_DRIVE_CLIENT_ID,
+      clientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+      source: 'environment',
+      savedAt: null,
+    };
+  }
+  return null;
+}
+
 /**
  * The credentials, or null when Drive is not usable.
  *
@@ -400,19 +538,22 @@ export function driveCredentials(
   },
   connection: DriveConnection | null = readConnection(),
 ): DriveCredentials | null {
-  const { GOOGLE_DRIVE_CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET } = env;
-  if (!GOOGLE_DRIVE_CLIENT_ID || !GOOGLE_DRIVE_CLIENT_SECRET) return null;
+  const client = driveClient(env);
+  if (!client) return null;
 
   // An explicit switch-off keeps the grant but stops the uploads, so a merchant on a
   // metered connection can pause Drive without having to consent all over again.
   if (connection && !connection.enabled) return null;
 
-  const refreshToken = connection?.refreshToken ?? env.GOOGLE_DRIVE_REFRESH_TOKEN;
+  // The legacy plaintext refresh token follows the same rule as the client secret: a
+  // standing credential in a config file is not honoured on a shop's machine.
+  const legacy = env.NODE_ENV !== 'production' ? env.GOOGLE_DRIVE_REFRESH_TOKEN : undefined;
+  const refreshToken = connection?.refreshToken ?? legacy;
   if (!refreshToken) return null;
 
   return {
-    clientId: GOOGLE_DRIVE_CLIENT_ID,
-    clientSecret: GOOGLE_DRIVE_CLIENT_SECRET,
+    clientId: client.clientId,
+    clientSecret: client.clientSecret,
     refreshToken,
     folderId: connection?.folderId ?? env.GOOGLE_DRIVE_FOLDER_ID,
     keep: connection?.keep,

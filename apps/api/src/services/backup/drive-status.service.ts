@@ -1,9 +1,23 @@
-import type { DriveStatus } from '@walaa/shared-types';
+import { tmpdir } from 'node:os';
+import type {
+  DriveAccount,
+  DriveClientUpdate,
+  DriveStatus,
+  DriveTestResult,
+  DriveTestStepName,
+} from '@walaa/shared-types';
 import { loadEnv } from '../../config/env';
+import { AppError } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import { asDriveError, driveFailure } from './drive-errors';
-import { driveCredentials, DRIVE_SCOPE, GoogleDriveDestination } from './drive';
-import { readConnection, readConnectionSummary, updateConnection } from './drive-store';
+import { driveClient, driveCredentials, DRIVE_SCOPE, GoogleDriveDestination } from './drive';
+import {
+  clearClient,
+  readConnection,
+  readConnectionSummary,
+  updateConnection,
+  writeClient,
+} from './drive-store';
 import { scheduleStatus } from './schedule.service';
 
 /**
@@ -32,10 +46,21 @@ import { scheduleStatus } from './schedule.service';
 
 /** A dead uplink must cost a bounded wait, not a hung Settings screen. */
 const PROBE_TIMEOUT_MS = 8000;
+/** The connection test moves a small file up and back down: generous, still bounded. */
+const TEST_TIMEOUT_MS = 20_000;
 
 /** `fetch` with a deadline. Undici turns the abort into an error `isNetworkError` knows. */
-const timedFetch: typeof fetch = (input, init) =>
-  fetch(input, { ...init, signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+const timed =
+  (ms: number): typeof fetch =>
+  (input, init) =>
+    fetch(input, { ...init, signal: AbortSignal.timeout(ms) });
+
+const TEXT = {
+  disconnectFirst:
+    'حساب Google مربوط الآن بإعدادات الربط الحالية. اضغط «فصل الحساب» أولاً، ثم احفظ الإعدادات الجديدة وأعد الربط.',
+  disconnectBeforeClear:
+    'لا يمكن حذف إعدادات الربط وحساب Google مربوط بها. اضغط «فصل الحساب» أولاً.',
+};
 
 /**
  * The full Drive picture for one merchant.
@@ -49,11 +74,13 @@ export async function driveStatus(
   options: { probe?: boolean } = {},
 ): Promise<DriveStatus> {
   const env = loadEnv();
-  const configured = Boolean(env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET);
+  const client = driveClient(env);
+  const configured = client !== null;
   const stored = readConnectionSummary();
   // The pre-consent-flow arrangement: a refresh token pasted into the environment file.
-  // Still honoured so an installation set up that way keeps its off-machine copy.
-  const legacy = Boolean(env.GOOGLE_DRIVE_REFRESH_TOKEN) && !stored;
+  // Honoured outside production only — see `driveCredentials`.
+  const legacy =
+    env.NODE_ENV !== 'production' && Boolean(env.GOOGLE_DRIVE_REFRESH_TOKEN) && !stored;
   const connected = configured && (Boolean(stored) || legacy);
 
   const schedule = await scheduleStatus(merchantId).catch(() => null);
@@ -76,6 +103,9 @@ export async function driveStatus(
       nextRunAt: schedule?.nextRunAt ?? null,
     },
     scope: DRIVE_SCOPE,
+    // The id only. The secret never leaves the store, in any response.
+    client: client ? { clientId: client.clientId, source: client.source, savedAt: client.savedAt } : null,
+    account: stored?.account ?? null,
   };
 
   if (!configured) return { ...base, failure: driveFailure('NOT_CONFIGURED') };
@@ -93,13 +123,22 @@ export async function driveStatus(
   if (!credentials) return { ...base, failure: driveFailure('NOT_CONNECTED') };
 
   try {
-    const destination = new GoogleDriveDestination(credentials, timedFetch);
+    const destination = new GoogleDriveDestination(credentials, timed(PROBE_TIMEOUT_MS));
     const backups = await destination.list();
+
+    // A grant made before the account was recorded learns whose it is, once.
+    let account = base.account;
+    if (!account && stored) {
+      account = await destination.account().catch(() => null);
+      if (account) updateConnection({ account });
+    }
+
     // A successful list clears a stale failure: the merchant fixed their Wi-Fi and the
     // panel must not keep telling them their internet is down.
     if (stored?.lastFailure) updateConnection({ lastFailure: null });
     return {
       ...base,
+      account,
       failure: null,
       backups: backups.map((backup) => ({
         id: backup.id,
@@ -113,6 +152,115 @@ export async function driveStatus(
     updateConnection({ lastFailure: classified.toFailure() });
     return { ...base, failure: classified.toFailure() };
   }
+}
+
+const TEST_STEPS: readonly DriveTestStepName[] = ['AUTHORISE', 'UPLOAD', 'READ_BACK', 'DELETE'];
+
+/**
+ * «اختبار الاتصال»: the whole chain, on demand.
+ *
+ * Authorise, upload a small file, read it back byte for byte, delete it — each step
+ * reporting for itself with the same classified failure a backup would get. It used to
+ * be a list call, which passes on a full Drive and on a folder the app can read but not
+ * write: exactly the two cases in which the nightly upload fails.
+ *
+ * Runs even while Drive is paused. Pausing stops the schedule; asking for a test is
+ * asking whether the chain works, which is a separate question.
+ */
+export async function testDriveConnection(): Promise<DriveTestResult> {
+  const env = loadEnv();
+  const at = new Date();
+  const notReady = (code: 'NOT_CONFIGURED' | 'NOT_CONNECTED'): DriveTestResult => ({
+    ok: false,
+    at: at.toISOString(),
+    account: null,
+    steps: TEST_STEPS.map((step, index) => ({
+      step,
+      ok: index === 0 ? false : null,
+      failure: index === 0 ? driveFailure(code, at) : null,
+    })),
+  });
+
+  if (!driveClient(env)) return notReady('NOT_CONFIGURED');
+
+  const connection = readConnection();
+  const credentials = driveCredentials(env, connection ? { ...connection, enabled: true } : null);
+  if (!credentials) return notReady('NOT_CONNECTED');
+
+  const destination = new GoogleDriveDestination(credentials, timed(TEST_TIMEOUT_MS));
+  const steps = await destination.roundTrip(tmpdir(), at);
+  const ok = steps.every((step) => step.ok === true);
+
+  let account: DriveAccount | null = connection?.account ?? null;
+  if (ok) {
+    account = (await destination.account().catch(() => null)) ?? account;
+    if (connection) updateConnection({ ...(account ? { account } : {}), lastFailure: null });
+  } else {
+    const failed = steps.find((step) => step.ok === false);
+    if (connection && failed?.failure) updateConnection({ lastFailure: failed.failure });
+  }
+
+  return { ok, at: at.toISOString(), account, steps };
+}
+
+/**
+ * Stores the OAuth client the owner typed into Settings — the secret sealed.
+ *
+ * Refused while an account is connected under a DIFFERENT client: the stored grant was
+ * issued to the old one and would stop working the moment the new one took over,
+ * silently, at 23:30. Re-saving the same client id (a rotated secret) is allowed.
+ *
+ * The audit row carries the id and the fact that a secret was stored — never the secret.
+ * Audit rows are readable by every dashboard role and travel inside every backup.
+ */
+export async function saveDriveClient(
+  input: { merchantId: string; actorUserId: string | null },
+  update: DriveClientUpdate,
+): Promise<DriveStatus> {
+  const clientId = update.clientId.trim();
+  const clientSecret = update.clientSecret.trim();
+
+  const current = driveClient(loadEnv());
+  if (readConnectionSummary() && current && current.clientId !== clientId) {
+    throw new AppError('VALIDATION_FAILED', TEXT.disconnectFirst, {
+      fields: [{ path: 'clientId', message: TEXT.disconnectFirst }],
+    });
+  }
+
+  writeClient(clientId, clientSecret);
+
+  await recordAudit({
+    merchantId: input.merchantId,
+    actorUserId: input.actorUserId,
+    action: AUDIT_ACTIONS.BACKUP_DRIVE_CLIENT_SAVED,
+    entityType: 'backup_drive',
+    entityId: 'client',
+    before: current ? { clientId: current.clientId } : undefined,
+    after: { clientId, secretStored: true },
+  });
+
+  return driveStatus(input.merchantId, { probe: false });
+}
+
+/** Forgets the OAuth client. Refused while an account is connected with it. */
+export async function clearDriveClient(input: {
+  merchantId: string;
+  actorUserId: string | null;
+}): Promise<DriveStatus> {
+  if (readConnectionSummary()) {
+    throw new AppError('VALIDATION_FAILED', TEXT.disconnectBeforeClear);
+  }
+  clearClient();
+
+  await recordAudit({
+    merchantId: input.merchantId,
+    actorUserId: input.actorUserId,
+    action: AUDIT_ACTIONS.BACKUP_DRIVE_CLIENT_CLEARED,
+    entityType: 'backup_drive',
+    entityId: 'client',
+  });
+
+  return driveStatus(input.merchantId, { probe: false });
 }
 
 /** Applies a settings change and records it. Returns the refreshed status. */

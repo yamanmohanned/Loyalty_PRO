@@ -585,6 +585,60 @@ export const locale = {
       disconnected: 'تم فصل الحساب. تستمر النسخ الاحتياطية على هذا الجهاز كالمعتاد.',
       keepLabel: 'عدد النسخ المحفوظة في Drive',
       keepHint: 'عند تجاوز هذا العدد تُحذف أقدم نسخة تلقائياً',
+
+      /* ── The OAuth client, typed by the owner, stored encrypted ─────────── */
+      clientTitle: 'إعدادات الربط مع Google',
+      clientIntro:
+        'قيمتان من مشروعك في Google Cloud تُدخلان مرة واحدة. تُحفظان على هذا الجهاز والسرّ مشفّر، ولا تظهران في أي ملف إعدادات أو سجلّ.',
+      clientIdLabel: 'معرّف العميل (Client ID)',
+      clientIdHint:
+        'من Google Cloud: القائمة ← Google Auth Platform ← Clients ← العميل من نوع Desktop app. ينتهي بـ ‎.apps.googleusercontent.com',
+      clientSecretLabel: 'سرّ العميل (Client secret)',
+      /* Google: a client secret is visible and downloadable only at creation; a lost one
+         is replaced with «Add Secret» on the client's page (support.google.com/cloud/answer/15549257). */
+      clientSecretHint:
+        'يظهر مرة واحدة فقط عند إنشاء العميل — انسخه واحفظه فوراً. إن فُقد فاضغط «Add Secret» في صفحة العميل نفسها في Google Cloud وأدخل السرّ الجديد هنا.',
+      clientSave: 'حفظ إعدادات الربط',
+      clientSaved: 'حُفظت إعدادات الربط على هذا الجهاز والسرّ مشفّر. اضغط الآن «ربط حساب Google».',
+      clientChange: 'تغيير',
+      clientClear: 'حذف الإعدادات',
+      clientCleared: 'حُذفت إعدادات الربط من هذا الجهاز.',
+      clientClearBlocked: 'لحذف إعدادات الربط أو استبدالها بعميل آخر افصل حساب Google أولاً.',
+      secretStored: (at: string) => `السرّ محفوظ مشفّراً على هذا الجهاز منذ ${at}.`,
+      clientFromEnvironment:
+        'مأخوذ من بيئة التشغيل — للتطوير والاختبار فقط، ولا يُقرأ هذا المصدر على جهاز متجر.',
+      clientStoredNote: 'لا يُرسل السرّ إلى أي جهة غير Google، ولا يُعرض مرة أخرى بعد الحفظ.',
+
+      /* ── The account, and whether the arrangement is working ──────────── */
+      accountTitle: 'حساب Google',
+      accountLinked: 'الحساب المربوط:',
+      accountUnknown: 'غير معروف بعد — اضغط «اختبار الاتصال» لقراءته',
+      connectedSince: (at: string) => `مربوط منذ ${at}`,
+      nextUpload: 'الرفع المجدول القادم:',
+      noSchedule: 'لا يوجد — الجدولة أو الرفع متوقف',
+      never: 'لم يُرفع شيء بعد',
+      copiesInDrive: 'النسخ الموجودة في Drive:',
+      copiesCount: (count: number, keep: number) => `${count} من أصل ${keep}`,
+      uploadNow: 'ارفع نسخة الآن',
+      uploading: 'جارٍ أخذ نسخة ورفعها…',
+      uploadedNow: 'أُخذت نسخة جديدة ورُفعت إلى Google Drive.',
+      uploadFailed:
+        'أُخذت النسخة على هذا الجهاز، لكنها لم تُرفع إلى Google Drive — السبب وما يجب فعله في التنبيه أعلاه.',
+      uploadNotRegistered: 'أُخذت النسخة على هذا الجهاز فقط، لأن Google Drive غير مربوط أو الرفع متوقف.',
+      test: 'اختبار الاتصال',
+      testing: 'جارٍ الاختبار…',
+      testPassed: 'نجح الاختبار: البرنامج يستطيع الكتابة في Google Drive والقراءة منه.',
+      testFailed: 'فشل الاختبار عند الخطوة المعلَّمة أدناه.',
+      stepNotReached: 'لم تُجرَ',
+      steps: {
+        AUTHORISE: 'الإذن من Google',
+        UPLOAD: 'رفع ملف اختبار صغير',
+        READ_BACK: 'قراءة الملف والتأكّد أنه مطابق',
+        DELETE: 'حذف ملف الاختبار',
+      } as Record<string, string>,
+      testAccount: (email: string) => `الحساب: ${email}`,
+      restoreHint: 'لاستعادة نسخة من Google Drive:',
+      restoreLink: 'النسخ الاحتياطي ← استعادة نسخة',
     },
   },
 

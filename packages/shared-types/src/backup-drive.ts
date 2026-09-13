@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Google Drive backup contracts (CLAUDE.md §7 / CLAUDE_v3.md §7.3).
  *
@@ -90,6 +92,62 @@ export interface DriveStatus {
   };
   /** The exact scope this build asks Google for, shown so it can be checked against consent. */
   scope: string;
+  /**
+   * The OAuth client in use — its id only; the secret never leaves the encrypted store.
+   * `environment` appears only outside production (tests, a developer's stand-in).
+   */
+  client: { clientId: string; source: 'settings' | 'environment'; savedAt: string | null } | null;
+  /** The Google account holding the backups, so the owner can see it is the shop's. */
+  account: DriveAccount | null;
+}
+
+/** A Google account, as Google names it. */
+export interface DriveAccount {
+  email: string | null;
+  name: string | null;
+}
+
+/**
+ * The OAuth client the owner types into Settings.
+ *
+ * Validated with the same schema in the dashboard and the API. The messages say where
+ * to find the value, because the only person who will ever type these is someone
+ * holding the Google Cloud console open in another window.
+ */
+export const DriveClientUpdateSchema = z
+  .object({
+    clientId: z
+      .string()
+      .trim()
+      .regex(
+        /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/i,
+        'معرّف العميل غير صحيح — ينتهي بـ ‎.apps.googleusercontent.com. انسخه كاملاً من صفحة Clients في Google Cloud.',
+      ),
+    clientSecret: z
+      .string()
+      .trim()
+      .min(10, 'سرّ العميل غير مكتمل — انسخه كاملاً كما ظهر عند إنشاء العميل.')
+      .max(200)
+      .regex(/^\S+$/, 'سرّ العميل لا يحتوي على مسافات — انسخه كما هو دون زيادة.'),
+  })
+  .strict();
+export type DriveClientUpdate = z.infer<typeof DriveClientUpdateSchema>;
+
+/** The four steps «اختبار الاتصال» proves, in order. */
+export type DriveTestStepName = 'AUTHORISE' | 'UPLOAD' | 'READ_BACK' | 'DELETE';
+
+export interface DriveTestStep {
+  step: DriveTestStepName;
+  /** Null when an earlier step failed and this one was not attempted. */
+  ok: boolean | null;
+  failure: DriveFailure | null;
+}
+
+export interface DriveTestResult {
+  ok: boolean;
+  at: string;
+  account: DriveAccount | null;
+  steps: DriveTestStep[];
 }
 
 /** The authorisation URL a person must open, and how long it stays valid. */

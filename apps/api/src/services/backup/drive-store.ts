@@ -9,7 +9,7 @@ import {
 } from 'node:fs';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import type { DriveFailure } from '@walaa/shared-types';
+import type { DriveAccount, DriveFailure } from '@walaa/shared-types';
 import { loadEnv } from '../../config/env';
 import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
 
@@ -94,7 +94,12 @@ interface StoredConnection {
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
   lastFailure: DriveFailure | null;
+  /** Whose Google account the grant belongs to, as Google names it. Not a credential. */
+  account?: DriveAccount | null;
 }
+
+/** AES-256-GCM, base64 parts. */
+type Sealed = { iv: string; tag: string; ciphertext: string };
 
 /** The connection as the rest of the service uses it. */
 export interface DriveConnection {
@@ -106,6 +111,8 @@ export interface DriveConnection {
   lastSuccessAt: string | null;
   lastAttemptAt: string | null;
   lastFailure: DriveFailure | null;
+  /** So the merchant can see WHICH account holds his backups. Absent on older grants. */
+  account?: DriveAccount | null;
 }
 
 /** The connection without the credential — safe to return from an API route. */
@@ -164,10 +171,10 @@ function encryptionKey(): Buffer {
   return key;
 }
 
-function encrypt(plaintext: string): StoredConnection['refreshToken'] {
+function encrypt(plaintext: string, aad: Buffer = AAD): Sealed {
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGORITHM, encryptionKey(), iv);
-  cipher.setAAD(AAD);
+  cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return {
     iv: iv.toString('base64'),
@@ -176,13 +183,13 @@ function encrypt(plaintext: string): StoredConnection['refreshToken'] {
   };
 }
 
-function decrypt(sealed: StoredConnection['refreshToken']): string {
+function decrypt(sealed: Sealed, aad: Buffer = AAD): string {
   const decipher = createDecipheriv(
     ALGORITHM,
     encryptionKey(),
     Buffer.from(sealed.iv, 'base64'),
   );
-  decipher.setAAD(AAD);
+  decipher.setAAD(aad);
   decipher.setAuthTag(Buffer.from(sealed.tag, 'base64'));
   return Buffer.concat([
     decipher.update(Buffer.from(sealed.ciphertext, 'base64')),
@@ -217,6 +224,7 @@ export function readConnection(): DriveConnection | null {
       lastSuccessAt: stored.lastSuccessAt ?? null,
       lastAttemptAt: stored.lastAttemptAt ?? null,
       lastFailure: stored.lastFailure ?? null,
+      account: stored.account ?? null,
     };
   } catch {
     return null;
@@ -251,6 +259,7 @@ export function writeConnection(connection: DriveConnection): void {
     lastSuccessAt: connection.lastSuccessAt,
     lastAttemptAt: connection.lastAttemptAt,
     lastFailure: connection.lastFailure,
+    account: connection.account ?? null,
   };
 
   const path = connectionPath();
@@ -308,4 +317,72 @@ export function recordAttempt(
  */
 export function clearConnection(): void {
   rmSync(connectionPath(), { force: true });
+}
+
+/* ── The OAuth client: the id, and the secret encrypted ───────────────────────── */
+
+/*
+  The client id and secret used to come from `walaa.env` — a secret in a plain
+  configuration file, which is exactly what §7.6 forbids and what the merchant was
+  promised would not happen. They are now typed into Settings by the owner and kept
+  here: the id in the clear (Google treats it as public; it appears in every consent
+  URL), the secret sealed with the same `drive.key` as the refresh token but under its
+  own additional authenticated data, so a blob lifted from one field cannot be replayed
+  into the other.
+*/
+
+const CLIENT_FILE = 'drive-client.json';
+const CLIENT_AAD = Buffer.from('walaa/drive/client-secret/v1', 'utf8');
+
+interface StoredClient {
+  version: 1;
+  clientId: string;
+  clientSecret: Sealed;
+  savedAt: string;
+}
+
+export interface StoredDriveClient {
+  clientId: string;
+  clientSecret: string;
+  savedAt: string;
+}
+
+const clientPath = (): string => join(driveStateDirectory(), CLIENT_FILE);
+
+/** The stored client, or null. Never throws — the local backup path reads through this. */
+export function readClient(): StoredDriveClient | null {
+  try {
+    const path = clientPath();
+    if (!existsSync(path)) return null;
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as StoredClient;
+    if (stored.version !== 1 || !stored.clientId || !stored.clientSecret?.ciphertext) return null;
+    return {
+      clientId: stored.clientId,
+      clientSecret: decrypt(stored.clientSecret, CLIENT_AAD),
+      savedAt: stored.savedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Stores the client, the secret encrypted. Written aside and renamed, like the grant. */
+export function writeClient(clientId: string, clientSecret: string): StoredDriveClient {
+  mkdirSync(driveStateDirectory(), { recursive: true });
+  const savedAt = new Date().toISOString();
+  const stored: StoredClient = {
+    version: 1,
+    clientId,
+    clientSecret: encrypt(clientSecret, CLIENT_AAD),
+    savedAt,
+  };
+  const path = clientPath();
+  const staging = `${path}.partial`;
+  writeFileSync(staging, JSON.stringify(stored, null, 2), { encoding: 'utf8', mode: 0o600 });
+  renameSync(staging, path);
+  return { clientId, clientSecret, savedAt };
+}
+
+export function clearClient(): void {
+  rmSync(clientPath(), { force: true });
 }
