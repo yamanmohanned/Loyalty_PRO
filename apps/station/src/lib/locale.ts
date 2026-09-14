@@ -325,6 +325,25 @@ export const locale = {
     syncing: 'قيد المزامنة',
     offline: 'غير متصل',
     queued: (count: number) => `${count} بانتظار الإرسال`,
+    /** Kept on this station until the manager PC's program is activated — not lost. */
+    held: (count: number) => `${count} محفوظة بانتظار التفعيل`,
+  },
+
+  /**
+   * The manager PC's licence is read-only (packaging/LICENSING.md §7).
+   *
+   * Written for the cashier, who can do nothing about a licence and must not be left
+   * wondering whether the customer's purchase counted. Each message answers that first,
+   * then says the one thing to do: carry on.
+   */
+  license: {
+    heldTitle: 'لم تُحتسب هذه الفاتورة للزبون الآن',
+    heldBody:
+      'حُفظت على هذه المحطة وستُحتسب له تلقائياً عند تفعيل البرنامج على جهاز المدير — تابع خدمة الزبون كالمعتاد، ولا قسيمة خصم لهذه الفاتورة.',
+    strip:
+      'البرنامج على جهاز المدير في وضع القراءة فقط: تُحفظ الفواتير هنا وتُحتسب للزبائن عند التفعيل، وتسجيل الزبائن الجدد متوقف مؤقتاً.',
+    registerRefused:
+      'لا يمكن تسجيل زبون جديد الآن: البرنامج على جهاز المدير في وضع القراءة فقط. لم يُسجَّل شيء — أكمل البيع كالمعتاد، واحتفظ بالبطاقة لتسجيله لاحقاً.',
   },
 
   actions: {

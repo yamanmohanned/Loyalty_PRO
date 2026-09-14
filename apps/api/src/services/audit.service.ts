@@ -116,6 +116,17 @@ export const AUDIT_ACTIONS = {
   LICENSE_STORED_CODE_INVALID: 'license.stored_code_invalid',
   /** A code from the mirror file was put back into the database (after a restore). */
   LICENSE_RESTORED_FROM_MIRROR: 'license.restored_from_mirror',
+  /** An emergency code read over the phone was entered. */
+  LICENSE_UNLOCK_ENTERED: 'license.unlock_entered',
+  LICENSE_UNLOCK_FAILED: 'license.unlock_failed',
+  /** The installation had a licence and now has no licence rows at all — damage or deletion. */
+  LICENSE_LOST: 'license.lost',
+  /** The clock came back into line; closes a `license.clock_rollback`. */
+  LICENSE_CLOCK_RESTORED: 'license.clock_restored',
+  /** The licence check itself failed; the gate used the last recorded status. */
+  LICENSE_CHECK_FAILED: 'license.check_failed',
+  /** A queued sale arrived while read-only and was accepted because it happened while licensed. */
+  LICENSE_ACCEPTED_BY_OCCURRENCE: 'license.accepted_by_occurrence',
   /** A copy fetched, decrypted and checked beside the live database — nothing replaced. */
   BACKUP_RESTORE_STAGED: 'backup.restore_staged',
   /** The owner confirmed a staged restore; applied at the next start. */

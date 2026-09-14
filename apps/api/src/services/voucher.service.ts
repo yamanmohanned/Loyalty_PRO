@@ -63,10 +63,12 @@ export async function redeemVoucher(params: {
   merchantId: string;
   voucherId: string;
   actorUserId: string;
+  /** When it happened, for a replay of the offline queue. */
+  occurredAt?: Date;
 }) {
   // Redeeming a voucher is the product's nearest thing to taking a payment, and is
   // refused while the licence is read-only.
-  await assertCanRecord('VOUCHER_REDEMPTION');
+  await assertCanRecord('VOUCHER_REDEMPTION', { occurredAt: params.occurredAt });
 
   const now = new Date();
 

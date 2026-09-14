@@ -709,6 +709,27 @@ clock — there is no expiry to stretch.
 changed source is an audit warning. Activated codes are mirrored to
 `license-codes.json` beside the anchor, so restoring an older database puts them back.
 
+**Never lock out a paying shop** *(operator's first requirement, 2026-09-15)* — every stop
+has a way back with no visit and no internet:
+- **Emergency codes** (`crates/walaa-license/src/unlock.rs`): fifteen symbols read over the
+  phone, from a hash chain derived from the private key; the program holds only the
+  chain's public tip. They override every read-only state for 1–30 days, judged against
+  the latest recorded time (a wound-back clock cannot stretch them).
+- **GRACE** (renamed from TRIAL_GRACE) follows every time-limited entitlement — trial or
+  emergency window — for five days.
+- **Warnings escalate**: `notice` 14 days out (bell), `warning` 7 (top-bar chip),
+  `urgent` 3 (red banner on every screen).
+- **A failing check fails to the last recorded status** (`installation_state.last_status*`):
+  a shop last seen licensed keeps trading; a copy last seen read-only stays read-only.
+  The service starts without the licensing module.
+- **A queued sale is judged by when it happened** (the till's `queuedAt`, capped at now,
+  up to 30 days back) OR by now; otherwise it stays queued. Never dropped.
+- **The till keeps a refused link**, pinned to its invoice, and it is credited on
+  activation; the cashier sees one sentence and carries on.
+- **Tamper events are permanent**: audit trail plus an append-only `license-events.log`
+  merged back after a restore, with the evidence (`cause`, uptime, phase, previous
+  count) that separates a dead CMOS battery from a clock wound back.
+
 **Two deviations from the brief, both forced:** the device ID is base-30, not Base32 —
 excluding six of 32 symbols leaves 30; and only the Drive *upload* needs `drive_backup`,
 because gating restore would strand a merchant replacing a dead PC.

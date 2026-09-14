@@ -130,7 +130,7 @@ export const locale = {
   /* ── Licensing, as the shell shows it ─────────────────────────────────────
      Every sentence is written for the person at the screen: what still works
      comes first, because the first fear of a merchant reading «read-only» is that
-     his data is gone. It is not, and the banner says so before anything else. */
+     the shop's data is gone. It is not, and the banner says so before anything else. */
   license: {
     unlicensedTitle: 'البرنامج غير مفعّل — يعمل للقراءة فقط',
     expiredTitle: 'انتهت الفترة التجريبية — البرنامج يعمل للقراءة فقط',
@@ -139,7 +139,19 @@ export const locale = {
     graceBody: (date: string) =>
       `البرنامج يعمل بكامل ميزاته حتى ${date}، ثم يتحوّل إلى القراءة فقط. فعّله برمز من المزوّد قبل ذلك.`,
     readOnlyBody:
-      'بياناتك كاملة ومتاحة: التقارير والزبائن وسجل البطاقات والنسخ الاحتياطي والاستعادة. المتوقف فقط: تسجيل المبيعات، وتسجيل الزبائن الجدد، وصرف القسائم.',
+      'بياناتك كاملة ومتاحة: التقارير والزبائن وسجل البطاقات والنسخ الاحتياطي والاستعادة. المتوقف فقط: تسجيل المبيعات، وتسجيل الزبائن الجدد، وصرف القسائم. إن تعذّر التفعيل الآن، فاتصل بالمزوّد ليقرأ لك رمز طوارئ يعيد التشغيل فوراً.',
+    trialUrgentTitle: (days: string) => `تنتهي الفترة التجريبية خلال ${days}`,
+    trialUrgentBody:
+      'فعّل البرنامج برمز من المزوّد قبل انتهائها. بعدها خمسة أيام مهلة يعمل فيها كل شيء، ثم وضع القراءة فقط.',
+    trialNoticeBody: 'اطلب رمز التفعيل من المزوّد في الأيام القادمة.',
+    graceEmergencyBody: (date: string) =>
+      `انتهى التشغيل المؤقت برمز الطوارئ. البرنامج يعمل بكامل ميزاته حتى ${date}، ثم يتحوّل إلى القراءة فقط — فعّله برمز من المزوّد، أو اطلب رمز طوارئ آخر.`,
+    emergencyTitle: (date: string) => `يعمل البرنامج برمز طوارئ حتى ${date}`,
+    emergencyBody: 'رمز الطوارئ مؤقت. اطلب من المزوّد رمز التفعيل والصقه في «الإعدادات ← الترخيص» قبل ذلك التاريخ.',
+    degradedTitle: 'تعذّر التحقق من الترخيص',
+    degradedBody:
+      'البرنامج يعمل بآخر حالة ترخيص مسجّلة. هذه مشكلة في التثبيت وليست في بياناتك — أعد تشغيل جهاز المدير، وإن استمرت فأعد تثبيت البرنامج أو تواصل مع المزوّد.',
+    countdownEmergency: (days: string) => `تشغيل مؤقت — يبقى ${days}`,
     tamperedClockBody: (behind: string) =>
       `تاريخ هذا الجهاز ووقته متأخران عن آخر وقت سجّله البرنامج بنحو ${behind}. صحّح التاريخ والوقت في Windows — يعود التسجيل تلقائياً فور تصحيحهما، وبياناتك لم تتأثر.`,
     tamperedCodeBody:
@@ -518,7 +530,7 @@ export const locale = {
 
     /* ── Licensing ─────────────────────────────────────────────────────────
        The one screen a merchant uses with the provider on the phone: every label
-       is something he may have to read aloud. */
+       is something the merchant may have to read aloud. */
     license: {
       title: 'ترخيص البرنامج',
       subtitle: 'حالة الترخيص على هذا الجهاز، وتفعيله برمز من المزوّد.',
@@ -526,13 +538,15 @@ export const locale = {
       status: {
         UNLICENSED: 'غير مفعّل',
         TRIAL: 'فترة تجريبية',
-        TRIAL_GRACE: 'مهلة بعد انتهاء التجربة',
+        EMERGENCY: 'تشغيل مؤقت برمز طوارئ',
+        GRACE: 'مهلة أخيرة',
         EXPIRED: 'منتهٍ',
         PERPETUAL: 'مفعّل',
         TAMPERED: 'موقوف',
       } as Record<string, string>,
+      degraded: 'تعذّر التحقق — تُستعمل آخر حالة مسجّلة',
       kindLabel: 'نوع الترخيص',
-      kind: { trial: 'تجريبي', perpetual: 'دائم' } as Record<string, string>,
+      kind: { trial: 'تجريبي', perpetual: 'دائم', emergency: 'رمز طوارئ' } as Record<string, string>,
       expiresLabel: 'ينتهي في',
       perpetual: 'دائم',
       graceEndsLabel: 'تنتهي المهلة في',
@@ -563,6 +577,70 @@ export const locale = {
       historyExpires: 'ينتهي في',
       historyBy: 'بواسطة',
       managerOnly: 'التفعيل وسجله متاحان للمالك والمدير فقط.',
+
+      /* The phone path: what the merchant does when no message can reach this PC. */
+      emergency: {
+        title: 'رمز الطوارئ',
+        subtitle:
+          'حين لا يصل رمز التفعيل: خمسة عشر حرفاً يقرؤها لك المزوّد بالهاتف، تعيد التشغيل الكامل فوراً لأيام محدودة — دون إنترنت ودون زيارة.',
+        label: 'رمز الطوارئ',
+        hint: 'اتصل بالمزوّد واقرأ له رقم هذا الجهاز أعلاه، ثم اكتب ما يقرؤه لك. الأحرف الصغيرة والمسافات لا تؤثر.',
+        placeholder: 'XXXXX-XXXXX-XXXXX',
+        submit: 'تشغيل فوري',
+        submitting: 'جارٍ التحقق…',
+        done: (date: string) => `تم: عاد التشغيل الكامل حتى ${date}. اطلب من المزوّد رمز التفعيل قبل ذلك التاريخ.`,
+        already: 'هذا الرمز مُدخل مسبقاً — لم يتغيّر شيء.',
+      },
+
+      /* The record the provider reads at the shop. */
+      events: {
+        title: 'سجل أحداث الترخيص',
+        subtitle:
+          'كل تفعيل ورمز طوارئ وكل تأخّر في ساعة الجهاز. يُحفظ هنا وفي ملف منفصل يبقى حتى بعد استعادة نسخة احتياطية.',
+        empty: 'لا أحداث بعد.',
+        rollbacks: (n: number) =>
+          n === 0
+            ? 'لم يُسجَّل أي تأخّر لساعة الجهاز.'
+            : n === 1
+              ? 'سُجّل تأخّر لساعة الجهاز مرة واحدة.'
+              : `سُجّل تأخّر لساعة الجهاز ${n} مرات.`,
+        type: {
+          ACTIVATED: 'تفعيل برمز',
+          ACTIVATION_FAILED: 'محاولة تفعيل مرفوضة',
+          UNLOCK_ENTERED: 'رمز طوارئ',
+          UNLOCK_FAILED: 'رمز طوارئ مرفوض',
+          LOST: 'اختفى الترخيص المفعّل',
+          DEVICE_IDENTIFIED: 'تعريف الجهاز',
+          DEVICE_SOURCES_CHANGED: 'تغيّر في مصادر رقم الجهاز',
+          CLOCK_ROLLBACK: 'ساعة الجهاز متأخرة',
+          CLOCK_RESTORED: 'عادت الساعة إلى وقتها',
+          CLOCK_ANCHOR_CONFLICT: 'سجلات الوقت غير متطابقة',
+          CLOCK_ANCHOR_RESET: 'تصحيح سجل الوقت برمز جديد',
+          STORED_CODE_INVALID: 'رمز محفوظ لا يطابق توقيعه',
+          RESTORED_FROM_MIRROR: 'استرجاع رمز بعد استعادة نسخة',
+          CHECK_FAILED: 'تعذّر التحقق من الترخيص',
+          ACCEPTED_BY_OCCURRENCE: 'عملية مؤجلة قُبلت بتاريخ حدوثها',
+        } as Record<string, string>,
+        cause: {
+          FIRMWARE_RESET:
+            'تاريخ مستحيل، أقدم من وجود البرنامج نفسه — علامة نموذجية على نفاد بطارية اللوحة الأم أو إعادة ضبط BIOS، لا على تلاعب.',
+          CHANGED_WHILE_RUNNING: 'غُيّر التاريخ إلى الوراء بينما البرنامج يعمل — تغيير يدوي.',
+          SET_BACK_WHILE_OFF:
+            'بدأ الجهاز بتاريخ أقدم من آخر تشغيل — تغيير أثناء إطفاء الجهاز، أو بطارية ضعيفة.',
+        } as Record<string, string>,
+        behind: (delay: string) => `متأخرة بنحو ${delay}`,
+        systemTime: 'كانت ساعة الجهاز تقرأ',
+        stoppedSales: 'أوقف ذلك تسجيل العمليات',
+        notStopped: 'لم يوقف تسجيل العمليات (ترخيص دائم)',
+        restoredAfter: (delay: string) => `بعد ${delay}`,
+        refusedDuring: (n: number) => (n === 0 ? 'دون عمليات مرفوضة' : `رُفضت خلالها ${n} عملية`),
+        // Neutral on purpose: an event reaches the file-only state either through a
+        // restore of an older copy or by being recorded before the first account existed.
+        fromFile: 'أُعيد إلى السجل من ملف أحداث الترخيص',
+        lost: 'كان على هذا الجهاز ترخيص، ثم لم يعد له أثر في البيانات — تلف في الملفات أو حذف. رمز الطوارئ أو إعادة لصق رمز التفعيل يعيد التشغيل.',
+        until: (date: string) => `حتى ${date}`,
+        reason: (reason: string) => `السبب: ${reason}`,
+      },
     },
 
     /* ── Staff accounts ────────────────────────────────────────────────────

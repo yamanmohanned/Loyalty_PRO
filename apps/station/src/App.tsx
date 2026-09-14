@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { LogOut, Search } from 'lucide-react';
-import type { AuthUser, PaperWidth as PaperWidthValue, SyncState } from '@walaa/shared-types';
-import { restoreSession, setTokens, setUnauthenticatedHandler } from './lib/api';
+import type { AuthUser, LicenseState, PaperWidth as PaperWidthValue, SyncState } from '@walaa/shared-types';
+import { api, restoreSession, setTokens, setUnauthenticatedHandler } from './lib/api';
 import { resolveApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { PrintProvider } from './lib/print';
@@ -96,6 +96,7 @@ export function App(): JSX.Element {
               setBoot({ kind: 'needs-login' });
             }}
           />
+          <LicenseStrip />
 
           <main className="flex-1">
             <Routes>
@@ -158,8 +159,53 @@ function Header({
  * Present at all times, because "did that scan go through?" is the question the
  * operator will otherwise ask by scanning again.
  */
+/**
+ * One line under the header while the manager PC's licence is read-only, so the cashier
+ * knows before the first scan rather than learning it from a refusal. Says what still
+ * happens (invoices are kept and credited later) before what does not.
+ *
+ * **Re-checked the moment the held count changes**, not only on a timer. It first polled
+ * every five minutes — and after the shop was unlocked it went on telling the cashier that
+ * registration was stopped while it worked, which is the ambiguity this strip exists to
+ * remove. The held count is the till's own evidence: it rises when the manager PC refuses
+ * for the licence and falls to zero when it starts accepting again. A one-minute poll
+ * covers the rest.
+ */
+function LicenseStrip(): JSX.Element | null {
+  const [readOnly, setReadOnly] = useState(false);
+  const [held, setHeld] = useState(0);
+
+  useEffect(() => subscribe((snapshot) => setHeld(snapshot.held)), []);
+
+  useEffect(() => {
+    let alive = true;
+    const check = (): void => {
+      api
+        .get<LicenseState>('/license')
+        .then((state) => {
+          if (alive) setReadOnly(state.readOnly);
+        })
+        // Unreachable is the connection pill's news, not this strip's.
+        .catch(() => undefined);
+    };
+    check();
+    const timer = window.setInterval(check, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [held]);
+
+  if (!readOnly) return null;
+  return (
+    <div role="status" className="border-b border-amber/30 bg-amber-tint px-5 py-2 text-center text-sm font-semibold text-ink">
+      {locale.license.strip}
+    </div>
+  );
+}
+
 function ConnectionPill(): JSX.Element {
-  const [snapshot, setSnapshot] = useState<QueueSnapshot>({ state: 'ONLINE', pending: 0 });
+  const [snapshot, setSnapshot] = useState<QueueSnapshot>({ state: 'ONLINE', pending: 0, held: 0 });
 
   useEffect(() => subscribe(setSnapshot), []);
 
@@ -189,7 +235,11 @@ function ConnectionPill(): JSX.Element {
         )}
       />
       <span className="hidden sm:inline">{label[snapshot.state]}</span>
-      {snapshot.pending > 0 ? <span>{locale.connection.queued(snapshot.pending)}</span> : null}
+      {snapshot.held > 0 ? (
+        <span>{locale.connection.held(snapshot.held)}</span>
+      ) : snapshot.pending > 0 ? (
+        <span>{locale.connection.queued(snapshot.pending)}</span>
+      ) : null}
     </span>
   );
 }

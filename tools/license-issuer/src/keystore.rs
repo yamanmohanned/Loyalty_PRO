@@ -34,6 +34,29 @@ pub struct KeyFile {
     pub created_at: String,
     pub kdf: Kdf,
     pub cipher: Cipher,
+    /// The emergency-unlock chain's public values. The chain's secret is derived from
+    /// the private key when a code is issued, and never stored on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unlock: Option<UnlockParams>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UnlockParams {
+    pub epoch_day: i64,
+    pub length: u32,
+    /// Hex, as compiled into the application.
+    pub tip: String,
+}
+
+impl UnlockParams {
+    pub fn from_chain(chain: &walaa_license::unlock::Chain) -> Self {
+        UnlockParams { epoch_day: chain.epoch_day, length: chain.length, tip: format!("{:016x}", chain.tip) }
+    }
+
+    pub fn chain(&self) -> Result<walaa_license::unlock::Chain, String> {
+        let tip = u64::from_str_radix(&self.tip, 16).map_err(|_| "damaged key file (unlock tip)".to_string())?;
+        Ok(walaa_license::unlock::Chain { epoch_day: self.epoch_day, length: self.length, tip })
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -127,6 +150,7 @@ pub fn seal(signing: &SigningKey, password: &str, kind: KeyKind, created_at: &st
             nonce: STANDARD.encode(nonce),
             ciphertext: STANDARD.encode(ciphertext),
         },
+        unlock: None,
     })
 }
 

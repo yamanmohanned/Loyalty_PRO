@@ -449,13 +449,185 @@ try {
     'a restart neither migrates nor re-installs the template',
   );
   second.kill();
-  await sleep(500);
+  await sleep(1500);
+
+  await recoveryDrill();
 } catch (error) {
   check(false, 'the staged runtime booted', error instanceof Error ? error.message : String(error));
   console.log('\n--- service output ---\n' + output.join('') + '\n----------------------');
 } finally {
   child.kill();
 }
+
+/*
+  ── The recovery drill: a paying shop whose licence is destroyed ─────────────
+
+  The operator's first requirement: nothing ordinary may stop a shop that has paid. This
+  runs it for real, on the production-mode install above, with nothing but the shipped
+  program and the provider's issuer:
+
+    1. destroy the licence — its database rows deleted, the mirror file overwritten;
+    2. restart: the shop must be read-only (so the drill is not passing vacuously);
+    3. the provider issues a phone code; it is typed in as heard — lower case, spaces;
+    4. the very next sale must be recorded, with no restart;
+    5. then delete the licensing module itself and restart: the service must start, and
+       the shop must keep trading on the last status it recorded.
+*/
+async function bootService(label) {
+  const lines = [];
+  const proc = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], { cwd: PROGRAM, env: childEnv, windowsHide: true });
+  proc.stdout.on('data', (chunk) => lines.push(chunk.toString()));
+  proc.stderr.on('data', (chunk) => lines.push(chunk.toString()));
+  try {
+    await waitForHealth(45_000);
+  } catch (error) {
+    console.log(`\n--- ${label} output ---\n${lines.join('')}\n----------------------`);
+    throw error;
+  }
+  return { proc, lines };
+}
+
+async function api(method, path, body, token) {
+  const response = await fetch(`http://127.0.0.1:${PORT}/api/v1${path}`, {
+    method,
+    headers: {
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    /* not JSON */
+  }
+  return { status: response.status, json, text };
+}
+
+// Function declarations throughout, not `const` arrows: the drill is called from the
+// main flow above, before any `const` below it has been evaluated.
+async function tokenFor(username, password) {
+  return (await api('POST', '/auth/login', { username, password })).json?.tokens?.accessToken ?? null;
+}
+
+/** A phone code for `deviceId`: from WALAA_VERIFY_UNLOCK_CODE, or the development issuer. */
+function phoneCodeFor(deviceId) {
+  if (process.env.WALAA_VERIFY_UNLOCK_CODE) {
+    return { code: process.env.WALAA_VERIFY_UNLOCK_CODE, source: 'WALAA_VERIFY_UNLOCK_CODE' };
+  }
+  delete process.env.VITEST;
+  const key = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@walaa', 'license-native')).keyInfo();
+  const issuer = join(REPO, 'tools', 'license-issuer', 'target', 'release', 'license-issuer.exe');
+  if (key.kind !== 'development' || !existsSync(issuer)) {
+    return { code: null, source: `${key.kind} key, no WALAA_VERIFY_UNLOCK_CODE` };
+  }
+  const output = execFileSync(
+    issuer,
+    ['--home', join(REPO, 'tools', 'license-issuer', 'dev-key'), '--password-stdin', 'unlock', '--device', deviceId, '--days', '7', '--note', 'verify-runtime recovery drill'],
+    { input: 'walaa-development-only-key\n', encoding: 'utf8' },
+  );
+  return { code: /\b([2-9A-HJKMNP-TV-Z]{5}-[2-9A-HJKMNP-TV-Z]{5}-[2-9A-HJKMNP-TV-Z]{5})\b/.exec(output)?.[1] ?? null, source: 'development issuer' };
+}
+
+/** One sale end to end: a new customer's card, a captured invoice, the scan. */
+async function sellOnce(invoiceId, phone) {
+  const station = await tokenFor('station', 'Till!2026');
+  const agent = await tokenFor('agent', 'Capture!2026');
+  const customer = await api('POST', '/customers', { name: 'زبون الاستعادة', phone }, station);
+  const card = customer.json?.customer?.cardNumber;
+  const now = new Date().toISOString();
+  await api(
+    'POST',
+    '/ingest/invoice',
+    {
+      agentId: 'verify-runtime',
+      invoice: { invoice_id: invoiceId, amount_gross: 30000, currency: 'IQD', branch_id: 'CLN-01', occurred_at: now, captured_at: now, capture_mode: 'SPOOL_WATCH' },
+    },
+    agent,
+  );
+  const sale = card ? await api('POST', '/scan/card', { barcodeToken: card, invoiceId }, station) : customer;
+  return { customer: customer.status, sale: sale.status, text: sale.text.slice(0, 160) };
+}
+
+async function recoveryDrill() {
+  // 1. Destroy the licence while the service is stopped.
+  const { DatabaseSync } = await import('node:sqlite');
+  const db = new DatabaseSync(join(DATA, 'walaa.db'));
+  db.exec('DELETE FROM license_activation; DELETE FROM license_unlock;');
+  db.close();
+  writeFileSync(join(DATA, 'license-codes.json'), '   destroyed');
+
+  // 2. The shop must now be read-only — or the drill proves nothing.
+  const third = await bootService('recovery drill');
+  const owner = await tokenFor('cleanowner', 'Clean-room!2026');
+  const destroyed = await api('GET', '/license', undefined, owner);
+  const deviceId = destroyed.json?.deviceId;
+  check(
+    destroyed.json?.readOnly === true,
+    'drill: with its licence destroyed, the shop is read-only',
+    `status ${destroyed.json?.status}`,
+  );
+  const refused = await sellOnce('INV-DRILL-0', '07701230000');
+  check(refused.customer === 423, 'drill: and refuses a sale', `HTTP ${refused.customer}`);
+
+  // 3. The phone call.
+  const { code, source } = phoneCodeFor(deviceId);
+  if (!code) {
+    check(false, 'drill: a phone code for this machine was available', source);
+    third.proc.kill();
+    return;
+  }
+  const other = phoneCodeFor('WL-2222-2222').code;
+  const wrongShop = other ? await api('POST', '/license/unlock', { code: other }, owner) : { status: 0, json: null };
+  check(
+    wrongShop.status === 422 && wrongShop.json?.error?.details?.reason === 'NOT_VALID',
+    'drill: a phone code for another shop is refused',
+    `HTTP ${wrongShop.status}`,
+  );
+  const spoken = code.toLowerCase().replace(/-/g, ' ');
+  const entered = await api('POST', '/license/unlock', { code: spoken }, owner);
+  check(
+    entered.status === 200 && entered.json?.state?.status === 'EMERGENCY' && entered.json?.state?.readOnly === false,
+    'drill: the phone code, typed as heard, restores full operation',
+    `HTTP ${entered.status} · ${entered.json?.state?.status ?? entered.text.slice(0, 160)} · "${spoken}" from ${source}`,
+  );
+
+  // 4. No restart.
+  const restored = await sellOnce('INV-DRILL-1', '07701230001');
+  check(
+    restored.customer === 201 && restored.sale < 300,
+    'drill: the very next sale is recorded, with no restart',
+    `customer ${restored.customer} · scan ${restored.sale} ${restored.sale >= 300 ? restored.text : ''}`,
+  );
+  const events = existsSync(join(DATA, 'license-events.log')) ? readFileSync(join(DATA, 'license-events.log'), 'utf8') : '';
+  check(
+    events.includes('license.unlock_entered') && events.includes('license.unlock_failed'),
+    'drill: both phone-code attempts are in the licence events file',
+  );
+  third.proc.kill();
+  await sleep(1500);
+
+  // 5. A broken installation: the licensing module itself is gone.
+  rmSync(join(PROGRAM, 'node_modules', '@walaa', 'license-native', 'walaa-license.node'), { force: true });
+  const fourth = await bootService('missing licensing module');
+  const degraded = await api('GET', '/license', undefined, await tokenFor('cleanowner', 'Clean-room!2026'));
+  check(
+    degraded.json?.degraded === true && degraded.json?.readOnly === false,
+    'drill: with the licensing module deleted, the service still starts and the shop still trades',
+    `status ${degraded.json?.status} · degraded ${degraded.json?.degraded}`,
+  );
+  const stillSelling = await sellOnce('INV-DRILL-2', '07701230002');
+  check(
+    stillSelling.customer === 201 && stillSelling.sale < 300,
+    'drill: a sale is recorded on the last recorded status',
+    `customer ${stillSelling.customer} · scan ${stillSelling.sale}`,
+  );
+  fourth.proc.kill();
+  await sleep(500);
+}
+
 
 /*
   ── A configuration failure must leave a readable reason ─────────────────────

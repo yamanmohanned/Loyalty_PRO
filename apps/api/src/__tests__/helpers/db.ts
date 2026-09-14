@@ -130,6 +130,7 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
   const tables = [
     'license_activation',
+    'license_unlock',
     'installation_state',
     'audit_log',
     'notification_log',

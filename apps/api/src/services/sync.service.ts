@@ -53,8 +53,10 @@ function classify(error: unknown): SyncItemResult['status'] {
     case 'CUSTOMER_ALREADY_EXISTS':
     case 'COUPON_NOT_REDEEMABLE':
       return 'REJECTED';
-    // Not settled: the Station keeps the item queued and sends it again after the
-    // program is activated. A read-only licence must never cost the merchant a sale.
+    // Not settled: the Station keeps the item queued and sends it again. It reaches
+    // here only if the sale happened while the shop was NOT licensed and it still is
+    // not — a sale made while licensed is accepted by when it happened. A read-only
+    // licence must never cost the merchant a sale; at worst it defers one.
     case 'LICENSE_READ_ONLY':
       return 'FAILED';
     default:
@@ -66,6 +68,10 @@ async function applyOperation(
   context: SyncContext,
   operation: SyncOperation,
 ): Promise<{ entityId: string | null; status: SyncItemResult['status'] }> {
+  // When the device recorded it. The licence judges a queued sale by this, not by when
+  // it arrives: a sale made while the shop was licensed is accepted whenever the till
+  // reconnects (license.service.ts, `assertCanRecord`).
+  const occurredAt = new Date(operation.queuedAt);
   switch (operation.type) {
     case 'INGEST_INVOICE': {
       const ingestionContext: IngestionContext = {
@@ -98,7 +104,7 @@ async function applyOperation(
       // No discount on a replayed scan: the customer has already paid and left, so a
       // voucher issued now would be one the drawer cannot produce at closing time.
       // The spend is still credited — see ScanOptions.issueDiscount.
-      const response = await scanCard(scanContext, operation.payload, { issueDiscount: false });
+      const response = await scanCard(scanContext, operation.payload, { issueDiscount: false, occurredAt });
       return { entityId: response.transaction?.id ?? null, status: 'APPLIED' };
     }
 
@@ -106,6 +112,7 @@ async function applyOperation(
       const customer = await createCustomer(
         { merchantId: context.merchantId, actorUserId: context.userId },
         operation.payload,
+        { occurredAt },
       );
       return { entityId: customer.id, status: 'APPLIED' };
     }
@@ -115,6 +122,7 @@ async function applyOperation(
         merchantId: context.merchantId,
         voucherId: operation.payload.voucherId,
         actorUserId: context.userId,
+        occurredAt,
       });
       return { entityId: result.voucher.id, status: 'APPLIED' };
     }

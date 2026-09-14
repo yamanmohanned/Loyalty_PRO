@@ -36,8 +36,60 @@ pub fn migrate(connection: &Connection) -> rusqlite::Result<()> {
             key_fingerprint TEXT NOT NULL,
             code TEXT NOT NULL
         );
-        CREATE INDEX IF NOT EXISTS issued_device ON issued(device_id, issued_at);",
+        CREATE INDEX IF NOT EXISTS issued_device ON issued(device_id, issued_at);
+        CREATE TABLE IF NOT EXISTS unlocks (
+            id INTEGER PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            day INTEGER NOT NULL,
+            valid_until INTEGER NOT NULL,
+            issued_at INTEGER NOT NULL,
+            note TEXT,
+            key_fingerprint TEXT NOT NULL,
+            code TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS unlocks_device ON unlocks(device_id, issued_at);",
     )
+}
+
+pub struct UnlockEntry {
+    pub device_id: String,
+    pub issued_at: i64,
+    pub valid_until: i64,
+    pub note: Option<String>,
+    pub code: String,
+}
+
+pub fn record_unlock(
+    connection: &Connection,
+    device: &str,
+    issued: &walaa_license::unlock::Issued,
+    issued_at: i64,
+    note: Option<&str>,
+    fingerprint: &str,
+) -> rusqlite::Result<()> {
+    connection.execute(
+        "INSERT INTO unlocks (device_id, day, valid_until, issued_at, note, key_fingerprint, code)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![device, issued.day, issued.valid_until, issued_at, note, fingerprint, issued.code],
+    )?;
+    Ok(())
+}
+
+pub fn list_unlocks(connection: &Connection, device: Option<&str>) -> rusqlite::Result<Vec<UnlockEntry>> {
+    let mut statement = connection.prepare(
+        "SELECT device_id, issued_at, valid_until, note, code
+         FROM unlocks WHERE (?1 IS NULL OR device_id = ?1) ORDER BY issued_at, id",
+    )?;
+    let rows = statement.query_map(params![device], |row| {
+        Ok(UnlockEntry {
+            device_id: row.get(0)?,
+            issued_at: row.get(1)?,
+            valid_until: row.get(2)?,
+            note: row.get(3)?,
+            code: row.get(4)?,
+        })
+    })?;
+    rows.collect()
 }
 
 pub fn record(connection: &Connection, payload: &Payload, extended: bool, fingerprint: &str, code: &str) -> rusqlite::Result<()> {
@@ -124,5 +176,18 @@ mod tests {
         assert_eq!(list(&connection, Some("WL-9999-9999")).unwrap().len(), 0);
         // The same licence id twice is refused by the database.
         assert!(record(&connection, &payload("a", Some(1_000)), false, "FP", "code-a").is_err());
+    }
+
+    #[test]
+    fn records_and_lists_emergency_codes() {
+        let connection = Connection::open_in_memory().unwrap();
+        migrate(&connection).unwrap();
+        let issued = walaa_license::unlock::Issued { code: "ABCDE-FGHJK-MNPQR".into(), day: 5, valid_until: 9_000 };
+        record_unlock(&connection, "WL-2345-6789", &issued, 1_000, Some("drive died"), "FP").unwrap();
+        let listed = list_unlocks(&connection, Some("WL-2345-6789")).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].valid_until, 9_000);
+        assert_eq!(listed[0].note.as_deref(), Some("drive died"));
+        assert!(list_unlocks(&connection, Some("WL-9999-9999")).unwrap().is_empty());
     }
 }

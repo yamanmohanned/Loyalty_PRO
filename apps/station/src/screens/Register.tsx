@@ -58,6 +58,8 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
    * not create it.
    */
   const [notSaved, setNotSaved] = useState<{ storage: boolean } | null>(null);
+  /** The manager PC's licence is read-only: nothing was registered, and the operator is told so. */
+  const [licenseRefused, setLicenseRefused] = useState(false);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ customer: Customer; mode: Mode } | null>(null);
   const cardInputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +124,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
 
     setBusy(true);
     setNotSaved(null);
+    setLicenseRefused(false);
 
     try {
       const response = await api.post<{ customer: Customer }>('/customers', parsed);
@@ -140,6 +143,11 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
         // rather than re-checking the phone number.
         setCardError(error_.message);
         cardInputRef.current?.focus();
+      } else if (error_ instanceof ApiRequestError && error_.code === 'LICENSE_READ_ONLY') {
+        // Not queued: a registration binds a card and checks the phone number now, and
+        // a customer registered hours later from a stale form is worse than one asked
+        // to register next visit. The form stays filled; nothing was stored.
+        setLicenseRefused(true);
       } else if (error_ instanceof ApiRequestError && error_.isUnsavedWrite) {
         setNotSaved({ storage: error_.isStorageFailure });
       } else {
@@ -203,6 +211,8 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
           </span>
           <h1 className="text-2xl font-bold">{locale.register.title}</h1>
         </div>
+
+        {licenseRefused ? <Notice tone="warn">{locale.license.registerRefused}</Notice> : null}
 
         {notSaved ? (
           <Notice tone="error">

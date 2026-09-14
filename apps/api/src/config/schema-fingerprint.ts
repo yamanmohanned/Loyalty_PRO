@@ -23,10 +23,10 @@
  */
 
 export const EXPECTED_MIGRATIONS_FINGERPRINT =
-  '2bf5f281d310b0a572a1a7b79e39b487d8a38171654a9e75ccbeafb72a95401e';
+  '3d93269f4b3225cf18bc3eb2dbc6e2575494ec7f81a9afde0ee7808b6feef713';
 
 export const EXPECTED_SCHEMA_HASH =
-  'bc23e04703e07fa71a12884ce44371a5adf2013eeec3a72f3d1308efad94178a';
+  '2d3a854bb6a10b738b32567cb01aa9151fa4422cb1597460bfbe1325e05f714f';
 
 /** When the two values above were generated, for a support call reading a log. */
-export const SCHEMA_FINGERPRINT_GENERATED_AT = '2026-09-14T04:39:21.124Z';
+export const SCHEMA_FINGERPRINT_GENERATED_AT = '2026-09-14T22:07:08.170Z';

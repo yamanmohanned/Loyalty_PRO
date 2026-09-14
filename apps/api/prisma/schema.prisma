@@ -581,7 +581,28 @@ model InstallationState {
   /// The latest time this installation has observed. One of three anchors; the other
   /// two are in the registry and a hidden file, and the latest of the three wins.
   lastSeenAt DateTime? @map("last_seen_at")
+  /// The last status the licence check produced, and until when it holds (NULL for
+  /// PERPETUAL). What the gate falls back to when the check itself fails — so a bug or
+  /// a missing module never stops a shop that was licensed.
+  lastStatus String? @map("last_status")
+  lastStatusUntil DateTime? @map("last_status_until")
+  lastStatusAt DateTime? @map("last_status_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("installation_state")
+}
+
+/// Every emergency code entered here — the fifteen symbols the provider reads over the
+/// phone (crates/walaa-license/src/unlock.rs). Like licence codes, re-verified on every
+/// check; `valid_until` is for the history list.
+model LicenseUnlock {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  code String @unique
+  deviceId String @map("device_id")
+  validUntil DateTime @map("valid_until")
+  enteredAt DateTime @default(now()) @map("entered_at")
+  enteredByUserId String? @map("entered_by")
+
+  @@map("license_unlock")
 }

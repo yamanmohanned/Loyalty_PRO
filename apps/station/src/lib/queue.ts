@@ -54,11 +54,20 @@ type Listener = (snapshot: QueueSnapshot) => void;
 export interface QueueSnapshot {
   state: SyncState;
   pending: number;
+  /**
+   * Queued items the manager PC refused because its licence is read-only. Kept, never
+   * dropped, and sent on every flush: they are credited once the program is activated,
+   * or at once if they happened while it was licensed. Counted apart so the pill can
+   * say why they wait rather than implying the network is down.
+   */
+  held: number;
 }
 
 let listeners: Listener[] = [];
 let flushing = false;
 let lastFailed = false;
+/** Operation ids the server last answered with LICENSE_READ_ONLY. */
+let heldIds = new Set<string>();
 /**
  * Whether the persistent socket is open (see `realtime.ts`).
  *
@@ -115,7 +124,12 @@ function currentState(): SyncState {
 }
 
 export function snapshot(): QueueSnapshot {
-  return { state: currentState(), pending: pendingCount() };
+  const queued = read();
+  return {
+    state: currentState(),
+    pending: queued.length,
+    held: queued.filter((operation) => heldIds.has(operation.operationId)).length,
+  };
 }
 
 function notify(): void {
@@ -169,6 +183,9 @@ export async function flush(): Promise<void> {
       response.results
         .filter((result) => isSyncItemSettled(result.status))
         .map((r) => r.operationId),
+    );
+    heldIds = new Set(
+      response.results.filter((result) => result.errorCode === 'LICENSE_READ_ONLY').map((r) => r.operationId),
     );
     write(read().filter((operation) => !settled.has(operation.operationId)));
     lastFailed = false;

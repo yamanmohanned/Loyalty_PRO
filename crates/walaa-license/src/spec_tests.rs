@@ -9,8 +9,11 @@
 
 use crate::code::{self, wrap};
 use crate::status::{clock_rolled_back, CLOCK_TOLERANCE_SECS, GRACE_DAYS};
-use crate::test_support::{sign, sign_raw, test_public_key};
-use crate::{anchors, device, evaluate, verify_with_key, LicenseKind, Payload, Status, VerifyError};
+use crate::test_support::{sign, sign_raw, test_public_key, test_unlock_chain, unlock_code};
+use crate::{
+    anchors, device, evaluate, evaluate_all, recording_allowed_at, unlock, verify_with_key, Basis, LicenseKind,
+    Payload, Status, VerifyError, Warning,
+};
 
 const DAY: i64 = 86_400;
 const NOW: i64 = 1_789_400_000; // 2026-09-14
@@ -122,19 +125,34 @@ fn a_running_trial_counts_down_and_warns_in_its_last_week() {
     let early = evaluate(Some(&payload), NOW + DAY, Some(NOW));
     assert_eq!(early.status, Status::Trial);
     assert_eq!(early.days_left, Some(13));
-    assert!(!early.show_expiry_warning);
+    assert_eq!(early.warning, Warning::Notice);
 
     let late = evaluate(Some(&payload), NOW + 8 * DAY, Some(NOW + 8 * DAY));
     assert_eq!(late.status, Status::Trial);
     assert_eq!(late.days_left, Some(6));
-    assert!(late.show_expiry_warning);
+    assert_eq!(late.warning, Warning::Warning);
+}
+
+#[test]
+fn warnings_escalate_from_two_weeks_out_not_hours() {
+    let payload = trial(30);
+    let at = |days_left: i64| evaluate(Some(&payload), NOW + (30 - days_left) * DAY, None).warning;
+    assert_eq!(at(20), Warning::None);
+    assert_eq!(at(14), Warning::Notice);
+    assert_eq!(at(8), Warning::Notice);
+    assert_eq!(at(7), Warning::Warning);
+    assert_eq!(at(4), Warning::Warning);
+    assert_eq!(at(3), Warning::Urgent);
+    assert_eq!(at(1), Warning::Urgent);
 }
 
 #[test]
 fn an_expired_trial_has_five_working_days_then_goes_read_only() {
     let payload = trial(14);
     let grace = evaluate(Some(&payload), NOW + 15 * DAY, Some(NOW + 15 * DAY));
-    assert_eq!(grace.status, Status::TrialGrace);
+    assert_eq!(grace.status, Status::Grace);
+    assert_eq!(grace.basis, Some(Basis::Trial));
+    assert_eq!(grace.warning, Warning::Urgent);
     assert!(!grace.status.read_only());
     assert_eq!(grace.days_left, Some(GRACE_DAYS - 1));
 
@@ -199,6 +217,97 @@ fn an_extension_governs_and_an_older_code_cannot_shorten_it() {
     let with_perpetual = [trial(30), perpetual(), trial(60)];
     assert_eq!(crate::best_license(&with_perpetual).map(|l| l.kind), Some(LicenseKind::Perpetual));
     assert_eq!(crate::best_license(&[]), None);
+}
+
+/* ── Emergency codes read over the phone ──────────────────────────────────── */
+
+fn unlock_until(issued_at: i64, days: u32) -> i64 {
+    let code = unlock_code(&device(), issued_at, days);
+    unlock::read(&code, &device(), &test_unlock_chain()).unwrap().valid_until
+}
+
+#[test]
+fn a_phone_code_restores_full_operation_whatever_stopped_the_shop() {
+    let until = unlock_until(NOW, 7);
+
+    // The licence was destroyed: nothing stored at all.
+    let destroyed = evaluate_all(None, false, &[until], NOW, None);
+    assert_eq!(destroyed.status, Status::Emergency);
+    assert_eq!(destroyed.basis, Some(Basis::Emergency));
+    assert!(!destroyed.status.read_only());
+    assert_eq!(destroyed.expires_at, Some(until));
+
+    // Every stored code fails its check — a corrupted licence.
+    assert_eq!(evaluate_all(None, true, &[until], NOW, None).status, Status::Emergency);
+
+    // A trial long expired.
+    let old = Payload { iat: NOW - 40 * DAY, exp: Some(NOW - 30 * DAY), ..trial(0) };
+    assert_eq!(evaluate_all(Some(&old), false, &[until], NOW, Some(NOW)).status, Status::Emergency);
+
+    // A dead CMOS battery: the system clock reads 2000-01-01, the recorded time is today.
+    // The trial alone is TAMPERED; the code measured against the recorded time still runs.
+    let running = trial(30);
+    let year_2000 = 946_684_800;
+    assert_eq!(evaluate(Some(&running), year_2000, Some(NOW)).status, Status::Tampered);
+    assert_eq!(evaluate_all(Some(&running), false, &[until], year_2000, Some(NOW)).status, Status::Emergency);
+}
+
+#[test]
+fn a_phone_code_never_hides_a_better_licence() {
+    let until = unlock_until(NOW, 30);
+    assert_eq!(evaluate_all(Some(&perpetual()), false, &[until], NOW, None).status, Status::Perpetual);
+    assert_eq!(evaluate_all(Some(&trial(60)), false, &[until], NOW, None).status, Status::Trial);
+}
+
+#[test]
+fn a_wound_back_clock_does_not_stretch_a_phone_code() {
+    let until = unlock_until(NOW, 3);
+    // The shop ran past the code's end and its grace; the recorded time says so.
+    let latest = until + (GRACE_DAYS + 1) * DAY;
+    // The clock is then set back to inside the window.
+    let evaluation = evaluate_all(None, false, &[until], NOW, Some(latest));
+    assert_eq!(evaluation.status, Status::Unlicensed);
+    assert!(evaluation.status.read_only());
+}
+
+#[test]
+fn a_phone_code_window_ends_in_grace_not_a_hard_stop() {
+    let until = unlock_until(NOW, 3);
+    let after = evaluate_all(None, false, &[until], until + 60, None);
+    assert_eq!(after.status, Status::Grace);
+    assert_eq!(after.basis, Some(Basis::Emergency));
+    assert!(!after.status.read_only());
+    assert_eq!(after.warning, Warning::Urgent);
+    assert_eq!(after.days_left, Some(GRACE_DAYS));
+
+    let done = evaluate_all(None, false, &[until], until + GRACE_DAYS * DAY + 60, None);
+    assert_eq!(done.status, Status::Unlicensed);
+}
+
+#[test]
+fn an_emergency_window_is_always_a_warning_and_urgent_at_its_end() {
+    let until = unlock_until(NOW, 7);
+    assert_eq!(evaluate_all(None, false, &[until], until - 5 * DAY, None).warning, Warning::Warning);
+    assert_eq!(evaluate_all(None, false, &[until], until - DAY, None).warning, Warning::Urgent);
+}
+
+#[test]
+fn a_sale_queued_while_licensed_counts_whenever_it_syncs() {
+    let running = trial(14);
+    assert!(recording_allowed_at(&[running.clone()], &[], NOW + 3 * DAY));
+    // In the grace days, still allowed.
+    assert!(recording_allowed_at(&[running.clone()], &[], NOW + 18 * DAY));
+    // After the grace, not.
+    assert!(!recording_allowed_at(&[running.clone()], &[], NOW + 20 * DAY));
+    // Before the trial existed, not.
+    assert!(!recording_allowed_at(&[running], &[], NOW - 3 * DAY));
+
+    assert!(recording_allowed_at(&[perpetual()], &[], NOW - 300 * DAY));
+    assert!(!recording_allowed_at(&[], &[], NOW));
+
+    let until = unlock_until(NOW, 7);
+    assert!(recording_allowed_at(&[], &[until], NOW));
+    assert!(!recording_allowed_at(&[], &[until], until + GRACE_DAYS * DAY));
 }
 
 #[test]

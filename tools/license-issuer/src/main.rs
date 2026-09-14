@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use chrono::{TimeZone, Utc};
 use clap::{Parser, Subcommand};
 use ed25519_dalek::Signer;
-use walaa_license::{code, key_fingerprint, KeyKind};
+use walaa_license::{code, device, key_fingerprint, unlock, KeyKind};
 
 const KEY_FILE: &str = "issuer-key.json";
 const LOG_FILE: &str = "issued.db";
@@ -69,7 +69,20 @@ enum Command {
         #[arg(long)]
         note: Option<String>,
     },
-    /// List every licence this issuer has issued.
+    /// An emergency code to read over the phone: full operation on that device at once,
+    /// for 1–30 days, with no internet. Not a licence — send one when you can.
+    Unlock {
+        /// The device ID the merchant reads out, WL-XXXX-XXXX.
+        #[arg(long)]
+        device: String,
+        /// How many days it keeps the shop working (through the end of that day, UTC).
+        #[arg(long, default_value_t = 7)]
+        days: u32,
+        /// Why — kept in this issuer's log only.
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// List every licence and emergency code this issuer has issued.
     List {
         /// Only this device.
         #[arg(long)]
@@ -86,6 +99,7 @@ fn main() -> ExitCode {
             let term = if perpetual { issue::Term::Perpetual } else { issue::Term::Days(days.unwrap_or(0)) };
             issue_command(&home, cli.password_stdin, issue::Request { device, term, extend, features: feat, note })
         }
+        Command::Unlock { device, days, note } => unlock_command(&home, cli.password_stdin, &device, days, note),
         Command::List { device } => list_command(&home, device),
     };
     match result {
@@ -143,8 +157,14 @@ fn keygen(home: &Path, from_stdin: bool, public_key_out: Option<PathBuf>, develo
             return Err("the two passwords differ — nothing was written".into());
         }
     }
-    let (file, signing) = keystore::generate(&password, kind, &now_iso())?;
+    let (mut file, signing) = keystore::generate(&password, kind, &now_iso())?;
     let public = signing.verifying_key().to_bytes();
+
+    // The emergency-code chain: its secret comes from the private key, its tip goes
+    // into the application beside the public key.
+    let epoch_day = Utc::now().timestamp().div_euclid(86_400) - unlock::EPOCH_LEAD_DAYS;
+    let chain = unlock::Chain::new(&unlock::chain_secret(&signing.to_bytes()), epoch_day, unlock::CHAIN_LENGTH);
+    file.unlock = Some(keystore::UnlockParams::from_chain(&chain));
 
     let target = public_key_out.unwrap_or_else(default_public_key_file);
     if let Ok(existing) = std::fs::read_to_string(&target) {
@@ -162,12 +182,12 @@ fn keygen(home: &Path, from_stdin: bool, public_key_out: Option<PathBuf>, develo
     std::fs::write(&key_path, json).map_err(|e| format!("writing {}: {e}", key_path.display()))?;
     log::open(&home.join(LOG_FILE)).map_err(|e| format!("creating the log: {e}"))?;
 
-    let written = match std::fs::write(&target, public_key_source(&public, kind)) {
+    let written = match std::fs::write(&target, public_key_source(&public, kind, &chain)) {
         Ok(()) => format!("wrote the public key into {}", target.display()),
         Err(error) => format!(
             "could not write {} ({error}) — copy this into crates/walaa-license/src/public_key.rs by hand:\n\n{}",
             target.display(),
-            public_key_source(&public, kind)
+            public_key_source(&public, kind, &chain)
         ),
     };
 
@@ -175,6 +195,7 @@ fn keygen(home: &Path, from_stdin: bool, public_key_out: Option<PathBuf>, develo
     println!("  private key (encrypted)  {}", key_path.display());
     println!("  issue log                {}", home.join(LOG_FILE).display());
     println!("  public key fingerprint   {}", key_fingerprint(&public));
+    println!("  emergency codes          until {}", date(chain.valid_until(chain.length)));
     println!("  {written}");
     println!();
     println!("Back up the folder {} and the password NOW, in two separate places.", home.display());
@@ -195,7 +216,7 @@ fn rust_bytes(bytes: &[u8]) -> String {
         .join(",\n    ")
 }
 
-fn public_key_source(public: &[u8; 32], kind: KeyKind) -> String {
+fn public_key_source(public: &[u8; 32], kind: KeyKind, chain: &unlock::Chain) -> String {
     let kind_name = match kind {
         KeyKind::Development => "Development",
         KeyKind::Production => "Production",
@@ -210,9 +231,18 @@ fn public_key_source(public: &[u8; 32], kind: KeyKind) -> String {
          \n\
          pub const KEY_KIND: KeyKind = KeyKind::{kind_name};\n\
          \n\
-         pub const PUBLIC_KEY: [u8; 32] = [\n    {},\n];\n",
+         pub const PUBLIC_KEY: [u8; 32] = [\n    {},\n];\n\
+         \n\
+         // The emergency-code chain (crates/walaa-license/src/unlock.rs). Public values:\n\
+         // phone codes are checked by hashing forward to this tip.\n\
+         pub const UNLOCK_EPOCH_DAY: i64 = {};\n\
+         pub const UNLOCK_CHAIN_LENGTH: u32 = {};\n\
+         pub const UNLOCK_TIP: u64 = 0x{:016x};\n",
         key_fingerprint(public),
-        rust_bytes(public)
+        rust_bytes(public),
+        chain.epoch_day,
+        chain.length,
+        chain.tip
     )
 }
 
@@ -271,14 +301,77 @@ fn issue_command(home: &Path, from_stdin: bool, request: issue::Request) -> Resu
     Ok(())
 }
 
+fn unlock_command(home: &Path, from_stdin: bool, device: &str, days: u32, note: Option<String>) -> Result<(), String> {
+    let file = load_key(home)?;
+    let chain = file
+        .unlock
+        .as_ref()
+        .ok_or("this key file was made before emergency codes existed — it cannot issue them")?
+        .chain()?;
+    let device = device::normalize_device_id(device);
+    if !device::is_valid_device_id(&device) {
+        return Err(format!(
+            "{device:?} is not a device ID — it looks like WL-XXXX-XXXX and uses only the symbols 2-9 and A-Z without I, L, O, U"
+        ));
+    }
+    let connection = log::open(&home.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
+
+    let password = read_password("Password for the private key: ", from_stdin)?;
+    let signing = keystore::open(&file, &password)?;
+    let secret = unlock::chain_secret(&signing.to_bytes());
+    let now = Utc::now().timestamp();
+    let issued = unlock::issue(&secret, &chain, &device, now, days)?;
+
+    // The same check the application makes, before the code is read to anyone.
+    unlock::verify(&issued.code, &device, &chain, now)
+        .map_err(|e| format!("internal error: the new code does not verify ({})", e.code()))?;
+    log::record_unlock(&connection, &device, &issued, now, note.as_deref(), &file.fingerprint)
+        .map_err(|e| format!("recording in the log: {e}"))?;
+
+    println!("Emergency code issued");
+    println!("  device    {device}");
+    println!("  works     until {} ({days} day{})", date(issued.valid_until), if days == 1 { "" } else { "s" });
+    if file.kind == KeyKind::Development.as_str() {
+        println!("  WARNING   from a DEVELOPMENT key — only development builds accept it");
+    }
+    println!();
+    println!("Read this to the merchant — fifteen symbols in three groups:");
+    println!();
+    println!("    {}", issued.code);
+    println!();
+    println!("The merchant types it into Settings > Licensing > emergency code. Full operation returns");
+    println!("at once, until the date above. It is not a licence: send a licence code when one can be received.");
+    Ok(())
+}
+
 fn list_command(home: &Path, device: Option<String>) -> Result<(), String> {
     let connection = log::open(&home.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
     let device = device.map(|d| walaa_license::device::normalize_device_id(&d));
     let entries = log::list(&connection, device.as_deref()).map_err(|e| e.to_string())?;
-    if entries.is_empty() {
-        println!("No licences issued{}.", device.map(|d| format!(" to {d}")).unwrap_or_default());
+    let unlocks = log::list_unlocks(&connection, device.as_deref()).map_err(|e| e.to_string())?;
+    if entries.is_empty() && unlocks.is_empty() {
+        println!("Nothing issued{}.", device.map(|d| format!(" to {d}")).unwrap_or_default());
         return Ok(());
     }
+    if !unlocks.is_empty() {
+        println!("Emergency codes");
+        println!("{:<20}  {:<12}  {:<20}  {:<17}  note", "issued", "device", "works until", "code");
+        for entry in &unlocks {
+            println!(
+                "{:<20}  {:<12}  {:<20}  {:<17}  {}",
+                date(entry.issued_at),
+                entry.device_id,
+                date(entry.valid_until),
+                entry.code,
+                entry.note.clone().unwrap_or_default()
+            );
+        }
+        println!();
+    }
+    if entries.is_empty() {
+        return Ok(());
+    }
+    println!("Licences");
     println!("{:<20}  {:<12}  {:<9}  {:<20}  {:<26}  {:<36}  note", "issued", "device", "type", "expires", "features", "licence");
     for entry in entries {
         let kind = if entry.extended { format!("{}+ext", entry.kind) } else { entry.kind.clone() };

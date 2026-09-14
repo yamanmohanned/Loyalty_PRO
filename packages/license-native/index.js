@@ -13,9 +13,10 @@
   The exports are assigned one by one so every loader sees them by name: Node's ESM
   import of a CommonJS module, vitest, and the esbuild bundle all read `exports.x = …`.
 
-  A missing module does not throw here. The service would then die inside an import,
-  before it can record a reason, and the dashboard would show a blank failure; instead
-  each function throws a sentence the startup-error record carries to the screen.
+  A missing module does not throw here: it must never stop the service. Each function
+  throws instead, and the licence service answers that the way it answers any failure
+  of the check — with the last status it recorded, so a shop that has paid keeps
+  trading (license.service.ts, "When the check itself fails").
 */
 const { existsSync } = require('node:fs');
 const { join } = require('node:path');
@@ -24,7 +25,7 @@ const file = process.env.VITEST ? 'walaa-license.test.node' : 'walaa-license.nod
 const path = join(__dirname, file);
 
 const MISSING =
-  'تعذّر تشغيل الخدمة: وحدة الترخيص مفقودة من ملفات البرنامج المثبّتة. هذه مشكلة في التثبيت وليست في بياناتك — ' +
+  'وحدة الترخيص مفقودة من ملفات البرنامج المثبّتة. هذه مشكلة في التثبيت وليست في بياناتك — ' +
   'أعد تثبيت البرنامج من ملف التثبيت الكامل. بيانات المتجر لم تتغيّر.';
 
 let binding = null;
@@ -45,6 +46,10 @@ exports.available = binding !== null;
 exports.computeDeviceId = call('computeDeviceId');
 exports.verifyLicense = call('verifyLicense');
 exports.licenseStatus = call('licenseStatus');
+exports.verifyUnlock = call('verifyUnlock');
+exports.recordingAllowed = call('recordingAllowed');
+exports.uptimeSeconds = call('uptimeSeconds');
+exports.unlockCodeForTests = call('unlockCodeForTests');
 exports.resolveAnchors = call('resolveAnchors');
 exports.readFileAnchor = call('readFileAnchor');
 exports.writeFileAnchor = call('writeFileAnchor');

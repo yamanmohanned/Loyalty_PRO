@@ -205,6 +205,8 @@ const CASES: Case[] = [
   { method: 'GET', path: '/license', allowed: STATION },
   { method: 'GET', path: '/license/activations', allowed: DASHBOARD },
   { method: 'POST', path: '/license/activate', allowed: DASHBOARD },
+  { method: 'POST', path: '/license/unlock', allowed: DASHBOARD },
+  { method: 'GET', path: '/license/events', allowed: DASHBOARD },
   { method: 'DELETE', path: '/backup/drive/client', allowed: ['OWNER'] },
   // Restoring a copy replaces the whole ledger and signs everyone out: the owner only.
   { method: 'POST', path: '/backup/restore/stage', allowed: ['OWNER'] },
@@ -455,6 +457,8 @@ describe('the route inventory', () => {
         'GET, HEAD /api/v1/license/',
         'GET, HEAD /api/v1/license/activations',
         'POST /api/v1/license/activate',
+        'POST /api/v1/license/unlock',
+        'GET, HEAD /api/v1/license/events',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',
         'PUT /api/v1/discount/rules',

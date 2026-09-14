@@ -5,23 +5,32 @@ provider chooses** per shop. Licensing is **entirely offline**: no server, no ac
 call home. A merchant reads a device number to the provider; the provider sends back a
 signed code; the merchant pastes it.
 
+**The rule above every other: a shop that has paid is never stopped.** A corrupted licence,
+a lost clock record, a Windows reinstall, a bug in the gate — each has a way back that
+needs neither a visit nor the internet ([§9](#9-never-locking-out-a-paying-shop)). The
+protection against unpaid copies is deliberately set at deterrence against casual copying
+([§18](#18-what-this-does-not-protect-against)).
+
 Contents
 
 1. [Who does what](#1-who-does-what)
 2. [How it is built](#2-how-it-is-built)
-3. [The device ID](#3-the-device-id)
+3. [The device ID — and what changes it](#3-the-device-id--and-what-changes-it)
 4. [The licence code](#4-the-licence-code)
-5. [Issuing a code (provider)](#5-issuing-a-code-provider)
-6. [Activating a code (merchant)](#6-activating-a-code-merchant)
-7. [Statuses and what each one does](#7-statuses-and-what-each-one-does)
-8. [Every scenario](#8-every-scenario)
-9. [The clock](#9-the-clock)
-10. [Features](#10-features)
-11. [Protecting the private key](#11-protecting-the-private-key)
-12. [The development key, and the installer gate](#12-the-development-key-and-the-installer-gate)
-13. [Upgrading an existing shop to 0.3.0](#13-upgrading-an-existing-shop-to-030)
-14. [Tests](#14-tests)
-15. [What this does not protect against](#15-what-this-does-not-protect-against)
+5. [Issuing (provider)](#5-issuing-provider)
+6. [Activating (merchant)](#6-activating-merchant)
+7. [The emergency code, read over the phone](#7-the-emergency-code-read-over-the-phone)
+8. [Statuses, warnings and what each does](#8-statuses-warnings-and-what-each-does)
+9. [Never locking out a paying shop](#9-never-locking-out-a-paying-shop)
+10. [At the till](#10-at-the-till)
+11. [The offline queue](#11-the-offline-queue)
+12. [The clock, and the permanent record of it](#12-the-clock-and-the-permanent-record-of-it)
+13. [Features](#13-features)
+14. [Protecting the private key](#14-protecting-the-private-key)
+15. [The development key, and the installer gate](#15-the-development-key-and-the-installer-gate)
+16. [Upgrading an existing shop to 0.3.0](#16-upgrading-an-existing-shop-to-030)
+17. [Tests and drills](#17-tests-and-drills)
+18. [What this does not protect against](#18-what-this-does-not-protect-against)
 
 ---
 
@@ -29,19 +38,20 @@ Contents
 
 | Who | Does | With |
 |---|---|---|
-| **Provider** | Generates the key pair once; issues trial, extension and perpetual codes | `tools/license-issuer` — never shipped |
-| **Merchant** | Reads the device number out; pastes the code | «الإعدادات ← الترخيص» in the manager dashboard |
+| **Provider** | Generates the key pair once; issues trial, extension and perpetual codes; reads emergency codes over the phone | `tools/license-issuer` — never shipped |
+| **Merchant** | Reads the device number out; pastes a licence code or types an emergency code | «الإعدادات ← الترخيص» in the manager dashboard |
 | **Service** | Computes the device ID, verifies codes, decides the status, refuses what read-only refuses | `crates/walaa-license` (Rust), loaded by the API |
 
 ## 2. How it is built
 
 ```
 crates/walaa-license        the rules, in Rust: device ID, code format, Ed25519
-                            verification, status evaluation, clock anchors.
-                            The provider's PUBLIC key is a const array in
+                            verification, emergency-code chain, status evaluation,
+                            clock anchors. The provider's PUBLIC key and the public
+                            tip of the emergency-code chain are constants in
                             src/public_key.rs — compiled in, not configuration.
 packages/license-native     that crate as a Node native module (napi-rs), loaded by
-                            the API like the argon2 addon. Two builds:
+                            the API. Two builds:
                               walaa-license.node       — ships; trusts the provider key
                               walaa-license.test.node  — tests only; trusts the
                                                          published test key and can sign.
@@ -53,33 +63,56 @@ tools/license-issuer        the provider's signing tool (README.md there).
 
 Every decision — is this code genuine, is it for this machine, which licence governs,
 what is the status now — is made in Rust. The service asks on **every** request that
-records a sale, registers a customer or redeems a voucher, and on every card batch and
-invoice capture (which are allowed regardless, and only logged). The dashboard and the
-till read the verdict from `GET /api/v1/license`; they decide nothing.
+records a sale, registers a customer or redeems a voucher. The dashboard and the till
+read the verdict from `GET /api/v1/license`; they decide nothing.
 
-## 3. The device ID
+## 3. The device ID — and what changes it
 
-`WL-XXXX-XXXX`, computed in Rust on the manager PC from two sources:
+`WL-XXXX-XXXX`, computed in Rust on the manager PC from exactly two sources:
 
-- the Windows **MachineGuid** (`HKLM\SOFTWARE\Microsoft\Cryptography`, read from the
-  64-bit view), and
-- the **volume serial** of the system drive (`%SystemDrive%\`).
+- the Windows **MachineGuid** (`HKLM\SOFTWARE\Microsoft\Cryptography`, 64-bit view) —
+  a random value Windows writes when it is installed;
+- the **volume serial** of the system drive (`%SystemDrive%\`) — written when the drive
+  is formatted.
 
 `SHA-256("walaa-device-v1|<guid, lower-case>|<serial as 8 upper-case hex digits>")`,
-then the first eight symbols in **base 30** over `23456789ABCDEFGHJKMNPQRSTVWXYZ`.
+then the first eight symbols in base 30 over `23456789ABCDEFGHJKMNPQRSTVWXYZ`.
 
 > **Why base 30 and not Base32.** The brief asked for Base32 without `I L O U 0 1`. The
 > 26 letters and 10 digits are 36 symbols; without those six they are **30** — and 30
 > symbols cannot be Base32, which needs 32. So the ID uses base 30 over exactly the
-> symbols the brief allows. The number is what a merchant reads aloud over the phone,
-> which is why the easily misread symbols are gone.
+> symbols the brief allows.
 
-It is computed **once**, on the first start of 0.3.0, and stored in the
-`installation_state` table. From then on the stored ID is the device ID. If a source
-changes later — a replaced system drive, a reinstalled Windows — the service keeps
-running under the stored ID, writes `license.device_sources_changed` to the audit trail
-naming which source changed, and **does not invalidate the licence**. The database holds
-only SHA-256 digests of the two sources, never the GUID or the serial themselves.
+**It is computed once, on the first start of 0.3.0, and stored in the database.** From
+then on the stored ID *is* the device ID; licences are checked against it. If a source
+changes later, the service keeps the stored ID, writes `license.device_sources_changed`
+to the audit trail naming which source changed, and **does not invalidate the licence**.
+The database holds only SHA-256 digests of the two sources.
+
+| Change | Computed ID | Licence |
+|---|---|---|
+| New network adapter, RAM, CPU, GPU, extra disks | unchanged — not a source | unaffected |
+| Motherboard replaced, same Windows | unchanged — MachineGuid lives in Windows, not the board | unaffected |
+| Windows updates, including feature upgrades; renaming the PC; new IP; joining a domain | unchanged | unaffected |
+| System drive cloned sector-by-sector to a new disk | usually unchanged (the serial is copied) | unaffected |
+| System drive replaced and Windows reinstalled, **database restored from backup** | changes | **unaffected** — the restored database carries the stored ID and the codes; audit warning |
+| Windows reinstalled in place, data folder kept | changes | **unaffected** — stored ID kept; audit warning |
+| Fresh Windows, fresh install of ولاء, **no backup restored** | changes | a new installation: `UNLICENSED` until re-bound |
+
+**Re-binding without a visit** (the last row — the only one that needs the provider):
+
+1. The merchant reads the new `WL-` number from «الإعدادات ← الترخيص» over the phone.
+2. The provider reads back an **emergency code** for the new number
+   (`license-issuer unlock --device WL-NEW --days 30`). Full operation returns at once
+   ([§7](#7-the-emergency-code-read-over-the-phone)).
+3. When the merchant can receive a message, the provider sends a perpetual licence for
+   the new number (`license-issuer issue --device WL-NEW --perpetual --note "replaces WL-OLD"`),
+   which the merchant pastes. The log keeps both.
+
+Or, simpler still: restore the shop's backup onto the new machine — the licence comes
+with the data, and the provider is not involved at all.
+
+**Cost: one phone call and one message. No visit, in any case.**
 
 ## 4. The licence code
 
@@ -89,242 +122,290 @@ The payload is compact JSON, fields in this order:
 {"v":1,"lid":"<uuid>","did":"WL-XXXX-XXXX","type":"trial|perpetual","iat":<unix>,"exp":<unix|null>,"feat":["drive_backup","multi_device"],"note":"<store name, optional>"}
 ```
 
-- `v` — format version; this build reads `1`.
-- `lid` — the licence's own ID; a code pasted twice is the same licence.
-- `type: "perpetual"` always has `"exp": null`; a trial always has `exp > iat`.
-- `feat` — see [§10](#10-features). `note` — up to 120 characters; shown in Settings.
-
 The code is `base64url(payload) + "." + base64url(signature)`, no padding, where the
-signature is **Ed25519 over the exact payload bytes**, checked with `verify_strict`. The
-issuer prints it in **60-character lines**. On paste, all whitespace and the invisible
-direction/zero-width marks some message apps insert (U+200B–U+200F, U+202A–U+202E,
-U+2060–U+2069, U+FEFF) are removed first, so a code arrives intact however it was sent.
-
-A code is checked in this order, and each failure is its own refusal:
+signature is **Ed25519 over the exact payload bytes**, checked with `verify_strict` before
+the JSON is even parsed. The issuer prints it in **60-character lines**. On paste, all
+whitespace and the invisible direction marks some message apps insert are removed first.
 
 | Check | Refusal | What the merchant reads |
 |---|---|---|
 | Two base64url parts, sane size | `MALFORMED` | هذا ليس رمز تفعيل كاملاً — تأكّد أنك نسخت رسالة المزوّد كاملة… |
-| Signature matches the embedded key | `BAD_SIGNATURE` | هذا الرمز لا يطابق توقيع مزوّد البرنامج — إمّا تغيّر فيه حرف أثناء النسخ، أو لم يصدر من المزوّد… |
-| `v` is 1 | `UNSUPPORTED_VERSION` | هذا الرمز صادر بصيغة أحدث مما يقرؤه هذا الإصدار — حدّث البرنامج… |
-| Fields well-formed and consistent | `MALFORMED` | (as above) |
-| `did` is this installation's ID | `DEVICE_MISMATCH` | هذا الرمز صادر لجهاز آخر (WL-…)، ورقم هذا الجهاز WL-…. أرسل رقم هذا الجهاز إلى المزوّد… |
+| Signature matches the embedded key | `BAD_SIGNATURE` | هذا الرمز لا يطابق توقيع مزوّد البرنامج… |
+| `v` is 1 | `UNSUPPORTED_VERSION` | هذا الرمز صادر بصيغة أحدث مما يقرؤه هذا الإصدار… |
+| `did` is this installation's ID | `DEVICE_MISMATCH` | هذا الرمز صادر لجهاز آخر (WL-…)، ورقم هذا الجهاز WL-…… |
+| a trial not already over | `EXPIRED_CODE` | انتهت مدة هذا الرمز في …… |
+| clock not before the issue time | `CLOCK_BEHIND` | تاريخ هذا الجهاز أقدم من تاريخ إصدار الرمز… |
+| no trial over a perpetual licence | `PERPETUAL_ACTIVE` | هذا الجهاز مفعّل بترخيص دائم… |
 
-The signature is checked **before** the JSON is parsed, so nothing unsigned is ever
-interpreted.
+## 5. Issuing (provider)
 
-## 5. Issuing a code (provider)
-
-Full instructions, with real output: [`tools/license-issuer/README.md`](../tools/license-issuer/README.md).
+Full instructions and real output: [`tools/license-issuer/README.md`](../tools/license-issuer/README.md).
 
 ```bash
 license-issuer keygen                                        # once, ever
-license-issuer issue --device WL-7K3M-9QXP --days 14         # a 14-day trial
-license-issuer issue --device WL-7K3M-9QXP --days 5 --extend # 5 days after the latest trial
-license-issuer issue --device WL-7K3M-9QXP --perpetual       # paid: never expires
-license-issuer list                                          # everything issued
+license-issuer issue  --device WL-7K3M-9QXP --days 14        # a 14-day trial
+license-issuer issue  --device WL-7K3M-9QXP --days 5 --extend
+license-issuer issue  --device WL-7K3M-9QXP --perpetual      # paid: never expires
+license-issuer unlock --device WL-7K3M-9QXP --days 7         # emergency code, by phone
+license-issuer list
 ```
-
-The private key is encrypted with a password asked for at every `issue`. Every code is
-recorded in the issuer's local SQLite log (`issued.db`).
 
 **The trial length is yours alone.** The application has no built-in trial: a new
 installation is `UNLICENSED` until given a code, and a trial lasts exactly the `--days`
 you issue.
 
-## 6. Activating a code (merchant)
+## 6. Activating (merchant)
 
-In the manager dashboard: **الإعدادات ← الترخيص** (the red read-only banner and the
-top-bar countdown both open it).
+In the manager dashboard: **الإعدادات ← الترخيص** (the banners and the top-bar chip all
+open it).
 
-1. **رقم هذا الجهاز** is shown in large type with a «نسخ الرقم» button, under the
-   instruction «أرسل هذا الرقم إلى المزوّد للحصول على رمز التفعيل».
-2. The code from the provider goes into the large «رمز التفعيل» field — pasted as it
-   arrived, lines and all — then «تفعيل».
-3. On success the screen says what was activated — «تم التفعيل: ترخيص دائم…» or «تم
-   التفعيل: فترة تجريبية مدتها 14 يوماً، تنتهي في …» — and the status changes **at once**:
-   no restart, because the service re-evaluates on every request. The till can sell on
-   its very next scan.
-4. **سجل التفعيل** lists every code ever activated on this installation: when, which
-   kind, until when, and by whom.
+1. **رقم هذا الجهاز** — large, with «نسخ الرقم», under «أرسل هذا الرقم إلى المزوّد للحصول
+   على رمز التفعيل».
+2. The licence code goes into «رمز التفعيل», pasted as it arrived, then «تفعيل».
+3. The status changes **at once** — no restart. The till can sell on its next scan.
+4. **سجل التفعيل** and **سجل أحداث الترخيص** list every activation, phone code and clock
+   event, with who and when.
 
-Activation is open to the OWNER and MANAGER accounts; the till's account can read the
-status but not activate. Every attempt — accepted or refused, with its reason — is
-written to the audit trail (`license.activated` / `license.activation_failed`).
+Every attempt — accepted or refused, with its reason — is recorded
+(`license.activated` / `license.activation_failed`).
 
-Besides the code checks in [§4](#4-the-licence-code), activation refuses:
+## 7. The emergency code, read over the phone
 
-| Refusal | When | Message |
-|---|---|---|
-| `EXPIRED_CODE` | a trial code whose `exp` has already passed | انتهت مدة هذا الرمز في …، فلا يضيف شيئاً — اطلب من المزوّد رمزاً جديداً. |
-| `CLOCK_BEHIND` | this PC's clock is more than 2 h before the code's issue time | تاريخ هذا الجهاز أقدم من تاريخ إصدار الرمز — صحّح التاريخ والوقت في Windows، ثم أعد التفعيل. |
-| `PERPETUAL_ACTIVE` | a trial code on a device that already holds a perpetual licence | هذا الجهاز مفعّل بترخيص دائم، فلا حاجة لهذا الرمز التجريبي — لم يتغيّر شيء. |
+For the moment no message can reach the shop PC — the licence file is destroyed, Windows
+was reinstalled, the clock record is wrong, something in the gate is broken — and the
+shop must trade *now*.
 
-Pasting a code that is already active is not an error: «هذا الرمز مفعّل على هذا الجهاز
-مسبقاً — لم يتغيّر شيء.»
+**What the merchant does:** «الإعدادات ← الترخيص» → reads «رقم هذا الجهاز» to the
+provider → types the fifteen symbols the provider reads back into «رمز الطوارئ» →
+«تشغيل فوري». Full operation returns with that request.
 
-## 7. Statuses and what each one does
+**What the provider does:** `license-issuer unlock --device WL-XXXX-XXXX [--days N]`
+(1–30, default 7), and reads out `XXXXX-XXXXX-XXXXX`.
 
-| Status | Meaning | Recording | What is shown |
-|---|---|---|---|
-| `UNLICENSED` | No valid code (the default) | **read-only** | Red banner «البرنامج غير مفعّل — يعمل للقراءة فقط» |
-| `TRIAL` | A trial, before its expiry | full | In its **last 7 days**: a top-bar chip «تنتهي الفترة التجريبية خلال X» |
-| `TRIAL_GRACE` | Trial expired less than **5 days** ago | **full** | A red banner on every launch: «انتهت الفترة التجريبية — هذه مهلة أخيرة» with the date it ends |
-| `EXPIRED` | Trial and grace both over | **read-only** | Red banner «انتهت الفترة التجريبية — البرنامج يعمل للقراءة فقط» |
-| `PERPETUAL` | Paid; `exp` is null | full | Nothing |
-| `TAMPERED` | Clock set back more than 2 h, or the stored code fails its signature | **read-only** | Red banner «توقّف تسجيل العمليات الجديدة», saying which of the two and what to do |
+**How it is checked without a secret in the program.** A signature is 64 bytes — far
+too long to read aloud. So the codes come from a **hash chain**: at `keygen` the issuer
+derives a secret from the private key and hashes it forward 7,300 times (twenty years of
+days); only the last value, the *tip*, is compiled into the program. The code for day
+`d` is the value `d` links before the tip. The program hashes a typed code forward: if it
+reaches the tip after `k` steps, the code is genuine and was issued for day `k`.
+Producing a later day's code means inverting the hash — only the key's holder can avoid
+that. **Nothing in the build, and nothing on the build machine, can make a code.**
 
-**Read-only refuses exactly three things**, each with HTTP 423 `LICENSE_READ_ONLY` and an
-Arabic sentence the till shows as it is:
+- Fifteen symbols in the device-ID alphabet: 14 carry a 64-bit value, the fifteenth is
+  a Luhn mod-30 **check symbol** that catches every single misheard symbol and most
+  swapped pairs — a typo is refused as a typo, not as a forgery.
+- **Mixed with the device ID**: the code read to one shop does not work typed into another.
+- Case, spaces, dashes and Arabic-Indic digits do not matter.
+- Runs **through the end of the UTC day N days after it was issued**, judged against the
+  later of the system clock and the latest time this installation has recorded — so
+  winding the clock back does not stretch it.
+- **Overrides every stop**: unlicensed, expired, clock problems, a stored licence that
+  fails its signature. It never hides a better licence: a perpetual or a longer trial
+  still shows as such.
+- Followed, like a trial, by **five days of grace**.
+- Stored, mirrored beside the clock file (a restore does not lose it), and recorded
+  (`license.unlock_entered` / `license.unlock_failed`).
 
-1. **recording a sale** — linking an invoice to a customer (`scanCard`);
-2. **registering a new customer** (`createCustomer`);
-3. **redeeming a voucher** — the product's nearest thing to taking a payment
-   (`redeemVoucher`).
-
-**Everything else keeps working**, because the merchant's data is never withheld: every
-report, the customer list and customer details, card history and card batches, invoice
-capture from the register (an invoice printed at the till is the shop's record, whatever
-the licence says), exports, backups — local and Google Drive —, the restore test, and
-restoring. Card batches and captures still evaluate the licence and note a read-only
-status in the log.
-
-**The offline queue.** A sale, registration or redemption the Station queued while it
-could not reach the manager PC, and which is refused on replay for the licence, is
-reported `FAILED` — the one result the Station does not settle. It stays in the queue and
-is sent again after activation. Nothing is lost.
-
-Where more than one code is stored, a perpetual licence governs; otherwise the trial with
-the latest expiry. An older or shorter code can never shorten a longer one.
-
-## 8. Every scenario
-
-| Scenario | What happens |
+| Refusal | What the merchant reads |
 |---|---|
-| **New installation** | `UNLICENSED`, read-only. The merchant sends the device number; the provider sends a trial or perpetual code. |
-| **Trial running** | Full use. From 7 days before expiry the top bar counts down. |
-| **Trial expires** | 5 days of `TRIAL_GRACE`: full use, red banner every launch with the date grace ends. Then `EXPIRED`, read-only. |
-| **Provider extends a trial** | `issue --days N --extend` → new code; pasted, the later expiry governs at once. Works in `TRIAL`, `TRIAL_GRACE` and `EXPIRED`. |
-| **Merchant pays** | `issue --perpetual` → pasted → `PERPETUAL` at once, forever. |
-| **Same code pasted twice** | «مفعّل مسبقاً — لم يتغيّر شيء». One row in the history. |
-| **Code for another device** | Refused `DEVICE_MISMATCH`; the message names both device numbers so the right one can be read back. |
-| **Code damaged in transit** | Refused `BAD_SIGNATURE` or `MALFORMED`; nothing stored. |
-| **Clock set back > 2 h** | `TAMPERED`, read-only, the banner says by roughly how much. Correcting the clock clears it on the next request — no code, no restart. The detection stays in the audit trail (`license.clock_rollback`). |
-| **Clock within 2 h** | Ordinary drift; nothing happens. |
-| **Clock was once far in the future** (so the recorded time is ahead of reality) | `TAMPERED` until that date — unless the merchant activates a **freshly issued** code: a signature from the provider's clock proves the recorded time was never real, and it is reset (`license.clock_anchor_reset`). |
-| **The three clock records disagree** | The latest wins and the disagreement is audited (`license.clock_anchor_conflict`). |
-| **Stored code edited in the database** | It fails its signature on the next request → `TAMPERED` (`license.stored_code_invalid`). Pasting a genuine code again fixes it. |
-| **Database restored from an older backup** | The activated codes are mirrored to `license-codes.json` beside the clock file; missing ones are verified and put back on the next start (`license.restored_from_mirror`). A restore never costs the licence. |
-| **System drive replaced / Windows reinstalled, database kept** | Stored device ID kept, licence kept, audit warning (`license.device_sources_changed`). |
-| **New PC, fresh install, no restore** | A new device ID → `UNLICENSED`; the provider issues a code for the new number. |
-| **New PC, backup restored onto it** | The restored database carries the stored device ID and the codes, so the licence moves with the shop's data — the case of a PC that died. The audit trail records that the sources changed. |
-| **Licensing module missing from the installation** | The service does not start, with «تعذّر تشغيل الخدمة: وحدة الترخيص مفقودة من ملفات البرنامج المثبّتة…». |
+| `TYPO` | في الرمز حرف مكتوب خطأً — اطلب من المزوّد أن يعيد قراءته، وقارن المجموعات الثلاث حرفاً حرفاً. |
+| `NOT_VALID` | هذا الرمز ليس لهذا الجهاز — تأكّد أن المزوّد أصدره لرقم الجهاز WL-…، ثم اطلب منه إعادة قراءته. |
+| `EXPIRED` | انتهت مدة هذا الرمز في … — اطلب من المزوّد رمزاً جديداً. |
+| `MALFORMED` | رمز الطوارئ خمسة عشر حرفاً ورقماً في ثلاث مجموعات من خمسة… |
 
-## 9. The clock
+## 8. Statuses, warnings and what each does
 
-A trial is a date, and a date can be defeated by winding the clock back. So the service
-keeps the **latest time it has ever observed** in three places, written together:
+| Status | Meaning | Recording |
+|---|---|---|
+| `UNLICENSED` | No valid code (the default) | **read-only** |
+| `TRIAL` | A trial, before its end | full |
+| `EMERGENCY` | An emergency code is carrying the shop | full |
+| `GRACE` | A trial or an emergency window ended less than **5 days** ago | **full** |
+| `EXPIRED` | A trial and its grace are over | **read-only** |
+| `PERPETUAL` | Paid; never expires; the clock is not consulted | full |
+| `TAMPERED` | Clock behind the recorded time by more than 2 h, or the stored code fails its signature | **read-only** |
+
+**Warnings escalate from two weeks out, not hours.** The service grades every state:
+
+| Grade | When | Where it shows |
+|---|---|---|
+| `notice` | a trial 8–14 days from its end | the bell |
+| `warning` | a trial 4–7 days from its end; any emergency window | a countdown chip in the top bar of every screen |
+| `urgent` | a trial's last 3 days; an emergency window's last 2; every grace day; every read-only state | a red banner on every screen, undismissible, and on every launch |
+
+**Read-only refuses exactly three things**, each with HTTP 423 `LICENSE_READ_ONLY`:
+recording a sale (`scanCard`), registering a customer (`createCustomer`) and redeeming a
+voucher (`redeemVoucher`). **Everything else keeps working** — reports, the customer
+list, card history and card batches, invoice capture from the register, exports,
+backups (local and Drive), the restore test, restoring. The merchant's data is never
+withheld.
+
+## 9. Never locking out a paying shop
+
+| What goes wrong | What happens | The way back — no visit, no internet |
+|---|---|---|
+| Licence rows deleted or corrupted | the mirror file puts the codes back on start | automatic |
+| Licence rows **and** mirror destroyed | `UNLICENSED` / `TAMPERED` | paste the original message again, or an **emergency code** by phone |
+| Database restored from before activation | the mirror puts the codes back | automatic |
+| A clock record lost | the other two outvote it; a disagreement is recorded | automatic |
+| The clock wrong (dead battery, mistake) | a perpetual licence ignores it; a trial is `TAMPERED` until corrected | fix the clock — it clears by itself — or an emergency code |
+| Windows reinstalled / system disk replaced | stored ID kept if the database survives or is restored | automatic; otherwise emergency code, then a new licence ([§3](#3-the-device-id--and-what-changes-it)) |
+| **The licensing module missing, or a bug in the check** | the gate uses **the last status it recorded**: a shop last seen licensed keeps trading, with an amber banner «تعذّر التحقق من الترخيص»; recorded as `license.check_failed` | reinstall when convenient; nothing stops meanwhile |
+| A trial or emergency window ends | five days of `GRACE`, full operation, red banner | a licence or another emergency code |
+| A sale queued offline arrives after the licence lapsed | accepted — it happened while licensed ([§11](#11-the-offline-queue)) | automatic |
+
+The fallback in the second-last row is bounded both ways: a status last recorded as
+time-limited lasts only until it would have ended anyway, and a copy last recorded as
+read-only stays read-only — deleting the module is not a way to get a licence. The
+service **starts** without the module; it no longer refuses to.
+
+## 10. At the till
+
+When the manager PC's licence is read-only and the cashier scans a customer's card and
+invoice:
+
+- **What the cashier sees:** one amber card —
+  «لم تُحتسب هذه الفاتورة للزبون الآن» and underneath «حُفظت على هذه المحطة وستُحتسب له
+  تلقائياً عند تفعيل البرنامج على جهاز المدير — تابع خدمة الزبون كالمعتاد، ولا قسيمة خصم
+  لهذه الفاتورة.» — with the usual full-width «مسح للزبون التالي» bar (Escape works; it
+  clears itself after 90 seconds). Nothing is stuck and nothing needs retrying.
+- **What happens to that customer's invoice:** the invoice itself was already captured
+  from the register by the capture agent — capture is never refused — so it is in the
+  shop's records. What waits is only its link to the customer: it is kept in the till's
+  queue **pinned to that exact invoice number**, and sent on every sync. The moment the
+  program is activated (or an emergency code entered) the link is applied and the
+  customer's spend is credited. No discount slip is issued for that invoice later —
+  the customer has paid and left, exactly as for any scan made while offline.
+- **The header** says «N محفوظة بانتظار التفعيل» for the held links, and a strip under it
+  explains the read-only state before the first scan.
+- **Registering a new customer** is refused with «لا يمكن تسجيل زبون جديد الآن: … لم
+  يُسجَّل شيء — أكمل البيع كالمعتاد، واحتفظ بالبطاقة لتسجيله لاحقاً.» The form stays
+  filled. It is not queued: a registration binds a card and checks the phone number now.
+- **Voucher redemption** is not done at the till in this build; on the dashboard it is
+  refused with a sentence, and the voucher stays valid.
+
+## 11. The offline queue
+
+A queued sale, registration or redemption is accepted if **either**
+
+- recording was allowed **when it happened** — judged by the till's own timestamp for
+  it, capped at the present and honoured up to **30 days** back, against every licence
+  and emergency code ever stored (a trial counts through its grace); **or**
+- recording is allowed **now**.
+
+Otherwise it is answered `FAILED`, which the till never discards: it stays queued and is
+sent again on every flush, and applies as soon as the shop is activated. **Nothing is
+ever dropped by a licensing rule.** Each item accepted because of when it happened while
+the shop is now read-only is recorded (`license.accepted_by_occurrence`).
+
+## 12. The clock, and the permanent record of it
+
+The latest time the installation has seen is kept in three places, written together and
+read together, the latest winning:
 
 | Where | What |
 |---|---|
 | The database | `installation_state.last_seen_at` |
-| The registry | `HKCU\Software\Walaa`, value `LastSeenAt` (QWORD). The service runs as LocalSystem, so this is `HKEY_USERS\S-1-5-18\Software\Walaa`. |
-| A hidden file | `.license-clock` in the data folder (`C:\ProgramData\Walaa`), `walaa-clock-v1 <seconds>` |
+| The registry | `HKCU\Software\Walaa\LastSeenAt`. The service runs as LocalSystem, so this is `HKEY_USERS\S-1-5-18\Software\Walaa`. |
+| A hidden file | `.license-clock` in the data folder (`C:\ProgramData\Walaa`) |
 
-At start the three are read and the **latest** wins; any disagreement is audited. The time
-moves forward on use and every 10 minutes, never backward. A write that fails is logged
-and does not stop the other two — losing one location loses nothing. If the system clock
-is **more than 2 hours** behind the latest recorded time, the status is `TAMPERED` until
-it is not.
+A clock more than 2 hours behind it makes a trial `TAMPERED` until corrected — then it
+clears by itself. **Every such event is recorded permanently**, and so is its end:
 
-A **perpetual** licence ignores the clock: it has no expiry to stretch, and a shop that
-paid is never stopped by a wrong date.
+`license.clock_rollback` carries the evidence to tell a merchant who wound the clock
+back from one whose CMOS battery died:
 
-## 10. Features
+| Field | Meaning |
+|---|---|
+| `cause` | `FIRMWARE_RESET` — the clock read a date before this program's key existed (or before 2020): nobody picks that on purpose; typical of a dead motherboard battery or a BIOS reset. `CHANGED_WHILE_RUNNING` — wall-clock time jumped back while monotonic time ran forward: somebody changed the date with the program open. `SET_BACK_WHILE_OFF` — the machine started with a plausible but earlier date. |
+| `behindMinutes`, `systemTime`, `latestSeen` | how far, what the clock said, the last time known to be real |
+| `phase` | `startup` or `running` |
+| `windowsUptimeMinutes` | a clock years in the past a minute after boot is what a battery failure looks like |
+| `previousRollbacks` | once, or a pattern |
+| `stoppedSales` | whether it stopped the shop (a perpetual licence ignores the clock; the event is recorded anyway) |
 
-`feat[]` in a code lists paid features. The service checks it before:
+`license.clock_restored` closes it: `durationMinutes` and `refusedDuring` (sales refused
+while it lasted).
 
-- **`drive_backup`** — uploading backups to Google Drive. Without it the nightly backup
-  still runs **locally**, and the Drive panel says «الرفع إلى Google Drive غير مشمول في
-  ترخيص هذا الجهاز…». **Connecting a Google account, listing the copies in Drive, and
-  restoring from Drive are never gated**: a merchant replacing a dead PC must be able to
-  get his data back whatever licence the new machine has.
-- **`multi_device`** — reserved; issued by default, nothing checks it yet.
+**Permanent:** licence events are written to the audit trail **and** appended to
+`license-events.log` in the data folder. Restoring an older database does not erase
+them — on the next start the file's events are put back (`restoredFromFile`). Events are
+filed at the best-known real time, so a log recorded while the clock read 2001 still
+reads in order. The provider reads them in «سجل أحداث الترخيص», with the count of
+clock set-backs ever recorded at the top.
 
-Any future paid feature is a new name in `KNOWN_FEATURES` (`crates/walaa-license/src/lib.rs`)
-and a `licensedFeature('…')` check where it is used. The issuer refuses feature names the
-crate does not know.
+## 13. Features
 
-## 11. Protecting the private key
+`feat[]` lists paid features. **`drive_backup`** gates *uploading* backups to Google
+Drive; connecting, listing and restoring from Drive are never gated. An emergency window
+over a destroyed licence keeps every feature, so the shop's Drive backups do not stop
+because its licence file did. `multi_device` is reserved; nothing checks it yet.
 
-The whole scheme rests on one file, `issuer-key.json`, and its password. See
-[the issuer README](../tools/license-issuer/README.md#backing-up-the-key). In short:
+## 14. Protecting the private key
 
-- **Lose the file or the password and no licence can ever be issued again** — not for a
-  new shop, not for a customer who has paid. Recovery means a new key, a new build for
-  every shop, installed in person.
-- Two copies of the home folder, off this computer, in two places; the password kept
-  separately from both; one test issue from a copy to prove it.
-- Never put the key file in this repository, a shared drive, or an e-mail. Only the
-  **public** half belongs in the repository (`public_key.rs`).
-- The key is encrypted at rest (Argon2id → XChaCha20-Poly1305, bound to its own public
-  key). A stolen file without the password is useless; both together are a licence
-  press.
+The whole scheme rests on `issuer-key.json` and its password — the emergency-code chain
+is derived from the same private key. See the
+[issuer README](../tools/license-issuer/README.md#backing-up-the-key):
 
-## 12. The development key, and the installer gate
+- **Lose the file or the password and no licence and no emergency code can ever be issued
+  again** — recovery means a new key, a new build for every shop, installed in person.
+- Two copies of the home folder, off the computer, in two places; the password kept
+  separately; one test issue from a copy to prove it.
+- Only the public half — the public key and the chain tip — belongs in the repository.
+
+## 15. The development key, and the installer gate
 
 Until the provider runs `keygen`, `crates/walaa-license/src/public_key.rs` holds a
-**development** key (`KeyKind::Development`, fingerprint `7411F6B7B28F4C15`) whose private
-half and password are committed in `tools/license-issuer/dev-key/`. Anyone with the
-repository can sign codes for it. That is what makes the tests and `pnpm package:verify`
-able to exercise activation end to end — and why it must never reach a shop:
+**development** key (fingerprint `49C862E0D57E50B7`) whose private half and password are
+committed in `tools/license-issuer/dev-key/`. It lets the tests and `pnpm package:verify`
+exercise activation and emergency codes end to end — and must never reach a shop:
 
 - `pnpm package:installer` first runs `packaging/scripts/verify-license-key.mjs`, which
-  loads the **staged** licensing module and refuses unless it embeds a production key.
-- `packaging/scripts/stage.mjs` copies the module by allowlist and fails if the test
-  build (`walaa-license.test.node`) reaches the staged runtime.
-- The service logs the key kind and fingerprint at every start (`licence … key`).
+  loads the **staged** module and refuses unless it embeds a production key.
+- `stage.mjs` copies the module by allowlist and fails if the test build reaches the
+  staged runtime.
 
-`pnpm package:verify` activates a code on the clean-room install: it uses
-`WALAA_VERIFY_LICENSE_CODE` if set (required once the production key is embedded — the
-provider issues one for the build machine), otherwise it issues one with the development
-issuer, which only a development build accepts.
+`pnpm package:verify` uses `WALAA_VERIFY_LICENSE_CODE` / `WALAA_VERIFY_UNLOCK_CODE` if set
+(required once the production key is embedded — issued for the build machine), otherwise
+the development issuer.
 
-## 13. Upgrading an existing shop to 0.3.0
+## 16. Upgrading an existing shop to 0.3.0
 
-0.3.0 adds a database migration (`license_activation`, `installation_state`). A shop
-machine never migrates itself, so this is an **in-person upgrade**, like every schema
-change:
+Two database migrations (`20260914090000_offline_licensing`,
+`20260915090000_licensing_resilience`), so an **in-person upgrade**: take a backup and
+copy it off the machine; install 0.3.0; the shop starts **`UNLICENSED` — read-only** until
+given a code. Have it ready: read the device number on the spot, issue, paste — or read
+an emergency code if the message cannot arrive in time.
 
-1. Take a backup (Backup screen → «نسخ احتياطي الآن») and copy it off the machine.
-2. Install 0.3.0.
-3. The shop starts **`UNLICENSED` — read-only** until given a code. Its data is all there
-   and readable; the till refuses sales until activation. Have the code ready: read the
-   device number from «الإعدادات ← الترخيص» on the spot, issue, paste.
-
-## 14. Tests
+## 17. Tests and drills
 
 | Where | Run | Covers |
 |---|---|---|
-| `crates/walaa-license` | `cargo test` | valid and invalid signatures, another key, wrong device, corrupted and wrong-version codes, pasting with spaces/CRLF/RTL marks, trial countdown and warning, grace then expiry, perpetual ignoring the clock, clock rollback and its 2 h tolerance and recovery, a clock before the issue time, extension governing, conflicting anchors, the device ID alphabet, the Windows sources and registry anchor |
-| `tools/license-issuer` | `cargo test` | key sealing, wrong password, damaged file, payload rules, the log |
-| `apps/api` — `license.test.ts` | `pnpm --filter @walaa/api test` | every refusal through HTTP with distinct Arabic messages and audit rows; the three refused operations and everything read-only keeps open (capture, batches, reports, backup, restore test); the offline queue keeping refused items; trial, grace, expiry; clock rollback → `TAMPERED` → recovery; conflicting anchors; anchor reset by a fresh code; tampered stored code; restore from the mirror; device source change; Drive upload needing `drive_backup` while listing does not |
-| `packaging` | `pnpm package:verify` | a clean install starts `UNLICENSED`, refuses a customer in Arabic, activates, then trades |
+| `crates/walaa-license` | `cargo test` | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened |
+| `tools/license-issuer` | `cargo test` | key sealing, payload rules, the log of licences and emergency codes |
+| `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @walaa/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore |
+| `packaging` | `pnpm package:verify` | a clean production-mode install: unlicensed → refused in Arabic → activated → trades; then **the recovery drill**: licence destroyed (rows deleted, mirror overwritten) → read-only → emergency code typed as heard → trades with no restart → licensing module deleted → service starts and still trades |
 
-The API suite runs against the **real Rust verifier** (the test build of the module) with
-codes signed by the published test key; its clock anchors go to a per-run registry key and
-folder, never `Software\Walaa`.
+## 18. What this does not protect against
 
-## 15. What this does not protect against
+Stated plainly, so nobody overestimates it — the bar is deterrence against casual copying:
 
-Stated plainly, so nobody overestimates it:
-
-- **The gate runs in the API's JavaScript bundle.** An administrator on the shop PC who
-  edits `walaa-api.cjs` to skip the check bypasses licensing. The signature, device and
-  clock checks make casual cheating fail loudly; they do not make a determined one
-  impossible. Nothing offline can.
+- **The gate runs in the API's JavaScript bundle.** An administrator who edits
+  `walaa-api.cjs` bypasses licensing.
+- **The last-status fallback is a database column.** Someone who deletes the licensing
+  module *and* edits that column to a working status gets a working shop.
+- **Emergency codes are 64-bit.** Forging one means inverting a 64-bit hash, ~2⁶⁴ work —
+  beyond casual, not beyond a determined attacker. The device mixing is a public
+  function: someone technical who hears one shop's code could derive another shop's code
+  for the same window. It stops a code being passed on as-is, nothing more.
 - **The licence follows the database.** Restoring a shop's backup onto another PC carries
-  its device ID and codes along (deliberately — a dead PC must not strand a paying shop).
-  The audit trail records the changed machine; nothing blocks it.
-- **Deleting all three clock records at once** (database row, registry value, hidden
-  file) forgets the recorded time. Each alone is audited and outvoted by the others.
+  its device ID and codes along — deliberately; the audit trail records the change.
+- **Deleting all three clock records and the events file at once** forgets the recorded
+  time and its history. Each alone is recorded and outvoted.
+- **A clock record in the future plus a destroyed licence.** If the clock once ran far
+  ahead, the recorded time sits in the future and an emergency code — judged against it —
+  can read as already expired. A freshly issued *licence* code resets such a record on
+  activation; an emergency code cannot. In that one combination the way back is the long
+  code by message.
+- **The till's queue lives in the tablet's browser storage.** Clearing the browser's data
+  on the till loses links it was holding — offline or for activation.

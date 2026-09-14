@@ -21,6 +21,7 @@ pub mod payload;
 #[cfg_attr(feature = "test-key", allow(dead_code))]
 mod public_key;
 pub mod status;
+pub mod unlock;
 pub mod verify;
 #[cfg(windows)]
 pub mod windows;
@@ -28,7 +29,10 @@ pub mod windows;
 mod spec_tests;
 
 pub use payload::{LicenseKind, Payload, FORMAT_VERSION};
-pub use status::{best_license, evaluate, Evaluation, Status};
+pub use status::{
+    best_license, clock_rolled_back, evaluate, evaluate_all, recording_allowed_at, Basis, Evaluation, Status,
+    Warning,
+};
 pub use verify::{verify, verify_with_key, Verified, VerifyError};
 
 use sha2::{Digest, Sha256};
@@ -79,6 +83,23 @@ pub fn embedded_key_kind() -> KeyKind {
     }
 }
 
+/// The emergency-unlock chain this build checks phone codes against — public values
+/// only, written by `license-issuer keygen` beside the public key.
+pub fn embedded_unlock_chain() -> unlock::Chain {
+    #[cfg(feature = "test-key")]
+    {
+        test_support::test_unlock_chain()
+    }
+    #[cfg(not(feature = "test-key"))]
+    {
+        unlock::Chain {
+            epoch_day: public_key::UNLOCK_EPOCH_DAY,
+            length: public_key::UNLOCK_CHAIN_LENGTH,
+            tip: public_key::UNLOCK_TIP,
+        }
+    }
+}
+
 /// A short public identifier for a key — safe to print and to compare by eye.
 pub fn key_fingerprint(key: &[u8; 32]) -> String {
     let digest = Sha256::digest(key);
@@ -90,10 +111,27 @@ pub fn key_fingerprint(key: &[u8; 32]) -> String {
 /// module's test build, which the API's test suite loads.
 #[cfg(any(test, feature = "test-key"))]
 pub mod test_support {
-    use crate::{code, Payload};
+    use crate::{code, unlock, Payload};
     use ed25519_dalek::{Signer, SigningKey};
+    use std::sync::OnceLock;
 
     pub const TEST_SEED: [u8; 32] = [0x77; 32];
+    /// 2024-10-04 — well before any test's clock, so every test date is on the chain.
+    pub const TEST_UNLOCK_EPOCH_DAY: i64 = 20_000;
+
+    pub fn test_unlock_chain() -> unlock::Chain {
+        static CHAIN: OnceLock<unlock::Chain> = OnceLock::new();
+        *CHAIN.get_or_init(|| {
+            unlock::Chain::new(&unlock::chain_secret(&TEST_SEED), TEST_UNLOCK_EPOCH_DAY, unlock::CHAIN_LENGTH)
+        })
+    }
+
+    /// An emergency code from the test chain, running `days` days from `now`.
+    pub fn unlock_code(device_id: &str, now: i64, days: u32) -> String {
+        unlock::issue(&unlock::chain_secret(&TEST_SEED), &test_unlock_chain(), device_id, now, days)
+            .expect("the test chain covers every test date")
+            .code
+    }
 
     pub fn test_signing_key() -> SigningKey {
         SigningKey::from_bytes(&TEST_SEED)

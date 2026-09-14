@@ -1,19 +1,24 @@
 {
   "format": "walaa-issuer-key-v1",
   "kind": "development",
-  "public_key": "344b8fed9505776815b001ba18ea81bf770e4f95b24ffe90f6bc5c24126563cc",
-  "fingerprint": "7411F6B7B28F4C15",
-  "created_at": "2026-09-14T04:28:40.862965800+00:00",
+  "public_key": "9da00e8909d7305125b230b51de59cf591da4b70db739c0f56622bb69c0f7704",
+  "fingerprint": "49C862E0D57E50B7",
+  "created_at": "2026-09-14T22:05:48.407955300+00:00",
   "kdf": {
     "algorithm": "argon2id",
     "memory_kib": 65536,
     "iterations": 3,
     "parallelism": 1,
-    "salt": "Wj+gyINNtharLgT5OwP+ew=="
+    "salt": "FfNSgJv/ByDx6TBvCUlgCQ=="
   },
   "cipher": {
     "algorithm": "xchacha20poly1305",
-    "nonce": "PGA0QYkDR7gpFQpRpWxlEC5bcQeVACOn",
-    "ciphertext": "0/Z1O2/umm8pyMvnmcIi7DkNfd90GC3ApJhcQZOundj6uWKMfJqNiWnyRzWOo7xE"
+    "nonce": "q7H1kFeCe+6fAJKllSA1Jh0qT6IaJnuF",
+    "ciphertext": "HNxpJhzJeuuZRinnm/pPJtXob1DocGc7squeBym3EVKWcABlPwExDpKTeugwreB4"
+  },
+  "unlock": {
+    "epoch_day": 20702,
+    "length": 7300,
+    "tip": "5aab66da129491c1"
   }
 }

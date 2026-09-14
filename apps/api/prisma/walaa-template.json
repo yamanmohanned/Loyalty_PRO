@@ -1,11 +1,11 @@
 {
   "file": "walaa-template.db",
-  "bytes": 348160,
-  "sha256": "232d82a41a3ceeccfa6e301a59bf602d5d7a2db8ff9370a8863241812d2ad689",
+  "bytes": 364544,
+  "sha256": "cb497505fdd566f3e52910b754eafbc265a3cd65c0d1c3d0ddf240e05ad55839",
   "productVersion": "0.3.0",
-  "installationId": "a994e8ba-8bbf-414f-8538-4e3842240be2",
-  "schemaHash": "bc23e04703e07fa71a12884ce44371a5adf2013eeec3a72f3d1308efad94178a",
-  "migrationsFingerprint": "2bf5f281d310b0a572a1a7b79e39b487d8a38171654a9e75ccbeafb72a95401e",
+  "installationId": "d71ce178-da43-4ed3-a7b2-6d8f757f047e",
+  "schemaHash": "2d3a854bb6a10b738b32567cb01aa9151fa4422cb1597460bfbe1325e05f714f",
+  "migrationsFingerprint": "3d93269f4b3225cf18bc3eb2dbc6e2575494ec7f81a9afde0ee7808b6feef713",
   "migrations": [
     "20260828021006_v3_instant_discount_sqlite",
     "20260830221926_audit_action_index",
@@ -14,7 +14,8 @@
     "20260902230000_discount_uncapped_value",
     "20260904090000_v4_invoice_bracket_discounts",
     "20260904140000_station_paper_width",
-    "20260914090000_offline_licensing"
+    "20260914090000_offline_licensing",
+    "20260915090000_licensing_resilience"
   ],
-  "builtAt": "2026-09-14T05:03:02.545Z"
+  "builtAt": "2026-09-14T22:49:33.622Z"
 }

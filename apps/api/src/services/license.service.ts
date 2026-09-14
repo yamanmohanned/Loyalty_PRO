@@ -1,5 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import {
   computeDeviceId,
   deleteRegistryKeyForTests,
@@ -7,20 +9,32 @@ import {
   licenseStatus as evaluateStatus,
   readFileAnchor,
   readRegistryAnchor,
+  recordingAllowed,
   resolveAnchors,
+  uptimeSeconds,
   verifyLicense,
+  verifyUnlock,
   writeFileAnchor,
   writeRegistryAnchor,
   type LicenseInfo,
   type LicenseStatus as NativeStatus,
 } from '@walaa/license-native';
-import type {
-  ActivateLicenseResponse,
-  LicenseActivationEntry,
-  LicenseFeature,
-  LicenseOverview,
-  LicenseRefusalReason,
-  LicenseState,
+import {
+  LICENSE_EVENT_TYPES,
+  LICENSE_FEATURES,
+  type ActivateLicenseResponse,
+  type ClockRollbackCause,
+  type EnterUnlockResponse,
+  type LicenseActivationEntry,
+  type LicenseEvent,
+  type LicenseEventType,
+  type LicenseEventsResponse,
+  type LicenseFeature,
+  type LicenseOverview,
+  type LicenseRefusalReason,
+  type LicenseState,
+  type LicenseStatusName,
+  type UnlockRefusalReason,
 } from '@walaa/shared-types';
 import { loadEnv } from '../config/env';
 import { resolveDataDir } from '../config/paths';
@@ -31,38 +45,60 @@ import { AUDIT_ACTIONS, recordAudit, type AuditAction } from './audit.service';
 /**
  * Offline licensing, as the service applies it (packaging/LICENSING.md).
  *
+ * ## The rule above every other
+ *
+ * **A shop that has paid is never stopped.** Not by a corrupted licence, a lost clock
+ * record, a Windows reinstall, or a bug in this file. Every path below that can refuse
+ * a sale has a way back that needs neither a visit nor the internet:
+ *
+ *  - an emergency code the provider reads over the phone (`enterUnlock`) restores full
+ *    operation at once, whatever else is wrong;
+ *  - a trial or an emergency window that ends is followed by five days of full
+ *    operation with a red warning — never a hard stop;
+ *  - when the check itself fails, the gate uses the last status it recorded, so a shop
+ *    last seen licensed keeps trading (`degradedState`);
+ *  - a sale the till queued while the shop was licensed is accepted whenever it
+ *    arrives (`assertCanRecord`'s `occurredAt`).
+ *
  * ## Where the decisions are made
  *
- * Every decision about a licence is made in Rust (`@walaa/license-native`, built from
- * `crates/walaa-license`): computing the device ID, checking a code's signature
- * against the embedded public key, choosing the governing licence and evaluating its
- * status against the clock. This file stores codes and times, asks, and applies the
- * answer — on every sale, new customer and voucher redemption, here in the service,
- * because a lock in a screen is gone the moment somebody opens the API in a browser.
+ * In Rust (`@walaa/license-native`, built from `crates/walaa-license`): the device ID,
+ * every signature and phone-code check, the governing licence, the status. This file
+ * stores codes and times, asks, and applies the answer — on every sale, new customer
+ * and voucher redemption, here in the service, because a lock in a screen is gone the
+ * moment somebody opens the API in a browser.
  *
  * ## What read-only means
  *
  * UNLICENSED, EXPIRED and TAMPERED refuse three things: linking a sale, registering a
  * customer, and redeeming a voucher. Nothing else. Reports, the customer list, card
- * history, exports, backups, restore tests and restores all keep working, and capturing
- * invoices from the register never stops — those invoices happened at the till and are
- * the merchant's record. The merchant's data is never withheld.
+ * history, exports, backups and restores all keep working, and capturing invoices from
+ * the register never stops. The merchant's data is never withheld.
  *
- * ## The clock
+ * ## The clock, and the record of it
  *
  * The latest time this installation has seen is kept in three places — the
  * `installation_state` table, `HKCU\Software\Walaa`, and a hidden file in the data
- * folder — written together, read together, the latest winning. A clock more than two
- * hours behind it is TAMPERED until corrected. A code issued later than that recorded
- * time, activated here, is proof the recorded time was wrong, and resets it.
+ * folder — the latest winning. A clock more than two hours behind it is TAMPERED until
+ * corrected. Every such event is written to the audit trail AND to an append-only file
+ * beside the clock file, which is merged back after a restore: the record of a clock
+ * wound back does not disappear with the database it was written to.
  */
 
 const PRODUCTION_REGISTRY_KEY = 'Software\\Walaa';
 const ANCHOR_FILE = '.license-clock';
 const MIRROR_FILE = 'license-codes.json';
-const MIRROR_FORMAT = 'walaa-license-codes-v1';
+const EVENTS_FILE = 'license-events.log';
+const MIRROR_FORMAT = 'walaa-license-codes-v2';
 const TOLERANCE_SECONDS = 2 * 3600;
 const TOUCH_INTERVAL_MS = 10 * 60 * 1000;
+const DAY_MS = 86_400_000;
+/** How long a till may hold a sale offline and still have it judged by when it happened. */
+const OCCURRENCE_WINDOW_DAYS = 30;
+/** A failing check is recorded at most this often — once is evidence, every request is noise. */
+const CHECK_FAILED_RECORD_INTERVAL_MS = 3600_000;
+/** Statuses in which the shop trades. */
+const WORKING: ReadonlySet<LicenseStatusName> = new Set(['TRIAL', 'EMERGENCY', 'GRACE', 'PERPETUAL']);
 
 type Log = (message: string, extra?: Record<string, unknown>) => void;
 
@@ -75,11 +111,30 @@ interface Installation {
   latestSeen: number | null;
 }
 
+/** An open clock episode: a rollback recorded and not yet corrected. */
+interface ClockEpisode {
+  eventId: string;
+  /** The latest recorded time when it was detected — the last moment known to be real. */
+  latestSeen: number | null;
+  /** Monotonic milliseconds at detection, when this process saw it happen. */
+  sinceMono: number | null;
+}
+
 let installation: Installation | null = null;
 let initialising: Promise<Installation> | null = null;
 let lastTouchAt = 0;
-let lastStatus: string | null = null;
 let reportedInvalidCodes = false;
+let rememberedStatus: string | null = null;
+/** Successful checks since this process started: the first is at start-up. */
+let checks = 0;
+let lastWallMs = Date.now();
+let lastMonoMs = performance.now();
+let episode: ClockEpisode | null = null;
+let refusedDuringEpisode = 0;
+let lastCheckFailedRecordedAt = 0;
+let failureForTests: Error | null = null;
+/** Whether this installation is known to have held a licence — this run, or at its last recorded status. */
+let licenceSeen = false;
 
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 const iso = (seconds: number | null | undefined): string | null =>
@@ -97,19 +152,132 @@ function licenseDirectory(): string {
 
 const anchorFile = (): string => join(licenseDirectory(), ANCHOR_FILE);
 const mirrorFile = (): string => join(licenseDirectory(), MIRROR_FILE);
+const eventsFile = (): string => join(licenseDirectory(), EVENTS_FILE);
 
-/** An audit row with no person behind it — against the installation's merchant, if there is one yet. */
-async function auditSystem(action: AuditAction, entityId: string, after: Record<string, unknown>): Promise<void> {
+async function firstMerchantId(): Promise<string | null> {
   const merchant = await prisma.merchant.findFirst({ select: { id: true } }).catch(() => null);
-  if (!merchant) return;
-  await recordAudit({
-    merchantId: merchant.id,
-    actorUserId: null,
+  return merchant?.id ?? null;
+}
+
+/* ── Licence events: the audit trail, and a file that survives a restore ────── */
+
+interface StoredEvent {
+  id: string;
+  action: AuditAction;
+  at: string;
+  actorUserId: string | null;
+  details: Record<string, unknown>;
+}
+
+function appendEventFile(event: StoredEvent): void {
+  try {
+    const path = eventsFile();
+    mkdirSync(dirname(path), { recursive: true });
+    appendFileSync(path, `${JSON.stringify(event)}\n`, 'utf8');
+  } catch (error) {
+    log('licence: an event could not be appended to the events file', { error: String(error), action: event.action });
+  }
+}
+
+function readEventFile(): StoredEvent[] {
+  try {
+    const path = eventsFile();
+    if (!existsSync(path)) return [];
+    return readFileSync(path, 'utf8')
+      .split('\n')
+      .flatMap((line) => {
+        try {
+          const parsed = JSON.parse(line) as StoredEvent;
+          return typeof parsed.id === 'string' && typeof parsed.action === 'string' ? [parsed] : [];
+        } catch {
+          return [];
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
+async function writeEventRow(merchantId: string, event: StoredEvent): Promise<void> {
+  await prisma.auditLog.create({
+    data: {
+      merchantId,
+      actorUserId: event.actorUserId,
+      action: event.action,
+      entityType: 'license',
+      entityId: event.id,
+      afterJson: JSON.stringify(event.details),
+      createdAt: new Date(event.at),
+    },
+  });
+}
+
+/**
+ * Records a licence event in both places. The file first: it is the copy that survives
+ * the database being replaced, and the one written even when the database cannot be.
+ */
+async function recordEvent(
+  action: AuditAction,
+  details: Record<string, unknown>,
+  actor: { merchantId?: string; userId?: string | null } = {},
+): Promise<string> {
+  // Stamped with the best-known real time, not the system clock alone: an event recorded
+  // while the clock reads 2001 must not sort to the start of the log the provider reads.
+  // The wrong system time is kept in the event's own details where it matters.
+  const at = Math.max(Date.now(), (installation?.latestSeen ?? 0) * 1000);
+  const event: StoredEvent = {
+    id: randomUUID(),
     action,
-    entityType: 'license',
-    entityId,
-    after,
-  }).catch(() => undefined);
+    at: new Date(at).toISOString(),
+    actorUserId: actor.userId ?? null,
+    details,
+  };
+  appendEventFile(event);
+  const merchantId = actor.merchantId ?? (await firstMerchantId());
+  if (merchantId) {
+    await writeEventRow(merchantId, event).catch((error: unknown) =>
+      log('licence: an event could not be written to the audit trail', { error: String(error), action }),
+    );
+  }
+  return event.id;
+}
+
+/**
+ * Puts back into the audit trail every event the file holds and the database does not —
+ * after a restore of an older copy, or events recorded before the first account existed.
+ */
+async function mergeEventFile(): Promise<number> {
+  const events = readEventFile();
+  if (events.length === 0) return 0;
+  const merchantId = await firstMerchantId();
+  if (!merchantId) return 0;
+
+  const present = new Set<string>();
+  for (let i = 0; i < events.length; i += 400) {
+    const rows = await prisma.auditLog.findMany({
+      where: { entityType: 'license', entityId: { in: events.slice(i, i + 400).map((e) => e.id) } },
+      select: { entityId: true },
+    });
+    for (const row of rows) present.add(row.entityId);
+  }
+
+  let merged = 0;
+  for (const event of events) {
+    if (present.has(event.id)) continue;
+    // The person may not exist in the restored database; the event still does.
+    const actor = event.actorUserId
+      ? await prisma.user.findUnique({ where: { id: event.actorUserId }, select: { id: true } })
+      : null;
+    await writeEventRow(merchantId, {
+      ...event,
+      actorUserId: actor?.id ?? null,
+      details: { ...event.details, restoredFromFile: true },
+    }).catch(() => undefined);
+    present.add(event.id);
+    merged += 1;
+  }
+  if (merged > 0) log('licence: events put back from the events file', { merged });
+  return merged;
 }
 
 /* ── The three clock anchors ────────────────────────────────────────────────── */
@@ -177,35 +345,54 @@ async function touch(force = false): Promise<void> {
 /* ── The mirror of activated codes ──────────────────────────────────────────── */
 
 /*
-  Every activated code is also kept in a file beside the clock anchor. A restore puts
-  back an older database — possibly one from before the shop's licence was activated —
-  and a restore must never cost the merchant his licence. On start, codes found in the
-  file and not in the database are re-verified and put back. The codes are signed, so
-  the file needs no secrecy: a code for another device fails its check.
+  Every activated licence and emergency code is also kept in a file beside the clock
+  anchor. A restore puts back an older database — possibly one from before the shop's
+  licence was activated — and a restore must never cost a merchant the licence. On
+  start, codes found in the file and not in the database are re-verified and put back.
+  The codes are signed or chained, so the file needs no secrecy.
 */
 
-function readMirror(): string[] {
+interface Mirror {
+  codes: string[];
+  unlocks: string[];
+}
+
+function readMirror(): Mirror {
   try {
     const path = mirrorFile();
-    if (!existsSync(path)) return [];
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { format?: string; codes?: unknown };
-    if (parsed.format !== MIRROR_FORMAT || !Array.isArray(parsed.codes)) return [];
-    return parsed.codes.filter((code): code is string => typeof code === 'string');
+    if (!existsSync(path)) return { codes: [], unlocks: [] };
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { format?: string; codes?: unknown; unlocks?: unknown };
+    const strings = (value: unknown): string[] =>
+      Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+    if (parsed.format !== MIRROR_FORMAT && parsed.format !== 'walaa-license-codes-v1') return { codes: [], unlocks: [] };
+    return { codes: strings(parsed.codes), unlocks: strings(parsed.unlocks) };
   } catch {
-    return [];
+    return { codes: [], unlocks: [] };
   }
 }
 
-function writeMirror(codes: string[]): void {
+function writeMirror(mirror: Mirror): void {
   try {
     const path = mirrorFile();
     mkdirSync(dirname(path), { recursive: true });
     const partial = `${path}.partial`;
-    writeFileSync(partial, JSON.stringify({ format: MIRROR_FORMAT, codes }, null, 2), 'utf8');
+    writeFileSync(partial, JSON.stringify({ format: MIRROR_FORMAT, ...mirror }, null, 2), 'utf8');
     renameSync(partial, path);
   } catch (error) {
     log('licence: the mirror of activated codes could not be written', { error: String(error) });
   }
+}
+
+async function storedCodes(): Promise<Mirror> {
+  const [codes, unlocks] = await Promise.all([
+    prisma.licenseActivation.findMany({ select: { code: true } }),
+    prisma.licenseUnlock.findMany({ select: { code: true } }),
+  ]);
+  return { codes: codes.map((r) => r.code), unlocks: unlocks.map((r) => r.code) };
+}
+
+async function refreshMirror(): Promise<void> {
+  writeMirror(await storedCodes());
 }
 
 function activationData(license: LicenseInfo, code: string, merchantId: string, userId: string | null) {
@@ -223,29 +410,47 @@ function activationData(license: LicenseInfo, code: string, merchantId: string, 
   };
 }
 
-async function syncMirror(deviceId: string): Promise<void> {
-  const rows = await prisma.licenseActivation.findMany({ select: { code: true, licenseId: true } });
-  const stored = new Set(rows.map((row) => row.code));
-  const storedIds = new Set(rows.map((row) => row.licenseId));
-  const merchant = await prisma.merchant.findFirst({ select: { id: true } });
+async function syncMirror(current: Installation): Promise<void> {
+  const mirror = readMirror();
+  const stored = await storedCodes();
+  const knownCodes = new Set(stored.codes);
+  const knownUnlocks = new Set(stored.unlocks);
+  const storedIds = new Set(
+    (await prisma.licenseActivation.findMany({ select: { licenseId: true } })).map((r) => r.licenseId),
+  );
+  const merchantId = (await firstMerchantId()) ?? 'installation';
 
-  for (const code of readMirror()) {
-    if (stored.has(code)) continue;
-    const outcome = verifyLicense(code, deviceId);
+  for (const code of mirror.codes) {
+    if (knownCodes.has(code)) continue;
+    const outcome = verifyLicense(code, current.deviceId);
     if (!outcome.ok || !outcome.license || !outcome.normalized) continue;
     if (storedIds.has(outcome.license.licenseId)) continue;
-    await prisma.licenseActivation.create({
-      data: activationData(outcome.license, outcome.normalized, merchant?.id ?? 'installation', null),
-    });
-    stored.add(outcome.normalized);
-    await auditSystem(AUDIT_ACTIONS.LICENSE_RESTORED_FROM_MIRROR, outcome.license.licenseId, {
+    await prisma.licenseActivation.create({ data: activationData(outcome.license, outcome.normalized, merchantId, null) });
+    knownCodes.add(outcome.normalized);
+    await recordEvent(AUDIT_ACTIONS.LICENSE_RESTORED_FROM_MIRROR, {
+      licenseId: outcome.license.licenseId,
       kind: outcome.license.kind,
       expiresAt: iso(outcome.license.expiresAt),
     });
-    log('licence: an activated code was put back from the mirror', { licenseId: outcome.license.licenseId });
   }
 
-  writeMirror([...stored]);
+  for (const code of mirror.unlocks) {
+    if (knownUnlocks.has(code)) continue;
+    const outcome = verifyUnlock(code, current.deviceId, nowSeconds(), current.latestSeen);
+    if (!outcome.ok || !outcome.normalized || !outcome.validUntil) continue;
+    await prisma.licenseUnlock.create({
+      data: {
+        merchantId,
+        code: outcome.normalized,
+        deviceId: current.deviceId,
+        validUntil: new Date(outcome.validUntil * 1000),
+      },
+    });
+    knownUnlocks.add(outcome.normalized);
+    await recordEvent(AUDIT_ACTIONS.LICENSE_RESTORED_FROM_MIRROR, { emergencyUntil: iso(outcome.validUntil) });
+  }
+
+  writeMirror({ codes: [...knownCodes], unlocks: [...knownUnlocks] });
 }
 
 /* ── The installation: device ID and recorded time ──────────────────────────── */
@@ -265,7 +470,7 @@ async function loadInstallation(): Promise<Installation> {
         deviceComputedAt: new Date(),
       },
     });
-    await auditSystem(AUDIT_ACTIONS.LICENSE_DEVICE_IDENTIFIED, deviceId, { deviceId });
+    await recordEvent(AUDIT_ACTIONS.LICENSE_DEVICE_IDENTIFIED, { deviceId });
   } else {
     // The stored ID stays the ID. A replaced drive or a reinstalled Windows changes
     // the computed one; the rule is a warning in the trail, never a revoked licence.
@@ -275,7 +480,7 @@ async function loadInstallation(): Promise<Installation> {
       ...(stored.volumeSerialDigest !== identity.volumeSerialDigest ? ['volume_serial'] : []),
     ];
     if (changed.length > 0) {
-      await auditSystem(AUDIT_ACTIONS.LICENSE_DEVICE_SOURCES_CHANGED, stored.deviceId, {
+      await recordEvent(AUDIT_ACTIONS.LICENSE_DEVICE_SOURCES_CHANGED, {
         changed,
         storedDeviceId: stored.deviceId,
         computedDeviceId: identity.deviceId,
@@ -292,20 +497,27 @@ async function loadInstallation(): Promise<Installation> {
     }
   }
 
-  await syncMirror(deviceId);
+  // A licence-backed status recorded last time means a licence existed, whatever the
+  // rows say now — so if they are gone, the trail can say so (`evaluateNow`).
+  licenceSeen = stored?.lastStatus === 'PERPETUAL' || stored?.lastStatus === 'TRIAL';
 
   const readings = await readAnchors();
   const resolution = resolveAnchors([readings.database, readings.registry, readings.file]);
+  const loaded: Installation = { deviceId, latestSeen: resolution.latest ?? null };
+
+  await syncMirror(loaded);
+  await mergeEventFile();
   if (resolution.conflict) {
-    await auditSystem(AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_CONFLICT, 'clock', {
+    await recordEvent(AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_CONFLICT, {
       database: iso(readings.database),
       registry: iso(readings.registry),
       file: iso(readings.file),
       chosen: iso(resolution.latest),
     });
   }
+  await loadOpenEpisode();
 
-  installation = { deviceId, latestSeen: resolution.latest ?? null };
+  installation = loaded;
   await touch(true);
   return installation;
 }
@@ -320,67 +532,251 @@ async function ensureInstallation(): Promise<Installation> {
   return initialising;
 }
 
+/* ── The clock record ───────────────────────────────────────────────────────── */
+
+/** A clock episode left open by a previous run: the trail's last clock event is a rollback. */
+async function loadOpenEpisode(): Promise<void> {
+  const last = await prisma.auditLog.findFirst({
+    where: { action: { in: [AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK, AUDIT_ACTIONS.LICENSE_CLOCK_RESTORED] } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (last?.action !== AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK) {
+    episode = null;
+    return;
+  }
+  let latestSeen: number | null = null;
+  try {
+    const details = JSON.parse(last.afterJson ?? '{}') as { latestSeen?: string };
+    latestSeen = details.latestSeen ? Math.floor(Date.parse(details.latestSeen) / 1000) : null;
+  } catch {
+    latestSeen = null;
+  }
+  episode = { eventId: last.entityId, latestSeen, sinceMono: null };
+}
+
+let keyCreatedAt: number | null = null;
+function keyCreated(): number | null {
+  if (keyCreatedAt === null) {
+    try {
+      keyCreatedAt = keyInfo().createdAt;
+    } catch {
+      return null;
+    }
+  }
+  return keyCreatedAt;
+}
+
+/**
+ * Records a clock set back, with what is needed to tell a merchant who wound it back
+ * from one whose CMOS battery died — and records it again when it is put right.
+ *
+ * Runs on every check and whatever the licence: a perpetual licence ignores the clock,
+ * but the event is still evidence, and still recorded.
+ */
+async function observeClock(rollbackBy: number | null, latestSeen: number | null, status: LicenseStatusName): Promise<void> {
+  const wall = Date.now();
+  const mono = performance.now();
+  // Wall-clock time that went BACKWARD while monotonic time went forward: somebody
+  // changed the date while this was running.
+  const jumpedBack = checks > 0 && lastWallMs + (mono - lastMonoMs) - wall > TOLERANCE_SECONDS * 1000;
+  lastWallMs = wall;
+  lastMonoMs = mono;
+  const now = Math.floor(wall / 1000);
+
+  if (rollbackBy && !episode) {
+    const created = keyCreated();
+    const implausible = (created !== null && now < created) || new Date(wall).getUTCFullYear() < 2020;
+    const cause: ClockRollbackCause = implausible
+      ? 'FIRMWARE_RESET'
+      : jumpedBack
+        ? 'CHANGED_WHILE_RUNNING'
+        : 'SET_BACK_WHILE_OFF';
+    let uptime: number | null = null;
+    try {
+      uptime = uptimeSeconds();
+    } catch {
+      uptime = null;
+    }
+    const previousRollbacks = await prisma.auditLog
+      .count({ where: { action: AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK } })
+      .catch(() => 0);
+    const eventId = await recordEvent(AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK, {
+      cause,
+      behindMinutes: Math.ceil(rollbackBy / 60),
+      systemTime: new Date(wall).toISOString(),
+      latestSeen: iso(latestSeen),
+      phase: checks === 0 ? 'startup' : 'running',
+      windowsUptimeMinutes: uptime === null ? null : Math.floor(uptime / 60),
+      previousRollbacks,
+      licenceStatus: status,
+      stoppedSales: status === 'TAMPERED',
+    });
+    episode = { eventId, latestSeen, sinceMono: mono };
+    refusedDuringEpisode = 0;
+    log('licence: the clock is behind the latest recorded time', { cause, behindMinutes: Math.ceil(rollbackBy / 60) });
+  } else if (!rollbackBy && episode) {
+    const durationMinutes =
+      episode.sinceMono !== null
+        ? Math.round((mono - episode.sinceMono) / 60_000)
+        : episode.latestSeen !== null
+          ? Math.max(0, Math.round((now - episode.latestSeen) / 60))
+          : null;
+    await recordEvent(AUDIT_ACTIONS.LICENSE_CLOCK_RESTORED, {
+      rollbackEventId: episode.eventId,
+      durationMinutes,
+      refusedDuring: refusedDuringEpisode,
+      systemTime: new Date(wall).toISOString(),
+    });
+    log('licence: the clock is back in line', { durationMinutes });
+    episode = null;
+    refusedDuringEpisode = 0;
+  }
+  checks += 1;
+}
+
 /* ── Status ─────────────────────────────────────────────────────────────────── */
 
 function toState(result: NativeStatus, deviceId: string): LicenseState {
   const license = result.license ?? null;
+  const basis = result.basis ?? null;
   return {
     status: result.status,
     readOnly: result.readOnly,
     deviceId,
     kind: license ? (license.kind as 'trial' | 'perpetual') : null,
+    basis,
     licenseId: license?.licenseId ?? null,
     issuedAt: iso(license?.issuedAt),
     expiresAt: iso(result.expiresAt ?? license?.expiresAt),
     graceEndsAt: iso(result.graceEndsAt),
     daysLeft: result.daysLeft ?? null,
-    showExpiryWarning: result.showExpiryWarning,
+    warning: result.warning,
+    emergencyUntil: iso(result.emergencyUntil),
     clockBehindMinutes: result.clockBehindBy ? Math.ceil(result.clockBehindBy / 60) : null,
     storedLicenseInvalid: result.status === 'TAMPERED' && !license && result.invalidCodes > 0,
-    features: license?.features ?? [],
+    degraded: false,
+    // An emergency window over a destroyed licence keeps every feature: the shop's
+    // Drive backups must not stop because its licence file did.
+    features: license?.features ?? (basis === 'emergency' ? [...LICENSE_FEATURES] : []),
     note: license?.note ?? null,
   };
 }
 
-/** Records what the trail must know about a status, once per change rather than per request. */
-async function noteStatus(state: LicenseState, invalidCodes: number): Promise<void> {
-  if (state.status === 'TAMPERED' && lastStatus !== 'TAMPERED') {
-    if (state.storedLicenseInvalid) {
-      await auditSystem(AUDIT_ACTIONS.LICENSE_STORED_CODE_INVALID, 'license', { invalidCodes });
-    } else {
-      await auditSystem(AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK, 'clock', {
-        behindMinutes: state.clockBehindMinutes,
-        now: new Date().toISOString(),
-      });
-    }
-    log('licence: TAMPERED — recording is refused until corrected', {
-      storedLicenseInvalid: state.storedLicenseInvalid,
-      clockBehindMinutes: state.clockBehindMinutes,
+/** Records what the trail must know about stored codes, once per change rather than per request. */
+async function noteStoredCodes(result: NativeStatus): Promise<void> {
+  const invalid = result.invalidCodes + result.invalidUnlocks;
+  if (invalid > 0 && !reportedInvalidCodes) {
+    await recordEvent(AUDIT_ACTIONS.LICENSE_STORED_CODE_INVALID, {
+      invalidCodes: result.invalidCodes,
+      invalidUnlocks: result.invalidUnlocks,
+      status: result.status,
     });
-  } else if (invalidCodes > 0 && !reportedInvalidCodes) {
-    await auditSystem(AUDIT_ACTIONS.LICENSE_STORED_CODE_INVALID, 'license', { invalidCodes });
+    log('licence: a stored code failed its own check', { status: result.status });
   }
-  reportedInvalidCodes = invalidCodes > 0;
-  lastStatus = state.status;
+  reportedInvalidCodes = invalid > 0;
+}
+
+let rememberWrite: Promise<void> | null = null;
+
+/**
+ * The last status, kept for the moment the check itself fails. Written only when it
+ * changes — and never on the sale's time.
+ *
+ * Claimed in memory before the write, so ten checks arriving together write once; and
+ * not awaited, because this runs at the top of every scan. An awaited write here put
+ * every concurrent scan behind SQLite's single writer, spread their arrival at the
+ * invoice apart, and turned "another station claimed it" answers into replays of the
+ * winner's result (concurrency.test.ts caught it). `degradedState` waits for it instead.
+ */
+function rememberStatus(state: LicenseState): void {
+  const until = state.status === 'PERPETUAL' ? null : state.graceEndsAt;
+  const key = `${state.status}|${until ?? ''}`;
+  if (key === rememberedStatus) return;
+  rememberedStatus = key;
+  rememberWrite = prisma.installationState
+    .update({
+      where: { id: 1 },
+      data: { lastStatus: state.status, lastStatusUntil: until ? new Date(until) : null, lastStatusAt: new Date() },
+    })
+    .then(() => undefined)
+    .catch(() => {
+      rememberedStatus = null;
+    });
+}
+
+async function evaluateNow(): Promise<LicenseState> {
+  if (failureForTests) throw failureForTests;
+  const current = await ensureInstallation();
+  await touch();
+  const stored = await storedCodes();
+  const result = evaluateStatus(stored.codes, stored.unlocks, current.deviceId, nowSeconds(), current.latestSeen);
+  const state = toState(result, current.deviceId);
+  await observeClock(result.clockRollbackBy ?? null, current.latestSeen, state.status);
+  await noteStoredCodes(result);
+  // The licence vanished — rows deleted, a corrupted file, a restore of a copy older than
+  // the mirror. Not a refusal of anything: a line for the provider, who otherwise sees
+  // only "unlicensed" and cannot tell a shop that never paid from one that lost its file.
+  if (licenceSeen && stored.codes.length === 0) {
+    await recordEvent(AUDIT_ACTIONS.LICENSE_LOST, { status: state.status, emergencyActive: state.status === 'EMERGENCY' });
+  }
+  licenceSeen = stored.codes.length > 0;
+  rememberStatus(state);
+  return state;
 }
 
 /**
- * The licence status now — every stored code re-verified in Rust, the governing one
- * evaluated against the clock and the latest recorded time.
+ * When the check itself fails — the module is missing, the registry cannot be read, a
+ * bug — the gate does not guess and does not stop. It uses the last status it recorded:
+ * a shop last seen licensed keeps trading (until that status would have run out anyway),
+ * a copy last seen read-only stays read-only. So deleting the licensing module is not a
+ * way to get a licence, and a bug in it is not a way to lose one.
  */
+async function degradedState(error: unknown): Promise<LicenseState> {
+  await rememberWrite;
+  const last = await prisma.installationState.findUnique({ where: { id: 1 } }).catch(() => null);
+  const status = (last?.lastStatus ?? 'UNLICENSED') as LicenseStatusName;
+  const until = last?.lastStatusUntil ?? null;
+  const working = WORKING.has(status) && (!until || until.getTime() > Date.now());
+
+  if (Date.now() - lastCheckFailedRecordedAt > CHECK_FAILED_RECORD_INTERVAL_MS) {
+    lastCheckFailedRecordedAt = Date.now();
+    log('licence: the check failed; the last recorded status is used', { error: String(error), status, working });
+    await recordEvent(AUDIT_ACTIONS.LICENSE_CHECK_FAILED, {
+      error: String(error).slice(0, 300),
+      lastStatus: status,
+      lastStatusAt: last?.lastStatusAt?.toISOString() ?? null,
+      trading: working,
+    }).catch(() => undefined);
+  }
+
+  return {
+    status: working ? status : WORKING.has(status) ? 'EXPIRED' : status,
+    readOnly: !working,
+    deviceId: last?.deviceId ?? installation?.deviceId ?? '—',
+    kind: null,
+    basis: null,
+    licenseId: null,
+    issuedAt: null,
+    expiresAt: until?.toISOString() ?? null,
+    graceEndsAt: until?.toISOString() ?? null,
+    daysLeft: null,
+    warning: 'urgent',
+    emergencyUntil: null,
+    clockBehindMinutes: null,
+    storedLicenseInvalid: false,
+    degraded: true,
+    features: working ? [...LICENSE_FEATURES] : [],
+    note: null,
+  };
+}
+
+/** The licence status now. Never throws: a failing check answers with `degradedState`. */
 export async function licenseState(): Promise<LicenseState> {
-  const current = await ensureInstallation();
-  await touch();
-  const rows = await prisma.licenseActivation.findMany({ select: { code: true } });
-  const result = evaluateStatus(
-    rows.map((row) => row.code),
-    current.deviceId,
-    nowSeconds(),
-    current.latestSeen,
-  );
-  const state = toState(result, current.deviceId);
-  await noteStatus(state, result.invalidCodes);
-  return state;
+  try {
+    return await evaluateNow();
+  } catch (error) {
+    return degradedState(error);
+  }
 }
 
 function humanDelay(minutes: number): string {
@@ -389,31 +785,43 @@ function humanDelay(minutes: number): string {
   return `${Math.round(minutes / 1440)} يوماً`;
 }
 
-/** The sentence a refused sale, registration or redemption carries — to the till and the dashboard. */
+const EMERGENCY_HINT = 'وإن تعذّر ذلك الآن، فاتصل بالمزوّد ليقرأ لك رمز طوارئ يعيد التشغيل الكامل فوراً.';
+
+/** The sentence a refused sale, registration or redemption carries. */
 export function readOnlyMessage(state: LicenseState): string {
+  if (state.degraded) {
+    return (
+      'لم تُسجَّل العملية: تعذّر التحقق من الترخيص على جهاز المدير، وآخر حالة مسجّلة لا تسمح بالتسجيل. ' +
+      'البيانات سليمة. أعد تشغيل جهاز المدير، ' +
+      EMERGENCY_HINT
+    );
+  }
   switch (state.status) {
     case 'UNLICENSED':
       return (
-        'لم تُسجَّل العملية: البرنامج غير مفعّل بعد، فهو يعمل الآن للقراءة فقط — التقارير والزبائن والنسخ الاحتياطي متاحة كاملة. ' +
-        'لتسجيل المبيعات يُفعَّل البرنامج من «الإعدادات ← الترخيص» على جهاز المدير.'
+        'لم تُسجَّل العملية: البرنامج غير مفعّل، فهو يعمل الآن للقراءة فقط — التقارير والزبائن والنسخ الاحتياطي متاحة كاملة. ' +
+        'يُفعَّل من «الإعدادات ← الترخيص» على جهاز المدير، ' +
+        EMERGENCY_HINT
       );
     case 'EXPIRED':
       return (
         'لم تُسجَّل العملية: انتهت الفترة التجريبية ومهلتها، فالبرنامج يعمل الآن للقراءة فقط — التقارير والزبائن والنسخ الاحتياطي متاحة كاملة. ' +
-        'لتسجيل المبيعات يُفعَّل البرنامج برمز جديد من «الإعدادات ← الترخيص» على جهاز المدير.'
+        'يُفعَّل برمز جديد من «الإعدادات ← الترخيص» على جهاز المدير، ' +
+        EMERGENCY_HINT
       );
     case 'TAMPERED':
       if (state.storedLicenseInvalid) {
         return (
-          'لم تُسجَّل العملية: بيانات الترخيص المحفوظة على جهاز المدير لا تطابق توقيعها، فتوقّف تسجيل العمليات الجديدة. ' +
-          'أعد لصق رمز التفعيل في «الإعدادات ← الترخيص»، أو اطلب رمزاً من المزوّد. البيانات المسجّلة سليمة.'
+          'لم تُسجَّل العملية: بيانات الترخيص المحفوظة على جهاز المدير لا تطابق توقيعها. البيانات المسجّلة سليمة. ' +
+          'أعد لصق رمز التفعيل في «الإعدادات ← الترخيص»، ' +
+          EMERGENCY_HINT
         );
       }
       return (
         `لم تُسجَّل العملية: تاريخ جهاز المدير ووقته متأخران عن آخر وقت سجّله البرنامج${
           state.clockBehindMinutes ? ` بنحو ${humanDelay(state.clockBehindMinutes)}` : ''
-        }، فتوقّف تسجيل العمليات الجديدة. ` +
-        'صحّح التاريخ والوقت في Windows على جهاز المدير — يعود التسجيل تلقائياً فور تصحيحهما.'
+        }. صحّح التاريخ والوقت في Windows على جهاز المدير — يعود التسجيل تلقائياً فور تصحيحهما، ` +
+        EMERGENCY_HINT
       );
     default:
       return 'لم تُسجَّل العملية.';
@@ -423,18 +831,52 @@ export function readOnlyMessage(state: LicenseState): string {
 export type RecordingAction = 'SALE' | 'NEW_CUSTOMER' | 'VOUCHER_REDEMPTION';
 
 /**
+ * Whether a sale queued offline happened while recording was allowed. Judged by when it
+ * happened (the till's own time, capped at now, honoured up to 30 days back) against
+ * every licence and emergency code stored — a sale made while licensed was made while
+ * licensed, whenever the till reconnects.
+ */
+async function allowedWhenItHappened(action: RecordingAction, occurredAt: Date, state: LicenseState): Promise<boolean> {
+  const nowMs = Date.now();
+  const t = Math.min(occurredAt.getTime(), nowMs);
+  if (Number.isNaN(t) || nowMs - t > OCCURRENCE_WINDOW_DAYS * DAY_MS) return false;
+  try {
+    const current = await ensureInstallation();
+    const stored = await storedCodes();
+    if (!recordingAllowed(stored.codes, stored.unlocks, current.deviceId, Math.floor(t / 1000))) return false;
+    const merchantId = await firstMerchantId();
+    if (merchantId) {
+      await recordAudit({
+        merchantId,
+        actorUserId: null,
+        action: AUDIT_ACTIONS.LICENSE_ACCEPTED_BY_OCCURRENCE,
+        entityType: 'license',
+        entityId: action,
+        after: { action, occurredAt: new Date(t).toISOString(), statusNow: state.status },
+      }).catch(() => undefined);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Refuses a new sale, a new customer or a voucher redemption when read-only.
  *
  * Called at the top of those three services — so the Station's direct requests and the
- * replay of its offline queue meet the same check. A refused queued item reports as
- * FAILED, which the Station does not settle: it stays queued and is sent again after
- * activation, rather than being lost.
+ * replay of its offline queue meet the same check. `occurredAt` is set by the replay:
+ * a queued item is accepted if recording was allowed when it happened OR is allowed
+ * now. Anything refused reports as FAILED, which the Station does not settle — it stays
+ * queued and is sent again, rather than being lost.
  */
-export async function assertCanRecord(action: RecordingAction): Promise<void> {
+export async function assertCanRecord(action: RecordingAction, options: { occurredAt?: Date } = {}): Promise<void> {
   const state = await licenseState();
   if (!state.readOnly) return;
+  if (options.occurredAt && (await allowedWhenItHappened(action, options.occurredAt, state))) return;
+  if (episode) refusedDuringEpisode += 1;
   throw new AppError('LICENSE_READ_ONLY', readOnlyMessage(state), {
-    details: { status: state.status, action },
+    details: { status: state.status, action, degraded: state.degraded },
   });
 }
 
@@ -507,8 +949,8 @@ async function entryFor(row: {
 }
 
 /**
- * Activates a pasted code. Every attempt, refused or not, is written to the audit trail
- * with its reason; the status changes the moment this returns — no restart.
+ * Activates a pasted code. Every attempt, refused or not, is recorded with its reason;
+ * the status changes the moment this returns — no restart.
  */
 export async function activateLicense(
   actor: { merchantId: string; userId: string | null },
@@ -523,14 +965,7 @@ export async function activateLicense(
     message: string,
     extra: Record<string, unknown> = {},
   ): Promise<AppError> => {
-    await recordAudit({
-      merchantId: actor.merchantId,
-      actorUserId: actor.userId,
-      action: AUDIT_ACTIONS.LICENSE_ACTIVATION_FAILED,
-      entityType: 'license',
-      entityId: typeof extra.licenseId === 'string' ? extra.licenseId : 'unknown',
-      after: { reason, deviceId: current.deviceId, ...extra },
-    });
+    await recordEvent(AUDIT_ACTIONS.LICENSE_ACTIVATION_FAILED, { reason, deviceId: current.deviceId, ...extra }, actor);
     return new AppError('LICENSE_INVALID', message, { details: { reason, ...extra } });
   };
 
@@ -569,14 +1004,7 @@ export async function activateLicense(
 
   const existing = await prisma.licenseActivation.findUnique({ where: { licenseId: license.licenseId } });
   if (existing) {
-    await recordAudit({
-      merchantId: actor.merchantId,
-      actorUserId: actor.userId,
-      action: AUDIT_ACTIONS.LICENSE_ACTIVATED,
-      entityType: 'license',
-      entityId: license.licenseId,
-      after: { kind: license.kind, repeat: true },
-    });
+    await recordEvent(AUDIT_ACTIONS.LICENSE_ACTIVATED, { kind: license.kind, repeat: true }, actor);
     return { state: await licenseState(), activation: await entryFor(existing), alreadyActive: true };
   }
 
@@ -588,8 +1016,7 @@ export async function activateLicense(
   const row = await prisma.licenseActivation.create({
     data: activationData(license, code, actor.merchantId, actor.userId),
   });
-  const codes = await prisma.licenseActivation.findMany({ select: { code: true } });
-  writeMirror(codes.map((c) => c.code));
+  await refreshMirror();
 
   // The vendor's clock signed this code. A recorded time well after the moment it was
   // issued is not a time this machine can have seen — the clock once ran in the future
@@ -598,31 +1025,78 @@ export async function activateLicense(
     const was = current.latestSeen;
     current.latestSeen = Math.max(now, license.issuedAt);
     await writeAnchors(current.latestSeen);
-    await recordAudit({
-      merchantId: actor.merchantId,
-      actorUserId: actor.userId,
-      action: AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_RESET,
-      entityType: 'license',
-      entityId: license.licenseId,
-      after: { was: iso(was), issuedAt: iso(license.issuedAt), now: iso(current.latestSeen) },
-    });
+    await recordEvent(
+      AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_RESET,
+      { was: iso(was), issuedAt: iso(license.issuedAt), now: iso(current.latestSeen), licenseId: license.licenseId },
+      actor,
+    );
   }
 
-  await recordAudit({
-    merchantId: actor.merchantId,
-    actorUserId: actor.userId,
-    action: AUDIT_ACTIONS.LICENSE_ACTIVATED,
-    entityType: 'license',
-    entityId: license.licenseId,
-    after: {
+  await recordEvent(
+    AUDIT_ACTIONS.LICENSE_ACTIVATED,
+    {
+      licenseId: license.licenseId,
       kind: license.kind,
       expiresAt: iso(license.expiresAt),
       features: license.features,
       deviceId: license.deviceId,
     },
-  });
+    actor,
+  );
 
   return { state: await licenseState(), activation: await entryFor(row), alreadyActive: false };
+}
+
+/* ── Emergency codes read over the phone ────────────────────────────────────── */
+
+const UNLOCK_REFUSALS: Record<Exclude<UnlockRefusalReason, 'NOT_VALID' | 'EXPIRED'>, string> = {
+  MALFORMED:
+    'رمز الطوارئ خمسة عشر حرفاً ورقماً في ثلاث مجموعات من خمسة — تأكّد أنك كتبته كاملاً كما قرأه المزوّد.',
+  TYPO: 'في الرمز حرف مكتوب خطأً — اطلب من المزوّد أن يعيد قراءته، وقارن المجموعات الثلاث حرفاً حرفاً.',
+};
+
+/**
+ * Enters an emergency code the provider read over the phone. Full operation returns
+ * with this request — whatever else is wrong — until the code's window ends.
+ */
+export async function enterUnlock(
+  actor: { merchantId: string; userId: string | null },
+  rawCode: string,
+): Promise<EnterUnlockResponse> {
+  const current = await ensureInstallation();
+  const outcome = verifyUnlock(rawCode, current.deviceId, nowSeconds(), current.latestSeen);
+
+  if (!outcome.ok || !outcome.normalized || !outcome.validUntil) {
+    const reason = (outcome.reason ?? 'MALFORMED') as UnlockRefusalReason;
+    const message =
+      reason === 'NOT_VALID'
+        ? `هذا الرمز ليس لهذا الجهاز — تأكّد أن المزوّد أصدره لرقم الجهاز ${current.deviceId}، ثم اطلب منه إعادة قراءته.`
+        : reason === 'EXPIRED'
+          ? `انتهت مدة هذا الرمز${outcome.validUntil ? ` في ${dateOnly(outcome.validUntil)}` : ''} — اطلب من المزوّد رمزاً جديداً.`
+          : UNLOCK_REFUSALS[reason];
+    await recordEvent(AUDIT_ACTIONS.LICENSE_UNLOCK_FAILED, { reason, deviceId: current.deviceId }, actor);
+    throw new AppError('LICENSE_INVALID', message, { details: { reason } });
+  }
+
+  const validUntil = new Date(outcome.validUntil * 1000).toISOString();
+  const existing = await prisma.licenseUnlock.findUnique({ where: { code: outcome.normalized } });
+  if (existing) {
+    return { state: await licenseState(), validUntil, alreadyEntered: true };
+  }
+
+  await prisma.licenseUnlock.create({
+    data: {
+      merchantId: actor.merchantId,
+      code: outcome.normalized,
+      deviceId: current.deviceId,
+      validUntil: new Date(validUntil),
+      enteredByUserId: actor.userId,
+    },
+  });
+  await refreshMirror();
+  await recordEvent(AUDIT_ACTIONS.LICENSE_UNLOCK_ENTERED, { validUntil, deviceId: current.deviceId }, actor);
+
+  return { state: await licenseState(), validUntil, alreadyEntered: false };
 }
 
 export async function licenseOverview(): Promise<LicenseOverview> {
@@ -631,18 +1105,56 @@ export async function licenseOverview(): Promise<LicenseOverview> {
   return { state, activations: await Promise.all(rows.map(entryFor)) };
 }
 
+const EVENT_TYPES: ReadonlySet<string> = new Set(LICENSE_EVENT_TYPES);
+
+/** Every licence event recorded here, newest first — the file merged in first. */
+export async function listLicenseEvents(): Promise<LicenseEventsResponse> {
+  await mergeEventFile().catch(() => 0);
+  const rows = await prisma.auditLog.findMany({
+    where: { action: { startsWith: 'license.' } },
+    orderBy: { createdAt: 'desc' },
+    take: 500,
+    include: { actor: { select: { name: true } } },
+  });
+  const events: LicenseEvent[] = rows.flatMap((row) => {
+    const type = row.action.slice('license.'.length).toUpperCase();
+    if (!EVENT_TYPES.has(type)) return [];
+    let details: Record<string, unknown> = {};
+    try {
+      details = JSON.parse(row.afterJson ?? '{}') as Record<string, unknown>;
+    } catch {
+      details = {};
+    }
+    return [{ id: row.id, type: type as LicenseEventType, at: row.createdAt.toISOString(), actorName: row.actor?.name ?? null, details }];
+  });
+  const clockRollbacks = await prisma.auditLog.count({ where: { action: AUDIT_ACTIONS.LICENSE_CLOCK_ROLLBACK } });
+  return { events, clockRollbacks };
+}
+
 /* ── Start-up ───────────────────────────────────────────────────────────────── */
 
-/** Called by `main.ts` once the database is open. Logs the device, the key and the status. */
+/**
+ * Called by `main.ts` once the database is open. Logs the device, the key and the
+ * status. Never throws: a licensing module that will not load must not keep the shop's
+ * service — and its data — from starting.
+ */
 export async function initLicensing(bootLog: Log): Promise<LicenseState> {
   log = bootLog;
-  const key = keyInfo();
+  let key: { kind: string; fingerprint: string } | null = null;
+  try {
+    key = keyInfo();
+  } catch (error) {
+    bootLog('licence: the licensing module is unavailable — the gate uses the last recorded status', {
+      error: String(error),
+    });
+  }
   const state = await licenseState();
   bootLog('licence', {
     status: state.status,
     deviceId: state.deviceId,
-    key: key.kind,
-    keyFingerprint: key.fingerprint,
+    degraded: state.degraded,
+    key: key?.kind ?? 'unavailable',
+    keyFingerprint: key?.fingerprint ?? null,
   });
   return state;
 }
@@ -658,23 +1170,41 @@ export function startLicenseClock(): () => void {
 
 /* ── Test seams ─────────────────────────────────────────────────────────────── */
 
-/** Forgets the cached installation so the next check re-reads the database and anchors. */
+/** Forgets every cache, as a restart would: the next check re-reads the database and anchors. */
 export function reloadLicensingForTests(): void {
   installation = null;
   initialising = null;
   lastTouchAt = 0;
-  lastStatus = null;
   reportedInvalidCodes = false;
+  rememberedStatus = null;
+  rememberWrite = null;
+  checks = 0;
+  lastWallMs = Date.now();
+  lastMonoMs = performance.now();
+  episode = null;
+  refusedDuringEpisode = 0;
+  lastCheckFailedRecordedAt = 0;
+  failureForTests = null;
+  licenceSeen = false;
 }
 
-/** As above, and removes the anchors and the mirror — a clean installation. */
+/** As above, and removes the anchors, the mirror and the events file — a clean installation. */
 export function resetLicensingForTests(): void {
   reloadLicensingForTests();
-  rmSync(anchorFile(), { force: true });
-  rmSync(mirrorFile(), { force: true });
+  for (const path of [anchorFile(), mirrorFile(), eventsFile()]) rmSync(path, { force: true });
   try {
     deleteRegistryKeyForTests(registryKey());
   } catch {
     /* Only the test build provides it; nothing else calls this. */
   }
+}
+
+/** Makes every check fail with `error` — a missing module, a bug — until cleared. */
+export function failLicensingForTests(error: Error | null): void {
+  failureForTests = error;
+}
+
+/** The events file's path — tests read it to prove events outlive the database. */
+export function licenseEventsFileForTests(): string {
+  return eventsFile();
 }

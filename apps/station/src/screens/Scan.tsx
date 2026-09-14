@@ -94,6 +94,12 @@ type Stage =
   /** Request never reached the server; queued, and the operator told what that costs. */
   | { kind: 'queued' }
   /**
+   * The manager PC answered that its licence is read-only. The link is kept on this
+   * station, pinned to the invoice the operator scanned, and credited automatically on
+   * activation — so the cashier carries on serving and nothing is lost or ambiguous.
+   */
+  | { kind: 'licenseHeld' }
+  /**
    * The write reached the server and was not stored (§12.16). Separate from `error`
    * because it is separate to the operator: nothing is retrying, nothing is queued,
    * and the sale is unrecorded until a human intervenes.
@@ -217,6 +223,18 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
             payload: { barcodeToken: identity.cardToken, invoiceId },
           });
           setStage({ kind: 'queued' });
+        } else if (error instanceof ApiRequestError && error.code === 'LICENSE_READ_ONLY') {
+          // Refused for the licence, not for the sale. The same queued operation the
+          // offline path writes, with the invoice pinned: the server credits exactly this
+          // invoice once the program is activated — or at once, if the refusal was about
+          // a sale made while it was still licensed.
+          enqueue({
+            type: 'SCAN_CARD',
+            operationId: crypto.randomUUID(),
+            queuedAt: new Date().toISOString(),
+            payload: { barcodeToken: identity.cardToken, invoiceId },
+          });
+          setStage({ kind: 'licenseHeld' });
         } else if (error instanceof ApiRequestError && error.isUnsavedWrite) {
           // NOT queued, deliberately. Retrying against a datastore that cannot write
           // buries the failure under a spinner while every following sale goes
@@ -725,6 +743,20 @@ function Stageview({
           </p>
         </Card>
         <ResetBar onReset={onReset} />
+        </>
+      );
+
+    case 'licenseHeld':
+      return (
+        <>
+          <Card className="space-y-3 border-amber/30 bg-amber-tint text-center">
+            <Receipt className="mx-auto text-amber" size={40} aria-hidden />
+            {/* One sentence that answers the cashier's only question — was it recorded? —
+                and one that says what to do. Nothing to retry, nothing to wait for. */}
+            <p className="text-xl font-bold text-ink">{locale.license.heldTitle}</p>
+            <p className="text-base text-ink">{locale.license.heldBody}</p>
+          </Card>
+          <ResetBar onReset={onReset} />
         </>
       );
 

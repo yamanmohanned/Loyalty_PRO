@@ -98,6 +98,11 @@ export interface ScanOptions {
    * basket, not their progress toward the next.
    */
   issueDiscount?: boolean;
+  /**
+   * When the scan happened, for a replay of the offline queue. A sale made while the
+   * shop was licensed is accepted whenever the till reconnects (license.service.ts).
+   */
+  occurredAt?: Date;
 }
 
 function toScanCustomer(customer: {
@@ -198,7 +203,7 @@ export async function scanCard(
 ): Promise<ScanCardResponse> {
   // A sale is one of the three things a read-only licence refuses — checked here, in
   // the service, so the till's direct request and its offline replay meet it alike.
-  await assertCanRecord('SALE');
+  await assertCanRecord('SALE', { occurredAt: options.occurredAt });
 
   const issueDiscount = options.issueDiscount ?? true;
   const branchId = context.branchId;

@@ -15,6 +15,7 @@ use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_QWORD,
     RRF_RT_REG_QWORD, RRF_RT_REG_SZ,
 };
+use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
 /// Read the 64-bit registry view even from a 32-bit process: the 32-bit view has no
 /// MachineGuid, and a silently different ID is the worst possible failure here.
@@ -140,6 +141,13 @@ pub fn delete_registry_key(subkey: &str) -> Result<(), String> {
         ERROR_SUCCESS | ERROR_FILE_NOT_FOUND => Ok(()),
         other => Err(format!("deleting HKCU key failed with Windows error {other}")),
     }
+}
+
+/// Seconds since Windows started. Evidence for a clock event: a clock found years in the
+/// past a minute after boot is what a dead CMOS battery looks like.
+pub fn uptime_seconds() -> u64 {
+    // SAFETY: no arguments; reads a counter the kernel maintains.
+    unsafe { GetTickCount64() / 1000 }
 }
 
 /// Sets the hidden attribute, keeping the others.

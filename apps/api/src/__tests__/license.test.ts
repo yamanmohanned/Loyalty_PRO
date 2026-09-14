@@ -367,24 +367,29 @@ describe('read-only refuses exactly three things', () => {
 });
 
 describe('the trial', () => {
-  it('counts down in its last seven days', async () => {
-    await useLicense(prisma, { type: 'trial', exp: now() + 3 * DAY - 60 });
-    const current = await state();
-    expect(current.status).toBe('TRIAL');
-    expect(current.daysLeft).toBe(3);
-    expect(current.showExpiryWarning).toBe(true);
+  it('warns days out, not hours, and louder as the end comes', async () => {
+    const levels: Array<[number, string]> = [
+      [20, 'none'],
+      [10, 'notice'],
+      [5, 'warning'],
+      [3, 'urgent'],
+    ];
+    for (const [daysLeft, warning] of levels) {
+      await useLicense(prisma, { type: 'trial', exp: now() + daysLeft * DAY - 60 });
+      const current = await state();
+      expect(current.status, `${daysLeft} days`).toBe('TRIAL');
+      expect(current.daysLeft, `${daysLeft} days`).toBe(daysLeft);
+      expect(current.warning, `${daysLeft} days`).toBe(warning);
+    }
     expect((await sell()).statusCode).toBe(200);
-  });
-
-  it('shows no countdown with more than seven days left', async () => {
-    await useLicense(prisma, { type: 'trial', exp: now() + 10 * DAY });
-    expect((await state()).showExpiryWarning).toBe(false);
   });
 
   it('keeps working through five days of grace after expiry', async () => {
     await useLicense(prisma, { type: 'trial', iat: now() - 15 * DAY, exp: now() - DAY });
     const current = await state();
-    expect(current.status).toBe('TRIAL_GRACE');
+    expect(current.status).toBe('GRACE');
+    expect(current.basis).toBe('trial');
+    expect(current.warning).toBe('urgent');
     expect(current.readOnly).toBe(false);
     expect(current.graceEndsAt).not.toBeNull();
     expect((await sell()).statusCode).toBe(200);

@@ -18,7 +18,8 @@ Only the matching private key — the file `issuer-key.json`, opened with **your
 password** — can sign a code that key accepts.
 
 - Lose the file **or** forget the password, and no new code can be made for any shop:
-  not a trial, not an extension, not a perpetual licence for a customer who has paid.
+  not a trial, not an extension, not a perpetual licence for a customer who has paid —
+  and not an **emergency code** either, since those come from the same private key.
   The only way out is a new key pair, which means a new build of the application for
   **every** shop, installed in person, and new codes for all of them.
 - Nobody can recover it for you. The file is encrypted (Argon2id, 64 MiB, 3 passes →
@@ -64,7 +65,8 @@ It asks for a password (at least 12 characters) and asks again to confirm it. Th
 
 1. writes `issuer-key.json` and `issued.db` into the home;
 2. writes the **public** key into `crates/walaa-license/src/public_key.rs`, marked
-   `KeyKind::Production` — the file the application compiles in;
+   `KeyKind::Production` — the file the application compiles in — together with the
+   public *tip* of the emergency-code chain (see [Emergency codes](#emergency-codes-read-over-the-phone));
 3. prints the fingerprint, and a reminder to back up.
 
 `keygen` refuses to run if the home already holds a key, and refuses to replace a
@@ -80,12 +82,13 @@ pointing into a scratch folder, so the repository was not touched — run it wit
 
 ```text
 Key pair generated (production).
-  private key (encrypted)  …\issuer-demo\issuer-key.json
-  issue log                …\issuer-demo\issued.db
-  public key fingerprint   C955D8B7ACA17905
-  wrote the public key into …\issuer-demo/public_key.rs
+  private key (encrypted)  …\issuer-demo2\issuer-key.json
+  issue log                …\issuer-demo2\issued.db
+  public key fingerprint   A5CCC964DCA87B9A
+  emergency codes          until 2046-09-08 00:00 UTC
+  wrote the public key into …\issuer-demo2/public_key.rs
 
-Back up the folder …\issuer-demo and the password NOW, in two separate places.
+Back up the folder …\issuer-demo2 and the password NOW, in two separate places.
 Losing either one makes it impossible to issue any new licence — see README.md.
 Then rebuild the application so it embeds this public key.
 ```
@@ -166,6 +169,56 @@ error: "WL-ILO1-0000" is not a device ID — it looks like WL-XXXX-XXXX and uses
 Every code is checked against the key file's own public key before it is printed, and
 recorded in `issued.db`.
 
+**A Windows reinstall or a new PC** gives the shop a new device number only when its
+backup is *not* restored (restoring brings the old number and licence back). Then:
+an emergency code for the new number at once, and a perpetual licence for it when a
+message can reach the shop — `--note "replaces WL-OLD"` keeps the link in your log.
+
+## Emergency codes, read over the phone
+
+For when the shop must trade *now* and no message can reach its PC: the licence was
+destroyed, Windows was reinstalled, the clock record is wrong, something in the gate is
+broken. The merchant reads you the device number; you run
+
+```bash
+license-issuer unlock --device WL-7K3M-9QXP             # 7 days (the default)
+license-issuer unlock --device WL-7K3M-9QXP --days 30   # up to 30
+```
+
+and read back fifteen symbols. The merchant types them into «الإعدادات ← الترخيص ←
+رمز الطوارئ», and full operation returns with that request — whatever else is wrong — until
+the end of the UTC day `--days` days from now, followed by five days of grace. It asks for
+the key's password, like `issue`.
+
+Real output (password from `--password-stdin`):
+
+```text
+$ license-issuer unlock --device WL-7K3M-9QXP --note "licence file lost; message not reachable"
+Emergency code issued
+  device    WL-7K3M-9QXP
+  works     until 2026-09-22 00:00 UTC (7 days)
+
+Read this to the merchant — fifteen symbols in three groups:
+
+    2MH6K-8SBHN-Q8JYC
+
+The merchant types it into Settings > Licensing > emergency code. Full operation returns
+at once, until the date above. It is not a licence: send a licence code when one can be received.
+
+$ license-issuer unlock --device WL-7K3M-9QXP --days 31
+error: --days must be between 1 and 30
+
+$ license-issuer unlock --device WL-7K3M-9QXP      (a key file made before this version)
+error: this key file was made before emergency codes existed — it cannot issue them
+```
+
+Why fifteen symbols can be trusted with no secret in the program: the codes are links of
+a hash chain derived from your private key; the program holds only the chain's end and
+hashes a typed code forward to it. The fifteenth symbol is a check symbol, so a misheard
+symbol is refused as a typo rather than as a forgery. A code is mixed with the device
+number, so one shop's code does not work in another. Full account:
+[`packaging/LICENSING.md` §7](../../packaging/LICENSING.md#7-the-emergency-code-read-over-the-phone).
+
 ## Listing what you have issued
 
 ```bash
@@ -174,10 +227,14 @@ license-issuer list --device WL-7K3M-9QXP
 ```
 
 ```text
+Emergency codes
+issued                device        works until           code               note
+2026-09-14 22:21 UTC  WL-7K3M-9QXP  2026-09-22 00:00 UTC  2MH6K-8SBHN-Q8JYC  licence file lost; message not reachable
+2026-09-14 22:21 UTC  WL-7K3M-9QXP  2026-10-15 00:00 UTC  2GZ4P-AB7T5-246C8
+
+Licences
 issued                device        type       expires               features                    licence                               note
-2026-09-14 04:54 UTC  WL-7K3M-9QXP  trial      2026-09-28 04:54 UTC  drive_backup,multi_device   5f3343d0-ee07-41e8-b7c0-d712cc2049b3  سوبرماركت النور
-2026-09-14 04:54 UTC  WL-7K3M-9QXP  trial+ext  2026-10-03 04:54 UTC  drive_backup,multi_device   fc2f915a-4f00-47cd-8755-b7a959561580
-2026-09-14 04:54 UTC  WL-7K3M-9QXP  perpetual  never                 drive_backup,multi_device   3760928f-2651-4428-83ae-6cab23b54d23  سوبرماركت النور
+2026-09-14 22:21 UTC  WL-7K3M-9QXP  perpetual  never                 drive_backup,multi_device   a4449648-9ed6-4b89-b45a-4d8fef8bcca4  replaces WL-2222-2222 after a Windows reinstall
 ```
 
 `list` needs no password. A merchant who lost the message can be sent the same code

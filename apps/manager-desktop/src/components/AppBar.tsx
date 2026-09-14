@@ -3,7 +3,7 @@ import { AlertOctagon, AlertTriangle, Bell, PanelRight, ShieldAlert } from 'luci
 import type { KeyStatus, LicenseState, StorageStatus } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { IS_DEMO } from '../lib/demo';
-import { licenseNotice } from './LicenseBanner';
+import { licenseAlert } from './LicenseBanner';
 import { Chip, cn } from './ui';
 
 /**
@@ -52,13 +52,14 @@ export function collectAlerts(
 ): Alert[] {
   const alerts: Alert[] = [];
 
-  // First: a read-only licence is the till refusing sales now. Read from `useLicense`,
-  // which the shell runs for its banner — the same rule as the two below.
-  const licence = license ? licenseNotice(license) : null;
+  // First: a read-only licence is the till refusing sales now, and a trial two weeks
+  // from its end is the first notice of it. Read from `useLicense`, which the shell
+  // runs for its banner — the same rule as the two below.
+  const licence = license ? licenseAlert(license) : null;
   if (licence) {
     alerts.push({
       id: 'license',
-      tone: 'danger',
+      tone: licence.tone === 'danger' ? 'danger' : 'warning',
       title: licence.title,
       body: licence.body,
       route: '/settings?tab=license',

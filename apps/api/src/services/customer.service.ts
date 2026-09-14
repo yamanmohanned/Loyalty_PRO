@@ -81,9 +81,11 @@ async function serializeWithActiveCard(customer: Customer): Promise<CustomerDto>
 export async function createCustomer(
   params: { merchantId: string; actorUserId: string },
   request: CreateCustomerRequest,
+  /** `occurredAt`: when it happened, for a replay of the offline queue. */
+  options: { occurredAt?: Date } = {},
 ): Promise<CustomerDto> {
   // Registering a customer is refused while the licence is read-only.
-  await assertCanRecord('NEW_CUSTOMER');
+  await assertCanRecord('NEW_CUSTOMER', options);
 
   try {
     const { customer, cardNumber } = await writeTransaction(async (db) => {
