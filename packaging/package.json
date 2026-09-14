@@ -1,6 +1,6 @@
 {
   "name": "@walaa/packaging",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Windows distribution — staged API runtime, service host, NSIS installer wiring.",

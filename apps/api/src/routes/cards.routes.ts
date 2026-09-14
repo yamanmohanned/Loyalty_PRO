@@ -26,6 +26,7 @@ import {
   voidCard,
   voidCardBatch,
 } from '../services/card.service';
+import { observeLicense } from '../services/license.service';
 
 const IdParamSchema = z.object({ id: z.string().uuid('معرّف غير صالح') }).strict();
 
@@ -65,6 +66,8 @@ export async function cardRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const auth = requireDashboardRole(request);
+      // Allowed while read-only; the status is still evaluated and noted.
+      await observeLicense(request.log, 'CARD_BATCH');
       const batch = await generateCardBatch(
         { merchantId: auth.merchantId, actorUserId: auth.sub },
         request.body as never,

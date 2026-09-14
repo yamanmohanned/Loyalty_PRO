@@ -1,0 +1,274 @@
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Copy, KeyRound } from 'lucide-react';
+import type { ActivateLicenseResponse, LicenseOverview, LicenseState } from '@walaa/shared-types';
+import { api, ApiRequestError } from '../../lib/api';
+import { formatDate, formatDateTime, locale } from '../../lib/locale';
+import { LICENSE_QUERY_KEY, licenseNotice, useLicense } from '../../components/LicenseBanner';
+import {
+  Button,
+  Card,
+  CardHeader,
+  Chip,
+  cn,
+  ErrorState,
+  Field,
+  Notice,
+  Skeleton,
+  tableHeadRow,
+  tableRow,
+  td,
+  th,
+} from '../../components/ui';
+
+/**
+ * «الإعدادات ← الترخيص» (packaging/LICENSING.md).
+ *
+ * The screen a merchant uses with the provider on the phone, in three steps: read the
+ * device number out, paste the code that comes back, see the status change. So the
+ * number is the largest thing on the page, the paste field takes whatever a message app
+ * delivers, and the status updates the moment the service accepts the code — no restart,
+ * because the service re-evaluates on every request and this refetches on success.
+ *
+ * Nothing is decided here. A pasted code goes to the service, which verifies it in Rust
+ * against the provider's public key; every refusal comes back as its own Arabic sentence
+ * and is written to the audit trail whatever the screen does with it.
+ */
+
+const t = locale.settings.license;
+const DAY_MS = 86_400_000;
+
+const TONE: Record<LicenseState['status'], 'success' | 'accent' | 'warning' | 'danger'> = {
+  PERPETUAL: 'success',
+  TRIAL: 'accent',
+  TRIAL_GRACE: 'danger',
+  UNLICENSED: 'warning',
+  EXPIRED: 'danger',
+  TAMPERED: 'danger',
+};
+
+const OVERVIEW_KEY = [...LICENSE_QUERY_KEY, 'overview'] as const;
+
+function DeviceNumber({ deviceId }: { deviceId: string }) {
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(deviceId);
+      setCopy('copied');
+    } catch {
+      setCopy('failed');
+    }
+  };
+
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium text-ink">{t.deviceLabel}</p>
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Latin in an RTL line: isolated, so the dashes do not reorder the groups. */}
+        <bdi
+          dir="ltr"
+          className="selectable select-all rounded-md border border-border-strong bg-canvas px-5 py-3 font-mono text-3xl font-bold tracking-wider text-ink"
+        >
+          {deviceId}
+        </bdi>
+        <Button variant="secondary" onClick={() => void onCopy()}>
+          {copy === 'copied' ? <Check size={18} aria-hidden /> : <Copy size={18} aria-hidden />}
+          {copy === 'copied' ? t.copied : t.copy}
+        </Button>
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-steel" role="status">
+        {copy === 'failed' ? t.copyFailed : t.deviceHint}
+      </p>
+    </div>
+  );
+}
+
+function StatusDetails({ state }: { state: LicenseState }) {
+  const rows: Array<[string, React.ReactNode]> = [
+    [
+      t.statusLabel,
+      <Chip tone={TONE[state.status]} dot>
+        {t.status[state.status]}
+      </Chip>,
+    ],
+    [t.kindLabel, state.kind ? t.kind[state.kind] : t.none],
+    [
+      t.expiresLabel,
+      state.kind === 'perpetual' ? t.perpetual : state.expiresAt ? formatDate(state.expiresAt) : t.none,
+    ],
+  ];
+  if (state.status === 'TRIAL_GRACE' && state.graceEndsAt) rows.push([t.graceEndsLabel, formatDate(state.graceEndsAt)]);
+  if (state.features.length > 0) {
+    rows.push([t.featuresLabel, state.features.map((f) => t.feature[f] ?? f).join('، ')]);
+  }
+  if (state.note) rows.push([t.noteLabel, state.note]);
+
+  return (
+    <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-[max-content_1fr]">
+      {rows.map(([label, value]) => (
+        <div key={label} className="contents">
+          <dt className="text-sm text-steel">{label}</dt>
+          <dd className="text-base text-ink">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function successSentence(response: ActivateLicenseResponse): string {
+  if (response.alreadyActive) return t.alreadyActive;
+  const { activation } = response;
+  if (activation.kind === 'perpetual' || !activation.expiresAt) return t.activatedPerpetual;
+  const days = Math.round((Date.parse(activation.expiresAt) - Date.parse(activation.issuedAt)) / DAY_MS);
+  return t.activatedTrial(locale.license.days(days), formatDate(activation.expiresAt));
+}
+
+function ActivationForm() {
+  const queryClient = useQueryClient();
+  const [code, setCode] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+
+  const activate = useMutation({
+    mutationFn: (value: string) => api.post<ActivateLicenseResponse>('/license/activate', { code: value }),
+    onSuccess: (response) => {
+      // The new verdict at once — the service already applies it to the next sale.
+      queryClient.setQueryData(LICENSE_QUERY_KEY, response.state);
+      void queryClient.invalidateQueries({ queryKey: LICENSE_QUERY_KEY });
+      // Drive's panel says whether uploads are licensed; it must not keep the old answer.
+      void queryClient.invalidateQueries({ queryKey: ['backup'] });
+      setDone(successSentence(response));
+      setCode('');
+    },
+    onMutate: () => setDone(null),
+  });
+
+  const refusal =
+    activate.error instanceof ApiRequestError && activate.error.status > 0
+      ? activate.error.message
+      : activate.error
+        ? locale.failure.unexpected
+        : null;
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (code.trim()) activate.mutate(code);
+      }}
+    >
+      <Field label={t.codeLabel} hint={t.codeHint} error={refusal ?? undefined}>
+        <textarea
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          dir="ltr"
+          rows={6}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={refusal ? true : undefined}
+          className={cn(
+            'selectable min-h-[160px] w-full rounded-md border bg-surface px-[18px] py-3 font-mono text-sm leading-relaxed text-ink',
+            'transition-[border-color,box-shadow] duration-fast ease-native focus:outline-none',
+            refusal
+              ? 'border-danger focus-visible:ring-4 focus-visible:ring-danger/20'
+              : 'border-border-strong focus:border-accent focus-visible:ring-4 focus-visible:ring-accent/20',
+          )}
+        />
+      </Field>
+      <div className="flex items-center gap-4">
+        <Button type="submit" disabled={activate.isPending || !code.trim()}>
+          <KeyRound size={18} aria-hidden />
+          {activate.isPending ? t.activating : t.activate}
+        </Button>
+      </div>
+      {done ? (
+        <Notice tone="accent" title={done}>
+          {null}
+        </Notice>
+      ) : null}
+    </form>
+  );
+}
+
+function History() {
+  const overview = useQuery({
+    queryKey: OVERVIEW_KEY,
+    queryFn: () => api.get<LicenseOverview>('/license/activations'),
+  });
+
+  if (overview.isPending) return <Skeleton className="m-6 h-24" />;
+  if (overview.isError) {
+    return (
+      <div className="p-6">
+        <ErrorState what={t.historyTitle} error={overview.error} onRetry={() => void overview.refetch()} />
+      </div>
+    );
+  }
+  if (overview.data.activations.length === 0) {
+    return <p className="p-6 text-steel">{t.historyEmpty}</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className={tableHeadRow}>
+            <th className={th}>{t.historyActivatedAt}</th>
+            <th className={th}>{t.historyKind}</th>
+            <th className={th}>{t.historyExpires}</th>
+            <th className={th}>{t.historyBy}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {overview.data.activations.map((entry) => (
+            <tr key={entry.licenseId} className={tableRow}>
+              <td className={td}>{formatDateTime(entry.activatedAt)}</td>
+              <td className={td}>{t.kind[entry.kind]}</td>
+              <td className={td}>{entry.expiresAt ? formatDate(entry.expiresAt) : t.perpetual}</td>
+              <td className={td}>{entry.activatedByName ?? t.none}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function LicenseSection() {
+  const license = useLicense();
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader title={t.title} subtitle={t.subtitle} />
+        <div className="space-y-6 p-6">
+          {license.isPending ? (
+            <Skeleton className="h-40" />
+          ) : license.isError ? (
+            <ErrorState what={t.title} error={license.error} onRetry={() => void license.refetch()} />
+          ) : (
+            <>
+              {(() => {
+                const notice = licenseNotice(license.data);
+                return notice ? (
+                  <Notice tone="danger" title={notice.title}>
+                    {notice.body}
+                  </Notice>
+                ) : null;
+              })()}
+              <StatusDetails state={license.data} />
+              <DeviceNumber deviceId={license.data.deviceId} />
+            </>
+          )}
+          <ActivationForm />
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title={t.historyTitle} />
+        <History />
+      </Card>
+    </div>
+  );
+}

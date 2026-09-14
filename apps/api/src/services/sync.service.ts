@@ -53,6 +53,10 @@ function classify(error: unknown): SyncItemResult['status'] {
     case 'CUSTOMER_ALREADY_EXISTS':
     case 'COUPON_NOT_REDEEMABLE':
       return 'REJECTED';
+    // Not settled: the Station keeps the item queued and sends it again after the
+    // program is activated. A read-only licence must never cost the merchant a sale.
+    case 'LICENSE_READ_ONLY':
+      return 'FAILED';
     default:
       return 'FAILED';
   }

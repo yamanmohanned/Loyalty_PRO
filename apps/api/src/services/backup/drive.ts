@@ -13,6 +13,7 @@ import {
   safeJson,
 } from './drive-errors';
 import { readClient, readConnection, recordAttempt, type DriveConnection } from './drive-store';
+import { licensedFeature } from '../license.service';
 
 /**
  * Google Drive as a backup destination (CLAUDE_v3.md §7.3).
@@ -184,6 +185,11 @@ export class GoogleDriveDestination implements BackupDestination {
 
   async put(localPath: string, name: string): Promise<StoredBackup> {
     try {
+      // The paid feature is the upload. Listing, fetching and restoring stay open
+      // whatever the licence says: reading the shop's own data back is never withheld.
+      if (!(await licensedFeature('drive_backup'))) {
+        throw new DriveError('NOT_LICENSED', 'the licence does not include drive_backup');
+      }
       const stored = await this.upload(localPath, name);
       this.journal({ at: new Date(this.now()), success: true });
       return stored;

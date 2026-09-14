@@ -6,6 +6,7 @@ import {
 } from '@walaa/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { ingestInvoice } from '../services/ingestion.service';
+import { observeLicense } from '../services/license.service';
 
 /**
  * The Print Capture Agent's endpoint (CLAUDE_v3.md §4).
@@ -30,6 +31,9 @@ export async function ingestRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const auth = requireAuth(request);
       const body = request.body as IngestInvoiceRequest;
+      // Never refused: an invoice printed at the register is the merchant's record
+      // whatever the licence says. The status is still evaluated and noted.
+      await observeLicense(request.log, 'INVOICE_CAPTURE');
 
       const result = await ingestInvoice(
         {

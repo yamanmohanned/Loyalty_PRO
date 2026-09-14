@@ -97,7 +97,7 @@ const result = await build({
   sourcemap: false,
   minify: false, // A readable stack trace in a shop's log file is worth the kilobytes.
   legalComments: 'none',
-  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', 'pino-pretty'],
+  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@walaa/license-native', 'pino-pretty'],
   logLevel: 'warning',
   metafile: true,
 });
@@ -133,7 +133,7 @@ const restoreResult = await build({
   sourcemap: false,
   minify: false,
   legalComments: 'none',
-  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', 'pino-pretty'],
+  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@walaa/license-native', 'pino-pretty'],
   logLevel: 'warning',
   metafile: true,
 });
@@ -185,6 +185,35 @@ copyAllowlist(argon2NativeDir, join(STAGE, 'node_modules', '@node-rs', 'argon2-w
   'argon2.win32-x64-msvc.node',
 ]);
 note('argon2 native addon (win32-x64-msvc)');
+
+// ── 4a. The licensing module ────────────────────────────────────────────────────
+/*
+  The Rust verifier (crates/walaa-license), built by `pnpm --filter
+  @walaa/license-native build` — which `package:build` runs just before this — with the
+  provider's public key compiled in.
+
+  An allowlist of three files, and the allowlist is the point: the package directory
+  also holds `walaa-license.test.node`, the build that trusts the PUBLISHED test key and
+  can sign codes. Shipping it would let anyone who reads this repository mint a licence.
+  `index.js` only loads it when `VITEST` is set, but the defence is that it is not on
+  the merchant's disk at all.
+*/
+const licenseDir = dirname(fromApi.resolve('@walaa/license-native/package.json'));
+const licenseBinary = join(licenseDir, 'walaa-license.node');
+if (!existsSync(licenseBinary)) {
+  throw new Error(
+    `licensing module not built at ${licenseBinary} — run \`pnpm --filter @walaa/license-native build\` first`,
+  );
+}
+copyAllowlist(licenseDir, join(STAGE, 'node_modules', '@walaa', 'license-native'), [
+  'package.json',
+  'index.js',
+  'walaa-license.node',
+]);
+if (existsSync(join(STAGE, 'node_modules', '@walaa', 'license-native', 'walaa-license.test.node'))) {
+  throw new Error('the test build of the licensing module reached the staged runtime — refusing to continue');
+}
+note(`licensing module (${mb(statSync(licenseBinary).size)})`);
 
 // ── 5. Migrations ───────────────────────────────────────────────────────────────
 // Shipped for verification rather than for application. A merchant's machine no

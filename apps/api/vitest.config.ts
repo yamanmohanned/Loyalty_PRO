@@ -16,10 +16,18 @@ const testUrl = `file:./${testDbName}`;
 
 const testBackupDir = fileURLToPath(new URL(`./prisma/test-backups-${runId}`, import.meta.url));
 
+// Licensing keeps its clock anchors in the registry and a data-folder file. A test run
+// gets its own of both, so it can never touch — or be confused by — the real
+// installation's `HKCU\Software\Walaa` on the developer's machine.
+const testLicenseRegistryKey = `Software\\Walaa-Test-${runId}`;
+const testLicenseDir = fileURLToPath(new URL(`./prisma/test-license-${runId}`, import.meta.url));
+
 // The `env` block below reaches the test WORKERS. Global setup and teardown run in this
 // process, so the path has to be here too — without it the teardown had nothing to
 // delete and every run left a staging directory behind.
 process.env.BACKUP_LOCAL_DIR = testBackupDir;
+process.env.WALAA_LICENSE_REGISTRY_KEY = testLicenseRegistryKey;
+process.env.WALAA_LICENSE_DIR = testLicenseDir;
 
 export default defineConfig({
   test: {
@@ -43,6 +51,8 @@ export default defineConfig({
       // Per run for the same reason as the database: two suites sharing one staging
       // directory would delete each other's snapshots mid-backup.
       BACKUP_LOCAL_DIR: testBackupDir,
+      WALAA_LICENSE_REGISTRY_KEY: testLicenseRegistryKey,
+      WALAA_LICENSE_DIR: testLicenseDir,
     },
   },
 });

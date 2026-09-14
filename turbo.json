@@ -3,10 +3,19 @@
   "ui": "stream",
   "globalDependencies": [".env.example", "packages/config/**"],
   "globalEnv": ["NODE_ENV", "DATABASE_URL"],
+  "globalPassThroughEnv": ["RUSTUP_HOME", "CARGO_HOME", "RUSTUP_TOOLCHAIN"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "@walaa/license-native#build": {
+      "cache": false,
+      "outputs": []
+    },
+    "@walaa/license-native#test": {
+      "cache": false,
+      "outputs": []
     },
     "typecheck": {
       "dependsOn": ["^build"],

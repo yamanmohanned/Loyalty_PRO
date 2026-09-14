@@ -19,6 +19,7 @@ import {
   writeClient,
 } from './drive-store';
 import { scheduleStatus } from './schedule.service';
+import { licensedFeature } from '../license.service';
 
 /**
  * What the Settings panel is told about Google Drive (CLAUDE_v3.md §7.3).
@@ -106,6 +107,7 @@ export async function driveStatus(
     // The id only. The secret never leaves the store, in any response.
     client: client ? { clientId: client.clientId, source: client.source, savedAt: client.savedAt } : null,
     account: stored?.account ?? null,
+    licensed: await licensedFeature('drive_backup').catch(() => false),
   };
 
   if (!configured) return { ...base, failure: driveFailure('NOT_CONFIGURED') };
@@ -114,6 +116,10 @@ export async function driveStatus(
   // Paused by the merchant. Not a failure — the grant is intact and one switch restores
   // it — so no red remedy is shown for a state somebody chose on purpose.
   if (!base.enabled) return base;
+
+  // Connected, but the licence does not include uploads. Said up front rather than at
+  // 23:30: the local copy still runs, and restoring from Drive still works.
+  if (!base.licensed) return { ...base, failure: driveFailure('NOT_LICENSED') };
 
   if (options.probe === false) {
     return { ...base, failure: stored?.lastFailure ?? null };

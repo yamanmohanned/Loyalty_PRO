@@ -23,6 +23,7 @@ import {
 import { findPendingInvoice } from './ingestion.service';
 import { publish } from './realtime.service';
 import { getSettlementStrategy } from './settlement';
+import { assertCanRecord } from './license.service';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -195,6 +196,10 @@ export async function scanCard(
   request: ScanCardRequest,
   options: ScanOptions = {},
 ): Promise<ScanCardResponse> {
+  // A sale is one of the three things a read-only licence refuses — checked here, in
+  // the service, so the till's direct request and its offline replay meet it alike.
+  await assertCanRecord('SALE');
+
   const issueDiscount = options.issueDiscount ?? true;
   const branchId = context.branchId;
   if (!branchId) throw forbidden('هذه المحطة غير مرتبطة بفرع');

@@ -34,6 +34,15 @@ Thumbs.db
 # test / coverage
 coverage/
 
+# Rust build output for the licensing crates, and the native module they produce.
+crates/*/target/
+tools/license-issuer/target/
+packages/license-native/target/
+packages/license-native/target-test/
+packages/license-native/*.node
+# The development issuer's log — local to whoever runs it.
+tools/license-issuer/dev-key/issued.db
+
 # SQLite database files — data, never source.
 apps/api/prisma/*.db
 apps/api/prisma/*.db-wal
@@ -41,6 +50,7 @@ apps/api/prisma/*.db-shm
 # Backup snapshots and archives the test suite stages (it cleans up after itself; this
 # catches an interrupted run, which would otherwise leave encrypted archives in the tree).
 apps/api/prisma/test-backups-*/
+apps/api/prisma/test-license-*/
 
 # rust build output (tauri app shell, service host)
 target/

@@ -535,3 +535,53 @@ model CardBatch {
   @@index([merchantId, generatedAt])
   @@map("card_batch")
 }
+
+/// Every licence code activated on this installation (packaging/LICENSING.md).
+///
+/// The status is never read from these columns. The Rust licensing module re-verifies
+/// each stored `code` on every check and chooses the governing licence from the codes
+/// themselves; the other columns are the Settings screen's history, and editing them
+/// changes nothing but that list. No relations, deliberately: a licence belongs to the
+/// machine, and must survive whatever happens to merchant or user rows.
+model LicenseActivation {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  /// The code's `lid`. One row per licence, so pasting the same code twice is a no-op.
+  licenseId String @unique @map("license_id")
+  /// trial | perpetual
+  kind String
+  deviceId String @map("device_id")
+  issuedAt DateTime @map("issued_at")
+  /// NULL for a perpetual licence.
+  expiresAt DateTime? @map("expires_at")
+  /// JSON array of feature names, copied from the code for display.
+  features String
+  note String?
+  /// The code as activated, whitespace removed. The only column the status reads.
+  code String
+  activatedAt DateTime @default(now()) @map("activated_at")
+  activatedByUserId String? @map("activated_by")
+
+  @@index([merchantId, activatedAt])
+  @@map("license_activation")
+}
+
+/// One row (id = 1): this installation's identity and the database's copy of the
+/// clock anchor.
+model InstallationState {
+  id Int @id
+  /// Computed once, on first start, and kept: a replaced drive changes the computed
+  /// value, and the rule is a warning in the audit trail, never a revoked licence.
+  deviceId String @map("device_id")
+  /// SHA-256 digests of the two sources — enough to say which one changed, without
+  /// storing the machine GUID or the volume serial.
+  machineGuidDigest String @map("machine_guid_digest")
+  volumeSerialDigest String @map("volume_serial_digest")
+  deviceComputedAt DateTime @map("device_computed_at")
+  /// The latest time this installation has observed. One of three anchors; the other
+  /// two are in the registry and a hidden file, and the latest of the three wins.
+  lastSeenAt DateTime? @map("last_seen_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("installation_state")
+}

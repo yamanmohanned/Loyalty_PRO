@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PrismaClient } from '@prisma/client';
@@ -51,6 +52,22 @@ export function dropTestDatabase(): void {
   if (backups && existsSync(backups)) {
     rmSync(backups, { recursive: true, force: true });
   }
+
+  const licenseDir = process.env.WALAA_LICENSE_DIR;
+  if (licenseDir && existsSync(licenseDir)) {
+    rmSync(licenseDir, { recursive: true, force: true });
+  }
+
+  // The run's own registry key (never `Software\Walaa`). Loaded here rather than at the
+  // top: this file is also imported by global setup, before any licence exists.
+  const registryKey = process.env.WALAA_LICENSE_REGISTRY_KEY;
+  if (registryKey && registryKey !== 'Software\\Walaa') {
+    process.env.VITEST ??= 'true';
+    const native = createRequire(import.meta.url)('@walaa/license-native') as {
+      deleteRegistryKeyForTests?: (subkey: string) => void;
+    };
+    native.deleteRegistryKeyForTests?.(registryKey);
+  }
 }
 
 /**
@@ -101,10 +118,19 @@ export function prepareTestDatabase(): void {
  * the runtime owns.** `db_identity` and `demo_provenance` are deliberately absent —
  * they identify the file rather than hold a merchant's data, and deleting them would
  * make each test re-adopt the database it is already running on.
+ *
+ * ── And a licence ───────────────────────────────────────────────────────────────
+ *
+ * Every test before licensing assumed a shop that may trade. So the reset ends with a
+ * perpetual, every-feature licence for this machine — signed with the test key and
+ * checked by the real Rust verifier — and a clean set of clock anchors. A licensing
+ * test that wants another state removes it (`removeLicenses`) and builds its own.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
   const tables = [
+    'license_activation',
+    'installation_state',
     'audit_log',
     'notification_log',
     'voucher',
@@ -124,4 +150,9 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
     await prisma.$executeRawUnsafe(`DELETE FROM "${table}"`);
   }
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = ON');
+
+  const { resetLicensingForTests } = await import('../../services/license.service');
+  const { installTestLicense } = await import('./license');
+  resetLicensingForTests();
+  await installTestLicense(prisma);
 }

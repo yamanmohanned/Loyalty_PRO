@@ -163,6 +163,15 @@ const EnvSchema = z.object({
    */
   GOOGLE_OAUTH_BASE: z.string().optional(),
   GOOGLE_DRIVE_API_BASE: z.string().optional(),
+  /**
+   * Where licensing keeps its clock anchor in the registry (under HKCU) and its files
+   * (the hidden anchor and the mirror of activated codes). **Tests only**: in production
+   * both are ignored and a shop always uses `Software\Walaa` and its data folder
+   * (`license.service.ts`), so writing them into `walaa.env` cannot move the anchors —
+   * which would otherwise be a way to reset the recorded time.
+   */
+  WALAA_LICENSE_REGISTRY_KEY: z.string().optional(),
+  WALAA_LICENSE_DIR: z.string().optional(),
 });
 
 /**

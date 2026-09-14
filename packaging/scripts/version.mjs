@@ -58,7 +58,7 @@ if (typeof VERSION !== 'string' || VERSION.length === 0) {
  * whose diffs matter.
  */
 const targets = [
-  ...['apps/api', 'apps/manager-desktop', 'apps/station', 'packages/shared-types', 'packages/ui', 'packages/config', 'packaging'].map(
+  ...['apps/api', 'apps/manager-desktop', 'apps/station', 'packages/shared-types', 'packages/ui', 'packages/config', 'packages/license-native', 'packaging'].map(
     (pkg) => ({
       file: `${pkg}/package.json`,
       // The top-level "version" key, which npm writes at two-space indent.
@@ -70,11 +70,20 @@ const targets = [
     file: 'apps/manager-desktop/src-tauri/tauri.conf.json',
     pattern: /^(\s*"version":\s*")([^"]*)(")/m,
   },
-  {
-    file: 'apps/manager-desktop/src-tauri/Cargo.toml',
+  // The licensing crates: the verifier the service loads, its Node binding, and the
+  // provider's issuer. One version with the product, so a log line naming any of them
+  // names the release it came from.
+  ...[
+    'apps/manager-desktop/src-tauri/Cargo.toml',
+    'crates/walaa-license/Cargo.toml',
+    'packages/license-native/Cargo.toml',
+    'tools/license-issuer/Cargo.toml',
+  ].map((file) => ({
+    file,
+    // The first `version =` is [package]'s: each of these puts [package] first.
     pattern: /^(version\s*=\s*")([^"]*)(")/m,
     optional: true,
-  },
+  })),
   {
     // The API's wire version, compiled in because the shipped bundle has no
     // package.json beside it to read at runtime.

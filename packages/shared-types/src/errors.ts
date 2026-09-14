@@ -58,6 +58,14 @@ export const ApiErrorCodeSchema = z.enum([
    * instead of only showing the sentence.
    */
   'RESTORE_REFUSED',
+  /**
+   * The installation is read-only — unlicensed, expired, or its clock set back — so a
+   * new sale, a new customer or a voucher redemption was not recorded. `details.status`
+   * names which. Reports, backups and everything already recorded keep working.
+   */
+  'LICENSE_READ_ONLY',
+  /** An activation code was refused. `details.reason` is a LicenseRefusalReason. */
+  'LICENSE_INVALID',
   'INTERNAL_ERROR',
 ]);
 
@@ -114,5 +122,9 @@ export const ERROR_STATUS: Readonly<Record<ApiErrorCode, number>> = {
   CARD_NOT_ISSUABLE: 409,
   DATABASE_DAMAGED: 500,
   RESTORE_REFUSED: 409,
+  // 423 Locked: the request was understood and the resource is, for now, not writable.
+  // Distinct from 403 so neither the Station nor a log reads it as a role refusal.
+  LICENSE_READ_ONLY: 423,
+  LICENSE_INVALID: 422,
   INTERNAL_ERROR: 500,
 };

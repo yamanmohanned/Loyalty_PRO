@@ -21,6 +21,7 @@ import {
 import { supersedeUnusableDatabase } from './lib/supersede-database';
 import { clearStartupFailure } from './lib/startup-error';
 import { recordAppliedRestore } from './services/backup/restore.service';
+import { initLicensing, startLicenseClock } from './services/license.service';
 import { startBackupScheduler } from './services/backup/schedule.service';
 import { startStorageSampler } from './services/storage.service';
 
@@ -222,6 +223,11 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
   */
   bootstrapLog('sqlite settings', { ...(await readSqliteSettings()) });
 
+  // The licence: the device ID, the three clock anchors, the status. Before serving, so
+  // the first request is already answered under it; its failures are sentences.
+  await initLicensing(bootstrapLog);
+  const stopLicenseClock = startLicenseClock();
+
   // Only now is there anything worth serving.
   const app = await buildApp();
 
@@ -249,6 +255,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
     try {
       stopScheduler();
       stopSampler();
+      stopLicenseClock();
       await app.close();
 
       /*

@@ -96,6 +96,26 @@ export const AUDIT_ACTIONS = {
    */
   BACKUP_SKIPPED: 'backup.skipped',
   BACKUP_RESTORED: 'backup.restored',
+
+  /* ── Licensing (packaging/LICENSING.md) ─────────────────────────────── */
+  /** A code activated — or the same code pasted again (`after.repeat`). */
+  LICENSE_ACTIVATED: 'license.activated',
+  /** Every refused activation, with the reason. */
+  LICENSE_ACTIVATION_FAILED: 'license.activation_failed',
+  /** The device ID was computed and stored for the first time. */
+  LICENSE_DEVICE_IDENTIFIED: 'license.device_identified',
+  /** MachineGuid or the volume serial changed. A warning: the licence keeps working. */
+  LICENSE_DEVICE_SOURCES_CHANGED: 'license.device_sources_changed',
+  /** The clock was found more than two hours behind the latest recorded time. */
+  LICENSE_CLOCK_ROLLBACK: 'license.clock_rollback',
+  /** The three recorded times disagreed; the latest was used. */
+  LICENSE_CLOCK_ANCHOR_CONFLICT: 'license.clock_anchor_conflict',
+  /** A freshly issued code showed the recorded time was in the future; it was reset. */
+  LICENSE_CLOCK_ANCHOR_RESET: 'license.clock_anchor_reset',
+  /** A stored code failed its own signature check — the database was edited. */
+  LICENSE_STORED_CODE_INVALID: 'license.stored_code_invalid',
+  /** A code from the mirror file was put back into the database (after a restore). */
+  LICENSE_RESTORED_FROM_MIRROR: 'license.restored_from_mirror',
   /** A copy fetched, decrypted and checked beside the live database — nothing replaced. */
   BACKUP_RESTORE_STAGED: 'backup.restore_staged',
   /** The owner confirmed a staged restore; applied at the next start. */

@@ -1,12 +1,44 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Settings as SettingsIcon, MonitorSmartphone, Network } from 'lucide-react';
 import { getLocalApiUrl, getRemoteApiUrl } from '../lib/config';
 import { readBackendStatus, type BackendStatus } from '../lib/backend';
 import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, Notice, PageHeader } from '../components/ui';
 import { ServerAddressForm } from '../components/ServerAddressForm';
+import { cn } from '../components/ui';
 import { DriveSection } from './settings/DriveSection';
+import { LicenseSection } from './settings/LicenseSection';
 import { StaffSection } from './settings/StaffSection';
+
+type Tab = 'general' | 'license';
+
+/**
+ * Two tabs. «الترخيص» is its own because it is reached from somewhere else — the
+ * read-only banner links straight to `?tab=license` — and because it is the one screen
+ * used with the provider on the phone, where the rest of Settings is noise.
+ */
+function Tabs({ active, onSelect }: { active: Tab; onSelect: (tab: Tab) => void }) {
+  return (
+    <div role="tablist" className="mb-6 flex gap-2 border-b border-border">
+      {(['general', 'license'] as const).map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          role="tab"
+          aria-selected={active === tab}
+          onClick={() => onSelect(tab)}
+          className={cn(
+            '-mb-px min-h-control border-b-2 px-5 text-base font-semibold transition-colors duration-fast',
+            active === tab ? 'border-accent text-accent' : 'border-transparent text-steel hover:text-ink',
+          )}
+        >
+          {locale.settings.tabs[tab]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Settings — the one place technical configuration lives.
@@ -80,13 +112,31 @@ export function SettingsScreen() {
   const hosts = status?.hostsService ?? local !== null;
   const running = status?.state === 'running' || status?.state === 'starting';
 
-  return (
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = params.get('tab') === 'license' ? 'license' : 'general';
+  const header = (
     <>
       <PageHeader
         icon={<SettingsIcon size={24} aria-hidden />}
         title={locale.settings.title}
         subtitle={locale.settings.subtitle}
       />
+      <Tabs active={tab} onSelect={(next) => setParams(next === 'license' ? { tab: 'license' } : {})} />
+    </>
+  );
+
+  if (tab === 'license') {
+    return (
+      <>
+        {header}
+        <LicenseSection />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {header}
 
       <Card>
         <CardHeader title={locale.settings.server.localTitle} />

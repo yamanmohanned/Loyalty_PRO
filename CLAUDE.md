@@ -684,3 +684,36 @@ Pointing that at the dev database would destroy it, so the isolation is a safety
 property rather than a convenience. Rate limiting is disabled in the general HTTP
 suite (it would otherwise exhaust one shared login bucket mid-file) and covered by
 its own suite with limiting left on.
+
+### 13.10 Offline licensing — decided in Rust, enforced in the service
+*(operator decisions, 2026-09-14; shipped in 0.3.0. Full account: `packaging/LICENSING.md`)*
+
+**Where it runs.** Codes are Ed25519-signed JSON verified by `crates/walaa-license`,
+compiled into a Node module the API loads (`@walaa/license-native`) with the provider's
+public key embedded as a constant. The issuer (`tools/license-issuer`) is never shipped.
+The UI decides nothing; it reads `GET /license`.
+
+**Read-only refuses exactly three things**, in the service functions so the offline
+sync replay meets the same gate: `scanCard` (a sale), `createCustomer`, `redeemVoucher`.
+Capture, card batches, reports, exports, backups and restores stay open — a merchant's
+data is never withheld. A queued sync item refused this way is FAILED, so the Station
+keeps it and sends it again after activation.
+
+**The clock.** The latest time seen is kept in three places (`installation_state`,
+`HKCU\Software\Walaa`, `.license-clock` in the data folder); a clock more than two
+hours behind it is TAMPERED until corrected, then clears by itself. A freshly issued
+code resets a recorded time that lies after its issue. Perpetual licences ignore the
+clock — there is no expiry to stretch.
+
+**Nothing ordinary loses a licence.** The device ID is stored on first computation; a
+changed source is an audit warning. Activated codes are mirrored to
+`license-codes.json` beside the anchor, so restoring an older database puts them back.
+
+**Two deviations from the brief, both forced:** the device ID is base-30, not Base32 —
+excluding six of 32 symbols leaves 30; and only the Drive *upload* needs `drive_backup`,
+because gating restore would strand a merchant replacing a dead PC.
+
+**The honest limit.** The gate is JavaScript in the API bundle. An administrator who
+edits that bundle bypasses it; the signature, device and clock checks raise the cost of
+cheating, they do not make it impossible. `pnpm package:installer` refuses a build that
+embeds the development key (`verify-license-key.mjs`).

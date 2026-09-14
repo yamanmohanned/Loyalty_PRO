@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertOctagon, AlertTriangle, Bell, PanelRight, ShieldAlert } from 'lucide-react';
-import type { KeyStatus, StorageStatus } from '@walaa/shared-types';
+import type { KeyStatus, LicenseState, StorageStatus } from '@walaa/shared-types';
 import { locale } from '../lib/locale';
 import { IS_DEMO } from '../lib/demo';
-import { cn } from './ui';
+import { licenseNotice } from './LicenseBanner';
+import { Chip, cn } from './ui';
 
 /**
  * The application bar.
@@ -47,8 +48,22 @@ export interface Alert {
 export function collectAlerts(
   storage: StorageStatus | undefined,
   key: KeyStatus | undefined,
+  license?: LicenseState,
 ): Alert[] {
   const alerts: Alert[] = [];
+
+  // First: a read-only licence is the till refusing sales now. Read from `useLicense`,
+  // which the shell runs for its banner — the same rule as the two below.
+  const licence = license ? licenseNotice(license) : null;
+  if (licence) {
+    alerts.push({
+      id: 'license',
+      tone: 'danger',
+      title: licence.title,
+      body: licence.body,
+      route: '/settings?tab=license',
+    });
+  }
 
   if (storage && storage.level !== 'OK') {
     alerts.push({
@@ -88,11 +103,16 @@ export function AppBar({
   onToggleRail,
   alerts,
   onOpenAlert,
+  countdown = null,
+  onOpenLicense,
 }: {
   railCollapsed: boolean;
   onToggleRail: () => void;
   alerts: readonly Alert[];
   onOpenAlert: (route: string) => void;
+  /** «تنتهي الفترة التجريبية خلال X» in a trial's last seven days; null otherwise. */
+  countdown?: string | null;
+  onOpenLicense?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -132,6 +152,18 @@ export function AppBar({
       >
         <PanelRight size={18} aria-hidden />
       </button>
+
+      <div className="flex items-center gap-3">
+        {/* A trial's last week, where it will be seen on every screen. A chip rather
+            than a banner: the program still works fully, so this is a date to act on,
+            not an alarm. It opens the page where the code is pasted. */}
+        {countdown ? (
+          <button type="button" onClick={onOpenLicense} className="rounded-pill">
+            <Chip tone="warning" dot>
+              {countdown}
+            </Chip>
+          </button>
+        ) : null}
 
       <div className="relative" ref={panelRef}>
         <button
@@ -202,6 +234,7 @@ export function AppBar({
             )}
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   );

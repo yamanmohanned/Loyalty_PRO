@@ -1,0 +1,28 @@
+[package]
+name = "walaa-license-node"
+version = "0.3.0"
+edition = "2021"
+publish = false
+description = "The API's native licensing module: device ID, code verification, status and clock anchors, in Rust."
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# The test build: trusts only the published test key and can sign with it. Built to
+# walaa-license.test.node, which the API's test suite loads and staging never copies.
+test-key = ["walaa-license/test-key"]
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi6"] }
+napi-derive = "2"
+walaa-license = { path = "../../crates/walaa-license" }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true

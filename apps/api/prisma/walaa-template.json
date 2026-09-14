@@ -1,11 +1,11 @@
 {
   "file": "walaa-template.db",
-  "bytes": 331776,
-  "sha256": "32fe43985b831514065c0c67cc05524442ee952345741fbfdd76f3f04a47f0a3",
-  "productVersion": "0.2.3",
-  "installationId": "f8f7614c-5e49-47a0-ac9c-f119c0906fe7",
-  "schemaHash": "4dc27d78754356925e805953e86dc63778d798f3eb2843887ef3893f96d51225",
-  "migrationsFingerprint": "e66d74a9871c3e88435d2ce3f15765ceb2c8e211eb129d9f9a65dbc93ddce70d",
+  "bytes": 348160,
+  "sha256": "232d82a41a3ceeccfa6e301a59bf602d5d7a2db8ff9370a8863241812d2ad689",
+  "productVersion": "0.3.0",
+  "installationId": "a994e8ba-8bbf-414f-8538-4e3842240be2",
+  "schemaHash": "bc23e04703e07fa71a12884ce44371a5adf2013eeec3a72f3d1308efad94178a",
+  "migrationsFingerprint": "2bf5f281d310b0a572a1a7b79e39b487d8a38171654a9e75ccbeafb72a95401e",
   "migrations": [
     "20260828021006_v3_instant_discount_sqlite",
     "20260830221926_audit_action_index",
@@ -13,7 +13,8 @@
     "20260901022739_settlement_default_merchant_defined",
     "20260902230000_discount_uncapped_value",
     "20260904090000_v4_invoice_bracket_discounts",
-    "20260904140000_station_paper_width"
+    "20260904140000_station_paper_width",
+    "20260914090000_offline_licensing"
   ],
-  "builtAt": "2026-09-13T20:15:12.361Z"
+  "builtAt": "2026-09-14T05:03:02.545Z"
 }

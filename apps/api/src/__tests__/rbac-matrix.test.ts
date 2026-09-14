@@ -200,6 +200,11 @@ const CASES: Case[] = [
   // The OAuth client lets this installation ask Google for access at all: owner only,
   // like connecting.
   { method: 'PUT', path: '/backup/drive/client', allowed: ['OWNER'] },
+  // Licensing: the till may read the status (so it can say "read-only" before a scan);
+  // activating and the history are the dashboard's.
+  { method: 'GET', path: '/license', allowed: STATION },
+  { method: 'GET', path: '/license/activations', allowed: DASHBOARD },
+  { method: 'POST', path: '/license/activate', allowed: DASHBOARD },
   { method: 'DELETE', path: '/backup/drive/client', allowed: ['OWNER'] },
   // Restoring a copy replaces the whole ledger and signs everyone out: the owner only.
   { method: 'POST', path: '/backup/restore/stage', allowed: ['OWNER'] },
@@ -446,6 +451,10 @@ describe('the route inventory', () => {
         'POST, DELETE /api/v1/backup/restore/stage',
         'POST /api/v1/backup/restore/apply',
         'PUT, DELETE /api/v1/backup/drive/client',
+        'GET, HEAD /api/v1/license',
+        'GET, HEAD /api/v1/license/',
+        'GET, HEAD /api/v1/license/activations',
+        'POST /api/v1/license/activate',
         'POST /api/v1/vouchers/:id/redeem',
         'POST /api/v1/vouchers/:id/void',
         'PUT /api/v1/discount/rules',

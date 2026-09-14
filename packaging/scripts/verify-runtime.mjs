@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +42,39 @@ const check = (ok, description, detail = '') => {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * A licence code for the device the staged runtime reports, or null.
+ *
+ * `WALAA_VERIFY_LICENSE_CODE` wins: with the production key embedded, the provider
+ * issues one for the build machine and passes it in. Otherwise, and only while the
+ * staged module still embeds the DEVELOPMENT key, one is issued here with the committed
+ * development issuer — whose codes that build, and no production build, accepts.
+ */
+function licenceCodeFor(deviceId) {
+  if (process.env.WALAA_VERIFY_LICENSE_CODE) {
+    return { code: process.env.WALAA_VERIFY_LICENSE_CODE, source: 'WALAA_VERIFY_LICENSE_CODE' };
+  }
+  delete process.env.VITEST;
+  const staged = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@walaa', 'license-native'));
+  const key = staged.keyInfo();
+  const issuer = join(REPO, 'tools', 'license-issuer', 'target', 'release', 'license-issuer.exe');
+  if (key.kind !== 'development' || !deviceId || !existsSync(issuer)) {
+    return { code: null, source: `${key.kind} key, no WALAA_VERIFY_LICENSE_CODE` };
+  }
+  const output = execFileSync(
+    issuer,
+    [
+      '--home', join(REPO, 'tools', 'license-issuer', 'dev-key'),
+      '--password-stdin',
+      'issue', '--device', deviceId, '--perpetual', '--note', 'verify-runtime',
+    ],
+    { input: 'walaa-development-only-key\n', encoding: 'utf8' },
+  );
+  const marker = output.indexOf('Send the merchant this code');
+  const code = marker < 0 ? null : output.slice(output.indexOf('\n', marker)).trim();
+  return { code, source: 'development issuer' };
+}
 
 function secret() {
   return randomBytes(48).toString('base64url');
@@ -326,6 +360,34 @@ try {
 
     const station = await signIn('station', 'Till!2026');
     const agent = await signIn('agent', 'Capture!2026');
+
+    // ── Licensing: a new installation is read-only until a code is activated ──
+    const licence = await call('GET', '/license', undefined, owner);
+    check(
+      licence.json?.status === 'UNLICENSED' && licence.json?.readOnly === true && /^WL-/.test(licence.json?.deviceId ?? ''),
+      'a new installation starts unlicensed and read-only, and names its device ID',
+      `status ${licence.json?.status} · device ${licence.json?.deviceId}`,
+    );
+    const refused = await call('POST', '/customers', { name: 'زبون الفحص', phone: '07701234567' }, station);
+    check(
+      refused.status === 423 &&
+        refused.json?.error?.code === 'LICENSE_READ_ONLY' &&
+        !/[A-Za-z]/.test(refused.json?.error?.message ?? 'x'),
+      'an unlicensed till refuses a new customer, with an Arabic sentence',
+      `HTTP ${refused.status}`,
+    );
+
+    const { code, source } = licenceCodeFor(licence.json?.deviceId);
+    if (!code) {
+      check(false, 'a licence code for this machine was available to activate', source);
+    } else {
+      const activation = await call('POST', '/license/activate', { code }, owner);
+      check(
+        activation.status === 200 && activation.json?.state?.readOnly === false,
+        'the owner can activate a licence code, and the installation trades at once',
+        `HTTP ${activation.status} · ${activation.json?.state?.status ?? activation.text.slice(0, 160)} · code from ${source}`,
+      );
+    }
 
     const customer = await call('POST', '/customers', { name: 'زبون الفحص', phone: '07701234567' }, station);
     const cardNumber = customer.json?.customer?.cardNumber ?? null;

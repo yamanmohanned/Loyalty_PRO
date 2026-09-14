@@ -10,6 +10,7 @@ import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { DEFAULT_SETTLEMENT_STRATEGY, getSettlementStrategy } from './settlement';
+import { assertCanRecord } from './license.service';
 
 /**
  * Voucher lifecycle and end-of-day reconciliation.
@@ -63,6 +64,10 @@ export async function redeemVoucher(params: {
   voucherId: string;
   actorUserId: string;
 }) {
+  // Redeeming a voucher is the product's nearest thing to taking a payment, and is
+  // refused while the licence is read-only.
+  await assertCanRecord('VOUCHER_REDEMPTION');
+
   const now = new Date();
 
   const voucher = await writeTransaction(async (db) => {

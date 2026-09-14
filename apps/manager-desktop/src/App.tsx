@@ -29,6 +29,7 @@ import { cn, Monogram } from './components/ui';
 import { BrandMark } from './components/BrandMark';
 import { RouteErrorBoundary } from './components/ErrorBoundary';
 import { StorageBanner, useStorageStatus } from './components/StorageBanner';
+import { LicenseBanner, licenseCountdown, useLicense } from './components/LicenseBanner';
 import { AppBar, collectAlerts } from './components/AppBar';
 import { DemoBadge, DemoWelcome } from './components/DemoSurfaces';
 import { startUpdateCheck, UpdateNotice } from './components/UpdateNotice';
@@ -347,6 +348,7 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
   const { pathname } = useLocation();
   const keyStatus = useKeyStatus();
   const storage = useStorageStatus();
+  const license = useLicense();
 
   /*
     Rail collapse: the viewport proposes, the merchant disposes.
@@ -363,8 +365,8 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
 
   // Assembled from the two queries the banners below already run — no extra request.
   const alerts = useMemo(
-    () => collectAlerts(storage.data, keyStatus.data),
-    [storage.data, keyStatus.data],
+    () => collectAlerts(storage.data, keyStatus.data, license.data),
+    [storage.data, keyStatus.data, license.data],
   );
 
   /**
@@ -454,7 +456,12 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
           onToggleRail={() => setRailOverride(!railCollapsed)}
           alerts={alerts}
           onOpenAlert={(route) => navigate(route)}
+          countdown={licenseCountdown(license.data)}
+          onOpenLicense={() => navigate('/settings?tab=license')}
         />
+        {/* First of the standing banners: read-only means the till is refusing sales
+            right now, which outranks every other warning on this screen. */}
+        <LicenseBanner state={license.data} onOpen={() => navigate('/settings?tab=license')} />
         {/*
           Above the backup banner deliberately. Both are standing warnings, but this one
           is about an outage that may start with the next scan, and the backup one is

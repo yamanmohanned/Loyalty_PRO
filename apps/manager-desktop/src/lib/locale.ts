@@ -127,6 +127,34 @@ export const locale = {
     backupKeyReplaced: 'تم استبدال المفتاح ولم يُؤكَّد الجديد بعد',
   },
 
+  /* ── Licensing, as the shell shows it ─────────────────────────────────────
+     Every sentence is written for the person at the screen: what still works
+     comes first, because the first fear of a merchant reading «read-only» is that
+     his data is gone. It is not, and the banner says so before anything else. */
+  license: {
+    unlicensedTitle: 'البرنامج غير مفعّل — يعمل للقراءة فقط',
+    expiredTitle: 'انتهت الفترة التجريبية — البرنامج يعمل للقراءة فقط',
+    tamperedTitle: 'توقّف تسجيل العمليات الجديدة',
+    graceTitle: 'انتهت الفترة التجريبية — هذه مهلة أخيرة',
+    graceBody: (date: string) =>
+      `البرنامج يعمل بكامل ميزاته حتى ${date}، ثم يتحوّل إلى القراءة فقط. فعّله برمز من المزوّد قبل ذلك.`,
+    readOnlyBody:
+      'بياناتك كاملة ومتاحة: التقارير والزبائن وسجل البطاقات والنسخ الاحتياطي والاستعادة. المتوقف فقط: تسجيل المبيعات، وتسجيل الزبائن الجدد، وصرف القسائم.',
+    tamperedClockBody: (behind: string) =>
+      `تاريخ هذا الجهاز ووقته متأخران عن آخر وقت سجّله البرنامج بنحو ${behind}. صحّح التاريخ والوقت في Windows — يعود التسجيل تلقائياً فور تصحيحهما، وبياناتك لم تتأثر.`,
+    tamperedCodeBody:
+      'بيانات الترخيص المحفوظة لا تطابق توقيعها. أعد لصق رمز التفعيل في «الإعدادات ← الترخيص»، أو اطلب رمزاً من المزوّد. بياناتك لم تتأثر.',
+    open: 'فتح الترخيص',
+    /** The top-bar chip in a trial's last seven days. */
+    countdown: (days: string) => `تنتهي الفترة التجريبية خلال ${days}`,
+    countdownToday: 'تنتهي الفترة التجريبية اليوم',
+    /** Arabic counts: one, two, three to ten, eleven and up. */
+    days: (n: number) =>
+      n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : n <= 10 ? `${n} أيام` : `${n} يوماً`,
+    minutes: (n: number) =>
+      n < 120 ? `${n} دقيقة` : n < 48 * 60 ? `${Math.round(n / 60)} ساعة` : `${Math.round(n / 1440)} يوماً`,
+  },
+
   /** The reporting window, shared by Overview and Reports. */
   range: {
     label: 'الفترة',
@@ -483,6 +511,60 @@ export const locale = {
    * rather than a form.
    */
   settings: {
+    tabs: {
+      general: 'عام',
+      license: 'الترخيص',
+    },
+
+    /* ── Licensing ─────────────────────────────────────────────────────────
+       The one screen a merchant uses with the provider on the phone: every label
+       is something he may have to read aloud. */
+    license: {
+      title: 'ترخيص البرنامج',
+      subtitle: 'حالة الترخيص على هذا الجهاز، وتفعيله برمز من المزوّد.',
+      statusLabel: 'الحالة',
+      status: {
+        UNLICENSED: 'غير مفعّل',
+        TRIAL: 'فترة تجريبية',
+        TRIAL_GRACE: 'مهلة بعد انتهاء التجربة',
+        EXPIRED: 'منتهٍ',
+        PERPETUAL: 'مفعّل',
+        TAMPERED: 'موقوف',
+      } as Record<string, string>,
+      kindLabel: 'نوع الترخيص',
+      kind: { trial: 'تجريبي', perpetual: 'دائم' } as Record<string, string>,
+      expiresLabel: 'ينتهي في',
+      perpetual: 'دائم',
+      graceEndsLabel: 'تنتهي المهلة في',
+      featuresLabel: 'الميزات المشمولة',
+      feature: {
+        drive_backup: 'النسخ الاحتياطي إلى Google Drive',
+        multi_device: 'تشغيل أكثر من جهاز',
+      } as Record<string, string>,
+      noteLabel: 'صادر باسم',
+      none: '—',
+      deviceLabel: 'رقم هذا الجهاز',
+      deviceHint: 'أرسل هذا الرقم إلى المزوّد للحصول على رمز التفعيل',
+      copy: 'نسخ الرقم',
+      copied: 'تم النسخ',
+      copyFailed: 'تعذّر النسخ — حدّد الرقم وانسخه يدوياً',
+      codeLabel: 'رمز التفعيل',
+      codeHint: 'الصق رسالة المزوّد كما وصلتك — الأسطر والمسافات لا تؤثر.',
+      activate: 'تفعيل',
+      activating: 'جارٍ التفعيل…',
+      activatedPerpetual: 'تم التفعيل: ترخيص دائم. البرنامج يعمل الآن بكامل ميزاته.',
+      activatedTrial: (days: string, date: string) =>
+        `تم التفعيل: فترة تجريبية مدتها ${days}، تنتهي في ${date}.`,
+      alreadyActive: 'هذا الرمز مفعّل على هذا الجهاز مسبقاً — لم يتغيّر شيء.',
+      historyTitle: 'سجل التفعيل',
+      historyEmpty: 'لم يُفعَّل أي رمز على هذا الجهاز بعد.',
+      historyActivatedAt: 'تاريخ التفعيل',
+      historyKind: 'النوع',
+      historyExpires: 'ينتهي في',
+      historyBy: 'بواسطة',
+      managerOnly: 'التفعيل وسجله متاحان للمالك والمدير فقط.',
+    },
+
     /* ── Staff accounts ────────────────────────────────────────────────────
 
        The screen first run always said it was deferring to, and which did not

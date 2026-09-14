@@ -98,6 +98,11 @@ export const DRIVE_MESSAGES: Record<DriveFailureCode, { message: string; remedy:
     remedy:
       'أعد الربط بالضغط على «ربط حساب Google». البرنامج لا يرى إلا الملفات التي أنشأها بنفسه، فإن حُذف مجلدها يدوياً وجب إعادة الربط.',
   },
+  NOT_LICENSED: {
+    message: 'الرفع إلى Google Drive غير مشمول في ترخيص هذا الجهاز، فلم تُرفع النسخة.',
+    remedy:
+      'النسخة المحلية أُخذت بنجاح. لتفعيل الرفع اطلب من المزوّد ترخيصاً يشمل النسخ إلى Google Drive وفعّله من «الإعدادات ← الترخيص». الاستعادة من Google Drive متاحة دائماً.',
+  },
   UNKNOWN: {
     message: 'لم تُرفع النسخة الاحتياطية إلى Google Drive.',
     remedy:

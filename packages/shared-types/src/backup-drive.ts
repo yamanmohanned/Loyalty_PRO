@@ -43,7 +43,13 @@ export type DriveFailureCode =
   /** Authenticated, but not allowed to touch that file — `drive.file` sees only its own. */
   | 'PERMISSION'
   /** Google answered with something this code does not recognise. Detail is in the log. */
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  /**
+   * The licence does not include `drive_backup`, so uploads are not made. Connecting,
+   * listing and restoring from Drive still work: reading the shop's own data back is
+   * never withheld.
+   */
+  | 'NOT_LICENSED';
 
 /**
  * A classified failure, ready to render.
@@ -99,6 +105,8 @@ export interface DriveStatus {
   client: { clientId: string; source: 'settings' | 'environment'; savedAt: string | null } | null;
   /** The Google account holding the backups, so the owner can see it is the shop's. */
   account: DriveAccount | null;
+  /** The licence includes `drive_backup`. Without it nothing is uploaded; restore still works. */
+  licensed: boolean;
 }
 
 /** A Google account, as Google names it. */

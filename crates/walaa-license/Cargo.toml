@@ -1,0 +1,29 @@
+[package]
+name = "walaa-license"
+version = "0.3.0"
+edition = "2021"
+publish = false
+description = "Offline licensing for ولاء: device identity, the signed license format, status rules and clock anchors."
+
+[features]
+# Builds that embed the published TEST key instead of the real one. Only the native
+# module's test build turns this on; nothing staged for a shop ever does.
+test-key = []
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Registry",
+] }
+
+[dev-dependencies]
+tempfile = "3"

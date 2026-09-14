@@ -32,6 +32,7 @@ import {
   lookupCard,
 } from './card.service';
 import { enqueueNotification, NOTIFICATION_TEMPLATES } from './notification';
+import { assertCanRecord } from './license.service';
 
 /**
  * The card number a customer currently holds travels with them in the DTO, but it
@@ -81,6 +82,9 @@ export async function createCustomer(
   params: { merchantId: string; actorUserId: string },
   request: CreateCustomerRequest,
 ): Promise<CustomerDto> {
+  // Registering a customer is refused while the licence is read-only.
+  await assertCanRecord('NEW_CUSTOMER');
+
   try {
     const { customer, cardNumber } = await writeTransaction(async (db) => {
       // The card is located BEFORE the customer is written. If the operator scanned
