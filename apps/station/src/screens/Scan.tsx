@@ -32,7 +32,7 @@ import {
 } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale, money } from '../lib/locale';
-import { enqueue } from '../lib/queue';
+import { enqueue, HELD_CAP, LICENSE_REFUSED_EVENT } from '../lib/queue';
 import { usePrint } from '../lib/print';
 import { PrintableSlip } from '../components/Printable';
 import { SlipPreview } from '../components/SlipPreview';
@@ -94,11 +94,14 @@ type Stage =
   /** Request never reached the server; queued, and the operator told what that costs. */
   | { kind: 'queued' }
   /**
-   * The manager PC answered that its licence is read-only. The link is kept on this
-   * station, pinned to the invoice the operator scanned, and credited automatically on
-   * activation — so the cashier carries on serving and nothing is lost or ambiguous.
+   * The manager PC answered that its licence is read-only. The link is kept — on the
+   * manager PC, which answered and so could write it down, or on this station if it
+   * could not — pinned to the invoice the operator scanned, and credited automatically on
+   * activation. The discount it would have earned is shown, because it is not given later.
    */
-  | { kind: 'licenseHeld' }
+  | { kind: 'licenseHeld'; keptOn: 'manager' | 'station'; forgoneDiscount: number | null }
+  /** Refused for the licence while this station already holds `HELD_CAP`: not kept. */
+  | { kind: 'licenseNotHeld' }
   /**
    * The write reached the server and was not stored (§12.16). Separate from `error`
    * because it is separate to the operator: nothing is retrying, nothing is queued,
@@ -108,6 +111,28 @@ type Stage =
   | { kind: 'error'; message: string };
 
 const STEP_LABELS = [locale.flow.cardStepName, locale.flow.invoiceStepName] as const;
+
+/** What a LICENSE_READ_ONLY refusal says about the sale: kept on the manager PC, and what it forwent. */
+function heldDetails(details: unknown): { held: boolean; forgoneDiscount: number | null } {
+  const value = (details ?? {}) as { held?: unknown; forgoneDiscount?: unknown };
+  return {
+    held: value.held === true,
+    forgoneDiscount: typeof value.forgoneDiscount === 'number' ? value.forgoneDiscount : null,
+  };
+}
+
+/**
+ * The sentence for the customer standing at the till, set apart from the cashier's own
+ * instructions so it can be read out as it is.
+ */
+function SayToCustomer({ sentence }: { sentence: string }): JSX.Element {
+  return (
+    <div className="rounded-md border border-border bg-surface px-4 py-3 text-start">
+      <p className="text-sm font-semibold text-steel">{locale.license.sayLabel}</p>
+      <p className="text-lg font-bold text-ink">«{sentence}»</p>
+    </div>
+  );
+}
 
 export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
   const [stage, setStage] = useState<Stage>({ kind: 'card' });
@@ -178,13 +203,13 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
           // card alone is queued — exactly what the one-step flow did — so the spend
           // is credited when the connection returns. No slip for this basket, and the
           // operator is told so rather than left to assume one is coming.
-          enqueue({
+          const kept = enqueue({
             type: 'SCAN_CARD',
             operationId: crypto.randomUUID(),
             queuedAt: new Date().toISOString(),
             payload: { barcodeToken: scanned },
           });
-          setStage({ kind: 'queued' });
+          setStage(kept ? { kind: 'queued' } : { kind: 'error', message: locale.errors.queueNotSaved });
         } else {
           setStage({
             kind: 'error',
@@ -216,25 +241,34 @@ export function ScanScreen({ shopName }: { shopName: string }): JSX.Element {
         if (error instanceof ApiRequestError && error.isNetworkFailure) {
           // The invoice number travels with the queued operation, so the replay
           // attributes the same sale the operator chose rather than re-guessing.
-          enqueue({
+          const kept = enqueue({
             type: 'SCAN_CARD',
             operationId: crypto.randomUUID(),
             queuedAt: new Date().toISOString(),
             payload: { barcodeToken: identity.cardToken, invoiceId },
           });
-          setStage({ kind: 'queued' });
+          setStage(kept ? { kind: 'queued' } : { kind: 'error', message: locale.errors.queueNotSaved });
         } else if (error instanceof ApiRequestError && error.code === 'LICENSE_READ_ONLY') {
-          // Refused for the licence, not for the sale. The same queued operation the
-          // offline path writes, with the invoice pinned: the server credits exactly this
-          // invoice once the program is activated — or at once, if the refusal was about
-          // a sale made while it was still licensed.
-          enqueue({
-            type: 'SCAN_CARD',
-            operationId: crypto.randomUUID(),
-            queuedAt: new Date().toISOString(),
-            payload: { barcodeToken: identity.cardToken, invoiceId },
-          });
-          setStage({ kind: 'licenseHeld' });
+          // Refused for the licence, not for the sale. The manager PC answered, so it has
+          // normally written the link down itself and credits it on activation — nothing
+          // on this tablet is needed. Only if it could not does this station keep a copy,
+          // the same queued operation the offline path writes, with the invoice pinned.
+          window.dispatchEvent(new Event(LICENSE_REFUSED_EVENT));
+          const held = heldDetails(error.details);
+          if (held.held) {
+            setStage({ kind: 'licenseHeld', keptOn: 'manager', forgoneDiscount: held.forgoneDiscount });
+          } else {
+            const kept = enqueue(
+              {
+                type: 'SCAN_CARD',
+                operationId: crypto.randomUUID(),
+                queuedAt: new Date().toISOString(),
+                payload: { barcodeToken: identity.cardToken, invoiceId },
+              },
+              { forLicence: true },
+            );
+            setStage(kept ? { kind: 'licenseHeld', keptOn: 'station', forgoneDiscount: null } : { kind: 'licenseNotHeld' });
+          }
         } else if (error instanceof ApiRequestError && error.isUnsavedWrite) {
           // NOT queued, deliberately. Retrying against a datastore that cannot write
           // buries the failure under a spinner while every following sale goes
@@ -754,7 +788,26 @@ function Stageview({
             {/* One sentence that answers the cashier's only question — was it recorded? —
                 and one that says what to do. Nothing to retry, nothing to wait for. */}
             <p className="text-xl font-bold text-ink">{locale.license.heldTitle}</p>
-            <p className="text-base text-ink">{locale.license.heldBody}</p>
+            <p className="text-base text-ink">
+              {stage.keptOn === 'manager' ? locale.license.heldBody : locale.license.heldHereBody}
+            </p>
+            {stage.forgoneDiscount !== null && stage.forgoneDiscount > 0 ? (
+              <p className="text-base font-bold text-ink">{locale.license.forgone(money(stage.forgoneDiscount))}</p>
+            ) : null}
+            <SayToCustomer sentence={locale.license.say} />
+          </Card>
+          <ResetBar onReset={onReset} />
+        </>
+      );
+
+    case 'licenseNotHeld':
+      return (
+        <>
+          <Card className="space-y-3 border-danger/30 bg-danger-tint text-center">
+            <AlertOctagon className="mx-auto text-danger" size={40} aria-hidden />
+            <p className="text-xl font-bold text-danger">{locale.license.notHeldTitle}</p>
+            <p className="text-base text-ink">{locale.license.notHeldBody(HELD_CAP)}</p>
+            <SayToCustomer sentence={locale.license.sayNotHeld} />
           </Card>
           <ResetBar onReset={onReset} />
         </>

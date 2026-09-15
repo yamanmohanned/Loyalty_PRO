@@ -102,8 +102,15 @@ export const customerRequired = (message = 'يجب اختيار الزبون ق�
 export const customerAlreadyExists = (message = 'يوجد زبون مسجّل بهذا الرقم') =>
   new AppError('CUSTOMER_ALREADY_EXISTS', message);
 
+/**
+ * What the merchant reads when the cause is a bug nobody anticipated. Never the bare
+ * «حدث خطأ»: it says where the fault is, what to check, and what to do if it repeats.
+ */
+export const UNEXPECTED_FAILURE_MESSAGE =
+  'تعذّر إكمال العملية بسبب خلل غير متوقّع في البرنامج على جهاز المدير. تحقّق من النتيجة قبل إعادتها، وإن تكرّر ذلك فأعد تشغيل جهاز المدير وأرسل للمزوّد وقت حدوثه.';
+
 export const internalError = (cause?: unknown) =>
-  new AppError('INTERNAL_ERROR', 'حدث خطأ غير متوقع', { cause });
+  new AppError('INTERNAL_ERROR', UNEXPECTED_FAILURE_MESSAGE, { cause });
 
 /**
  * The datastore refused a write — a full disk, in the case this exists for

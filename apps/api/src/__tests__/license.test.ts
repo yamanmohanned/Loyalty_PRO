@@ -340,7 +340,7 @@ describe('read-only refuses exactly three things', () => {
     expect(verification.ok).toBe(true);
   });
 
-  it('keeps a sale queued offline in the queue rather than dropping it, and applies it after activation', async () => {
+  it('keeps a sale queued offline on the manager PC rather than dropping it, and applies it on activation', async () => {
     expect((await capture('INV-Q-1')).statusCode).toBe(201);
     const batch = {
       deviceId: 'station-1',
@@ -357,11 +357,14 @@ describe('read-only refuses exactly three things', () => {
       app.inject({ method: 'POST', url: url('/sync/batch'), headers: bearer(await tokenFor('station')), payload: batch });
 
     const refused = (await send()).json().results[0];
-    // FAILED is the one status the Station does not settle: the item stays queued.
-    expect(refused.status).toBe('FAILED');
+    // HELD: the manager PC has written it down and credits it on activation, so the
+    // Station may let it go — it no longer rests on the tablet's storage.
+    expect(refused.status).toBe('HELD');
     expect(refused.errorCode).toBe('LICENSE_READ_ONLY');
 
     await activate(testCode());
+    // Credited by the activation itself; a Station that still has its copy is answered
+    // with that same sale.
     expect((await send()).json().results[0].status).toBe('APPLIED');
   });
 });

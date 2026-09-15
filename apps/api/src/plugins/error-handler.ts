@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { StorageFailureCause } from '@walaa/shared-types';
-import { AppError } from '../lib/errors';
+import { AppError, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
 import { isDatabaseDamaged, isUniqueViolation, storageFailureCause } from '../lib/prisma';
 import { isContentionError } from '../lib/write-transaction';
 import { lastStorageLevel } from '../services/storage.service';
@@ -183,7 +183,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
       reply.status(500).send({
         error: {
           code: 'INTERNAL_ERROR',
-          message: 'حدث خطأ غير متوقع',
+          message: UNEXPECTED_FAILURE_MESSAGE,
           requestId: request.id,
         },
       });
@@ -195,7 +195,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     reply.status(500).send({
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'حدث خطأ غير متوقع',
+        message: UNEXPECTED_FAILURE_MESSAGE,
         requestId: request.id,
       },
     });

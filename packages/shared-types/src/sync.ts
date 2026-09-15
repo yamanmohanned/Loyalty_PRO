@@ -78,12 +78,14 @@ export type SyncBatchRequest = z.infer<typeof SyncBatchRequestSchema>;
  * Outcome of one queued operation.
  *
  * `DUPLICATE` is a **success** from the device's point of view: the server already
- * has this operation, so the device should clear it. Only `FAILED` stays queued;
- * `REJECTED` is dropped as permanently invalid. Getting this classification wrong
- * either loses a sale or retries it forever, which is why it is decided in one
- * place and shared with every client.
+ * has this operation, so the device should clear it. `HELD` is the same promise for a
+ * sale refused because the licence is read-only: the manager PC has written the link
+ * down and applies it itself on activation (packaging/LICENSING.md §10), so the device
+ * may let it go. Only `FAILED` stays queued; `REJECTED` is dropped as permanently
+ * invalid. Getting this classification wrong either loses a sale or retries it forever,
+ * which is why it is decided in one place and shared with every client.
  */
-export const SyncItemStatusSchema = z.enum(['APPLIED', 'DUPLICATE', 'REJECTED', 'FAILED']);
+export const SyncItemStatusSchema = z.enum(['APPLIED', 'DUPLICATE', 'HELD', 'REJECTED', 'FAILED']);
 export type SyncItemStatus = z.infer<typeof SyncItemStatusSchema>;
 
 export const SyncItemResultSchema = z.object({
@@ -111,7 +113,7 @@ export type SyncState = z.infer<typeof SyncStateSchema>;
 
 /** Whether a result means the device may clear the operation from its queue. */
 export const isSyncItemSettled = (status: SyncItemStatus): boolean =>
-  status === 'APPLIED' || status === 'DUPLICATE' || status === 'REJECTED';
+  status === 'APPLIED' || status === 'DUPLICATE' || status === 'HELD' || status === 'REJECTED';
 
 /* ── Real-time push (§7.2) ─────────────────────────────────────────────────── */
 

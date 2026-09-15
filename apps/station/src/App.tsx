@@ -6,7 +6,7 @@ import { api, restoreSession, setTokens, setUnauthenticatedHandler } from './lib
 import { resolveApiUrl } from './lib/config';
 import { locale } from './lib/locale';
 import { PrintProvider } from './lib/print';
-import { startQueue, subscribe, type QueueSnapshot } from './lib/queue';
+import { LICENSE_REFUSED_EVENT, startQueue, subscribe, type QueueSnapshot } from './lib/queue';
 import { startRealtime } from './lib/realtime';
 import { LoginScreen } from './screens/Login';
 import { RegisterScreen } from './screens/Register';
@@ -174,6 +174,14 @@ function Header({
 function LicenseStrip(): JSX.Element | null {
   const [readOnly, setReadOnly] = useState(false);
   const [held, setHeld] = useState(0);
+  const [heldOnManager, setHeldOnManager] = useState(0);
+  const [refusals, setRefusals] = useState(0);
+
+  useEffect(() => {
+    const onRefused = (): void => setRefusals((n) => n + 1);
+    window.addEventListener(LICENSE_REFUSED_EVENT, onRefused);
+    return () => window.removeEventListener(LICENSE_REFUSED_EVENT, onRefused);
+  }, []);
 
   useEffect(() => subscribe((snapshot) => setHeld(snapshot.held)), []);
 
@@ -183,7 +191,9 @@ function LicenseStrip(): JSX.Element | null {
       api
         .get<LicenseState>('/license')
         .then((state) => {
-          if (alive) setReadOnly(state.readOnly);
+          if (!alive) return;
+          setReadOnly(state.readOnly);
+          setHeldOnManager(state.heldAtStations?.count ?? 0);
         })
         // Unreachable is the connection pill's news, not this strip's.
         .catch(() => undefined);
@@ -194,12 +204,13 @@ function LicenseStrip(): JSX.Element | null {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [held]);
+  }, [held, refusals]);
 
   if (!readOnly) return null;
   return (
     <div role="status" className="border-b border-amber/30 bg-amber-tint px-5 py-2 text-center text-sm font-semibold text-ink">
       {locale.license.strip}
+      {heldOnManager > 0 ? ` ${locale.license.stripHeld(heldOnManager)}` : null}
     </div>
   );
 }

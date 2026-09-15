@@ -48,6 +48,20 @@ const QUEUE_KEY = 'walaa.station.queue';
 const DEVICE_KEY = 'walaa.station.device';
 /** Matches the server's per-batch cap. */
 const MAX_BATCH = 100;
+/**
+ * The most this station holds while the manager PC's licence is read-only.
+ *
+ * By then the shop has been read-only for days — at a few hundred linked sales a day,
+ * about a week — and holding more helps nobody: it is a person's problem (activate, or
+ * phone the provider for an emergency code), and the cashier is told so. The cap also
+ * keeps the queue far from the browser's storage limit (2,000 items is about 430,000
+ * characters), which a queue must never reach: a write refused there loses the sale
+ * being written.
+ */
+export const HELD_CAP = 2000;
+
+/** Raised when the manager PC refuses a sale for the licence, so the read-only strip re-checks at once. */
+export const LICENSE_REFUSED_EVENT = 'walaa:license-refused';
 
 type Listener = (snapshot: QueueSnapshot) => void;
 
@@ -55,10 +69,11 @@ export interface QueueSnapshot {
   state: SyncState;
   pending: number;
   /**
-   * Queued items the manager PC refused because its licence is read-only. Kept, never
-   * dropped, and sent on every flush: they are credited once the program is activated,
-   * or at once if they happened while it was licensed. Counted apart so the pill can
-   * say why they wait rather than implying the network is down.
+   * What waits for the manager PC's licence: every queued item, once its last answer
+   * refused anything for the licence — it is reachable, so nothing here waits for the
+   * network. Kept, never dropped, sent on every flush, credited once the program is
+   * activated (or at once if it happened while licensed). Counted apart so the pill
+   * says why they wait rather than implying the network is down.
    */
   held: number;
 }
@@ -66,8 +81,10 @@ export interface QueueSnapshot {
 let listeners: Listener[] = [];
 let flushing = false;
 let lastFailed = false;
-/** Operation ids the server last answered with LICENSE_READ_ONLY. */
+/** Operation ids the server has answered with LICENSE_READ_ONLY and not yet settled. */
 let heldIds = new Set<string>();
+/** Whether the server's latest answer refused anything for the licence. */
+let readOnlyAnswer = false;
 /**
  * Whether the persistent socket is open (see `realtime.ts`).
  *
@@ -128,7 +145,7 @@ export function snapshot(): QueueSnapshot {
   return {
     state: currentState(),
     pending: queued.length,
-    held: queued.filter((operation) => heldIds.has(operation.operationId)).length,
+    held: readOnlyAnswer ? queued.length : 0,
   };
 }
 
@@ -145,10 +162,23 @@ export function subscribe(listener: Listener): () => void {
   };
 }
 
-/** Adds an operation and tries to flush immediately. */
-export function enqueue(operation: SyncOperation): void {
-  write([...read(), operation]);
+/**
+ * Adds an operation and tries to flush immediately.
+ *
+ * Returns false when it could not be kept — a link refused for the licence while this
+ * station already holds `HELD_CAP`, or a browser that refused the write — so the caller
+ * tells the operator the truth instead of implying the sale is saved.
+ */
+export function enqueue(operation: SyncOperation, options: { forLicence?: boolean } = {}): boolean {
+  const queued = read();
+  if (options.forLicence && queued.length >= HELD_CAP) return false;
+  try {
+    write([...queued, operation]);
+  } catch {
+    return false;
+  }
   void flush();
+  return true;
 }
 
 /**
@@ -171,9 +201,15 @@ export async function flush(): Promise<void> {
 
   flushing = true;
   notify();
+  let drainAgain = false;
 
   try {
-    const batch = queued.slice(0, MAX_BATCH);
+    // Held items last: a sale that can be credited now must not wait behind a hundred
+    // the licence is holding.
+    const batch = [
+      ...queued.filter((operation) => !heldIds.has(operation.operationId)),
+      ...queued.filter((operation) => heldIds.has(operation.operationId)),
+    ].slice(0, MAX_BATCH);
     const response = await api.post<SyncBatchResponse>('/sync/batch', {
       deviceId: deviceId(),
       operations: batch,
@@ -184,11 +220,18 @@ export async function flush(): Promise<void> {
         .filter((result) => isSyncItemSettled(result.status))
         .map((r) => r.operationId),
     );
-    heldIds = new Set(
-      response.results.filter((result) => result.errorCode === 'LICENSE_READ_ONLY').map((r) => r.operationId),
-    );
-    write(read().filter((operation) => !settled.has(operation.operationId)));
+    // Refused for the licence and NOT held on the manager PC — only those wait here.
+    const refused = response.results
+      .filter((result) => result.errorCode === 'LICENSE_READ_ONLY' && !isSyncItemSettled(result.status))
+      .map((r) => r.operationId);
+    heldIds = new Set([...[...heldIds].filter((id) => !settled.has(id)), ...refused]);
+    readOnlyAnswer = refused.length > 0;
+    const remaining = read().filter((operation) => !settled.has(operation.operationId));
+    write(remaining);
     lastFailed = false;
+    // Once the program is activated, two thousand held sales drain in one go rather
+    // than a hundred every thirty seconds.
+    drainAgain = settled.size > 0 && remaining.length > 0;
   } catch (error) {
     // Only a network failure means "still offline". A rejected batch is a bug worth
     // surfacing, but the operations stay queued either way — nothing is dropped here
@@ -198,6 +241,7 @@ export async function flush(): Promise<void> {
     flushing = false;
     notify();
   }
+  if (drainAgain) void flush();
 }
 
 /**

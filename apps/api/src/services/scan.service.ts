@@ -8,7 +8,7 @@ import {
   type ScanCustomer,
   type Voucher as VoucherDto,
 } from '@walaa/shared-types';
-import { forbidden } from '../lib/errors';
+import { AppError, forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
@@ -196,14 +196,115 @@ export async function identifyCard(
   };
 }
 
+/**
+ * A sale refused because the licence is read-only, kept on the manager PC
+ * (packaging/LICENSING.md §10).
+ *
+ * The till reached this server — that is how it was refused — so the link is written
+ * here, where a till restart, a reboot or a cleared browser cannot touch it, and
+ * `applyHeldSales` applies it once recording is allowed again. It is an append-only
+ * audit event: the sale waits while no `sale.held_applied` or `sale.held_closed` follows.
+ *
+ * The discount the invoice would have earned is worked out now and recorded, because it
+ * is not given later: every settlement strategy settles a discount at the payment of the
+ * invoice it came from (settlement/strategy.ts), and that payment is over. Recording the
+ * amount is what makes the loss visible — on the cashier's card at once and on the
+ * manager's screens — instead of silent.
+ *
+ * Returns the refusal to throw, carrying `held` and the amount. A hold that could not be
+ * written says `held: false`, and the till keeps the link itself.
+ */
+async function holdForActivation(
+  context: ScanContext,
+  request: ScanCardRequest,
+  occurredAt: Date,
+  refusal: AppError,
+): Promise<AppError> {
+  const refuse = (extra: Record<string, unknown>): AppError =>
+    new AppError(refusal.code, refusal.message, {
+      details: { ...((refusal.details as Record<string, unknown> | undefined) ?? {}), ...extra },
+    });
+  const branchId = context.branchId;
+  const invoiceId = request.invoiceId?.trim();
+  if (!branchId || !invoiceId) return refuse({ held: false });
+
+  try {
+    const token = request.barcodeToken.trim();
+    const lookup = await lookupCard(context.merchantId, token);
+    if (!lookup.ok) return refuse({ held: false });
+
+    const entityId = `${branchId}|${invoiceId}`;
+    const existing = await prisma.auditLog.findFirst({
+      where: { action: AUDIT_ACTIONS.SALE_HELD, entityId },
+      select: { afterJson: true },
+    });
+    if (existing) {
+      const recorded = JSON.parse(existing.afterJson ?? '{}') as { forgoneDiscount?: number | null };
+      return refuse({ held: true, invoiceId, forgoneDiscount: recorded.forgoneDiscount ?? null });
+    }
+
+    const [customer, pending] = await Promise.all([
+      prisma.customer.findFirst({
+        where: { id: lookup.customerId, merchantId: context.merchantId },
+        select: { id: true, name: true },
+      }),
+      findPendingInvoice(context.merchantId, branchId, { invoiceId }),
+    ]);
+    let forgoneDiscount: number | null = null;
+    if (pending) {
+      const [settings, rules] = await Promise.all([
+        ensureDiscountSettings(context.merchantId),
+        getActiveRules(context.merchantId),
+      ]);
+      forgoneDiscount = computeDiscount({
+        amountGross: pending.amountGross,
+        rules,
+        absoluteMaxDiscountValue: settings.absoluteMaxDiscountValue,
+        discountTypeSetting: settings.discountType as 'PERCENTAGE' | 'FIXED_AMOUNT' | 'NONE',
+      }).discountValue;
+    }
+
+    await recordAudit({
+      merchantId: context.merchantId,
+      actorUserId: context.userId,
+      action: AUDIT_ACTIONS.SALE_HELD,
+      entityType: 'held_sale',
+      entityId,
+      after: {
+        barcodeToken: token,
+        invoiceId,
+        branchId,
+        stationId: context.stationId ?? null,
+        userId: context.userId,
+        customerId: customer?.id ?? lookup.customerId,
+        customerName: customer?.name ?? null,
+        occurredAt: occurredAt.toISOString(),
+        amountGross: pending?.amountGross ?? null,
+        forgoneDiscount,
+      },
+    });
+    return refuse({ held: true, invoiceId, forgoneDiscount });
+  } catch {
+    return refuse({ held: false });
+  }
+}
+
 export async function scanCard(
   context: ScanContext,
   request: ScanCardRequest,
   options: ScanOptions = {},
 ): Promise<ScanCardResponse> {
   // A sale is one of the three things a read-only licence refuses — checked here, in
-  // the service, so the till's direct request and its offline replay meet it alike.
-  await assertCanRecord('SALE', { occurredAt: options.occurredAt });
+  // the service, so the till's direct request and its offline replay meet it alike. A
+  // refused sale is not dropped: it is kept here and applied on activation.
+  try {
+    await assertCanRecord('SALE', { occurredAt: options.occurredAt });
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'LICENSE_READ_ONLY') {
+      throw await holdForActivation(context, request, options.occurredAt ?? new Date(), error);
+    }
+    throw error;
+  }
 
   const issueDiscount = options.issueDiscount ?? true;
   const branchId = context.branchId;

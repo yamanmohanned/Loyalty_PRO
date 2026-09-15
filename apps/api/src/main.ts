@@ -21,6 +21,7 @@ import {
 import { supersedeUnusableDatabase } from './lib/supersede-database';
 import { clearStartupFailure } from './lib/startup-error';
 import { recordAppliedRestore } from './services/backup/restore.service';
+import { applyHeldSales } from './services/held-sale.service';
 import { initLicensing, startLicenseClock } from './services/license.service';
 import { startBackupScheduler } from './services/backup/schedule.service';
 import { startStorageSampler } from './services/storage.service';
@@ -226,7 +227,14 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
   // The licence: the device ID, the three clock anchors, the status. Before serving, so
   // the first request is already answered under it; its failures are sentences.
   await initLicensing(bootstrapLog);
-  const stopLicenseClock = startLicenseClock();
+  // Sales held while read-only are applied as soon as recording is allowed: now, if a
+  // licence arrived while the service was stopped, and on every beat of the clock after.
+  void applyHeldSales()
+    .then((result) => {
+      if (result.applied > 0 || result.closed > 0) bootstrapLog('held sales applied', { ...result });
+    })
+    .catch(() => undefined);
+  const stopLicenseClock = startLicenseClock(applyHeldSales);
 
   // Only now is there anything worth serving.
   const app = await buildApp();

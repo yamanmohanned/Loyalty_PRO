@@ -5,7 +5,7 @@ import {
   type SyncItemResult,
   type SyncOperation,
 } from '@walaa/shared-types';
-import { AppError } from '../lib/errors';
+import { AppError, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
 import { createCustomer } from './customer.service';
 import { ingestInvoice, type IngestionContext } from './ingestion.service';
 import { scanCard, type ScanContext } from './scan.service';
@@ -58,7 +58,9 @@ function classify(error: unknown): SyncItemResult['status'] {
     // not — a sale made while licensed is accepted by when it happened. A read-only
     // licence must never cost the merchant a sale; at worst it defers one.
     case 'LICENSE_READ_ONLY':
-      return 'FAILED';
+      // Kept on this PC and applied on activation (scan.service.ts, `holdForActivation`):
+      // the till may let it go. A hold that could not be written stays queued there.
+      return (error.details as { held?: boolean } | undefined)?.held ? 'HELD' : 'FAILED';
     default:
       return 'FAILED';
   }
@@ -154,7 +156,7 @@ export async function processSyncBatch(
         operationId: operation.operationId,
         status: classify(error),
         errorCode: appError?.code ?? 'INTERNAL_ERROR',
-        errorMessage: appError?.message ?? 'حدث خطأ غير متوقع',
+        errorMessage: appError?.message ?? UNEXPECTED_FAILURE_MESSAGE,
         entityId: null,
       });
     }

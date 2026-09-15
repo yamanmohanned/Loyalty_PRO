@@ -331,6 +331,16 @@ fn unlock_command(home: &Path, from_stdin: bool, device: &str, days: u32, note: 
     println!("Emergency code issued");
     println!("  device    {device}");
     println!("  works     until {} ({days} day{})", date(issued.valid_until), if days == 1 { "" } else { "s" });
+    // The chain is a calendar: it ends on a fixed day, whatever has been issued. Say so a
+    // year ahead, while there is time to ship builds that carry a new one (LICENSING.md §7).
+    let chain_end = chain.valid_until(chain.length);
+    let left = (chain_end - now) / 86_400;
+    if left < 365 {
+        println!(
+            "  WARNING   this key's emergency codes end on {} — {left} days from now. Make a new chain and ship it before then.",
+            date(chain_end)
+        );
+    }
     if file.kind == KeyKind::Development.as_str() {
         println!("  WARNING   from a DEVELOPMENT key — only development builds accept it");
     }

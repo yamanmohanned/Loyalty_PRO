@@ -714,18 +714,28 @@ has a way back with no visit and no internet:
 - **Emergency codes** (`crates/walaa-license/src/unlock.rs`): fifteen symbols read over the
   phone, from a hash chain derived from the private key; the program holds only the
   chain's public tip. They override every read-only state for 1–30 days, judged against
-  the latest recorded time (a wound-back clock cannot stretch them).
+  the latest recorded time (a wound-back clock cannot stretch them). Direction and replay
+  are proven by tests (LICENSING.md §7); the chain is a calendar of 7,301 end days, not a
+  stock of codes — issuing consumes nothing. A renewed chain must use a new secret label,
+  never the same secret under a later epoch.
 - **GRACE** (renamed from TRIAL_GRACE) follows every time-limited entitlement — trial or
   emergency window — for five days.
 - **Warnings escalate**: `notice` 14 days out (bell), `warning` 7 (top-bar chip),
   `urgent` 3 (red banner on every screen).
-- **A failing check fails to the last recorded status** (`installation_state.last_status*`):
-  a shop last seen licensed keeps trading; a copy last seen read-only stays read-only.
-  The service starts without the licensing module.
+- **A failing check falls back to the last status the module recorded, bounded**
+  (`installation_state.last_status*`; operator question, 2026-09-15): PERPETUAL keeps
+  trading until the module is back; TRIAL / EMERGENCY / GRACE until the earlier of its own
+  end and **7 days after the module last confirmed it**, time judged against the recorded
+  time, which the fallback keeps moving forward (a clock behind it refuses); anything else
+  is read-only. Deleting the module never adds a day, and no phone code can be entered
+  while it is out. The service starts without the licensing module.
 - **A queued sale is judged by when it happened** (the till's `queuedAt`, capped at now,
   up to 30 days back) OR by now; otherwise it stays queued. Never dropped.
-- **The till keeps a refused link**, pinned to its invoice, and it is credited on
-  activation; the cashier sees one sentence and carries on.
+- **The till keeps a refused link**, pinned to its invoice — at most **2,000 per till** —
+  and it is credited on activation **at the price paid, with no discount**: a discount the
+  register did not apply is never issued later. The manager screens show how many are
+  held and since when; they never expire. The cashier has one sentence for the customer:
+  «عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة — لكنها محفوظة على بطاقتك.»
 - **Tamper events are permanent**: audit trail plus an append-only `license-events.log`
   merged back after a restore, with the evidence (`cause`, uptime, phase, previous
   count) that separates a dead CMOS battery from a clock wound back.

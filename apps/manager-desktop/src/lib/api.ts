@@ -102,7 +102,8 @@ async function parse<T>(response: Response): Promise<T> {
   throw new ApiRequestError(
     response.status,
     envelope?.error?.code ?? 'INTERNAL_ERROR',
-    envelope?.error?.message ?? 'حدث خطأ غير متوقع',
+    envelope?.error?.message ??
+      'ردّ جهاز المدير بجواب لم يُفهم. تحقّق من النتيجة قبل إعادة العملية، وإن تكرّر ذلك فأعد تشغيل البرنامج.',
     envelope?.error?.fields,
     { requestId: envelope?.error?.requestId, details: envelope?.error?.details },
   );

@@ -65,6 +65,19 @@ export interface LicenseState {
    * last status recorded before it did. A shop that was licensed keeps trading.
    */
   degraded: boolean;
+  /**
+   * While `degraded`: when recording stops unless the program is reinstalled — the earlier
+   * of the recorded status's own end and a week after the module last confirmed it. NULL
+   * when nothing stops it (a perpetual licence) and when it has already stopped.
+   */
+  degradedUntil: string | null;
+  /**
+   * Sales refused because the licence is read-only and kept on this PC until activation:
+   * how many, from how many tills, when the oldest was made, and the discount they would
+   * have earned — which is not given later. NULL when none wait. Filled by the licence
+   * screens' requests only; the gate itself never computes it.
+   */
+  heldAtStations: { count: number; stations: number; oldest: string; forgoneDiscount: number } | null;
   features: string[];
   note: string | null;
 }

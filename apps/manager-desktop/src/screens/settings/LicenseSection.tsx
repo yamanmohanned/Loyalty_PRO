@@ -9,6 +9,7 @@ import type {
   LicenseOverview,
   LicenseState,
 } from '@walaa/shared-types';
+import { formatIqd } from '@walaa/shared-types';
 import { api, ApiRequestError } from '../../lib/api';
 import { formatDate, formatDateTime, locale } from '../../lib/locale';
 import { LICENSE_QUERY_KEY, licenseNotice, useLicense } from '../../components/LicenseBanner';
@@ -107,7 +108,7 @@ function StatusDetails({ state }: { state: LicenseState }) {
         <Chip tone={TONE[state.status]} dot>
           {t.status[state.status]}
         </Chip>
-        {state.degraded ? <Chip tone="warning">{t.degraded}</Chip> : null}
+        {state.degraded ? <Chip tone="danger">{t.degraded}</Chip> : null}
       </span>,
     ],
     [t.kindLabel, state.basis ? t.kind[state.basis] : state.kind ? t.kind[state.kind] : t.none],
@@ -121,6 +122,11 @@ function StatusDetails({ state }: { state: LicenseState }) {
     ],
   ];
   if (state.status === 'GRACE' && state.graceEndsAt) rows.push([t.graceEndsLabel, formatDate(state.graceEndsAt)]);
+  if (state.degraded && state.degradedUntil) rows.push([t.degradedUntilLabel, formatDate(state.degradedUntil)]);
+  if (state.heldAtStations) {
+    const held = state.heldAtStations;
+    rows.push([t.heldLabel, t.heldValue(held.count, held.stations, formatDate(held.oldest), formatIqd(held.forgoneDiscount))]);
+  }
   if (state.features.length > 0) {
     rows.push([t.featuresLabel, state.features.map((f) => t.feature[f] ?? f).join('، ')]);
   }

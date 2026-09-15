@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, AlertTriangle } from 'lucide-react';
-import type { LicenseState } from '@walaa/shared-types';
+import { formatIqd, type LicenseState } from '@walaa/shared-types';
 import { api } from '../lib/api';
 import { formatDate, locale } from '../lib/locale';
 import { onRealtimeConnect } from '../lib/realtime';
@@ -37,7 +37,9 @@ export function useLicense() {
     staleTime: 60_000,
     // A trial turns into grace, and grace into read-only, with nobody pressing anything.
     // A dashboard left open on a back-office monitor must notice within minutes.
-    refetchInterval: 10 * 60_000,
+    // While read-only, every minute: the count of held sales and the discount they lost
+    // should reach the manager as it happens, not ten minutes later.
+    refetchInterval: (query) => (query.state.data?.readOnly ? 60_000 : 10 * 60_000),
   });
 
   useEffect(
@@ -59,12 +61,34 @@ const date = (value: string | null): string => (value ? formatDate(value) : '—
 
 /** The banner's sentence: for every urgent or read-only state, and a failing check. */
 export function licenseNotice(state: LicenseState): LicenseNotice | null {
+  const notice = statusNotice(state);
+  // While read-only the tills hold what they cannot record: say how much waits, and since when.
+  if (notice && state.readOnly && state.heldAtStations) {
+    const held = locale.license.heldAtStations(
+      state.heldAtStations.count,
+      date(state.heldAtStations.oldest),
+      formatIqd(state.heldAtStations.forgoneDiscount),
+    );
+    return { ...notice, body: `${notice.body} ${held}` };
+  }
+  return notice;
+}
+
+function statusNotice(state: LicenseState): LicenseNotice | null {
   const t = locale.license;
+  // Always red: a gate running on its last record must be fixed, not lived with.
   if (state.degraded) {
+    const stopped = state.clockBehindMinutes
+      ? `${t.tamperedClockBody(t.minutes(state.clockBehindMinutes))} ${t.degradedStoppedBody}`
+      : t.degradedStoppedBody;
     return {
       title: t.degradedTitle,
-      body: state.readOnly ? `${t.degradedBody} ${t.readOnlyBody}` : t.degradedBody,
-      tone: state.readOnly ? 'danger' : 'amber',
+      body: state.readOnly
+        ? stopped
+        : state.degradedUntil
+          ? t.degradedUntilBody(date(state.degradedUntil))
+          : t.degradedBody,
+      tone: 'danger',
     };
   }
   switch (state.status) {

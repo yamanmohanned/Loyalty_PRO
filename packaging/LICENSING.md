@@ -213,6 +213,63 @@ that. **Nothing in the build, and nothing on the build machine, can make a code.
 | `EXPIRED` | انتهت مدة هذا الرمز في … — اطلب من المزوّد رمزاً جديداً. |
 | `MALFORMED` | رمز الطوارئ خمسة عشر حرفاً ورقماً في ثلاث مجموعات من خمسة… |
 
+### Hearing one code gives nothing later — proven
+
+Anyone who hears a code can take the shop's mixing off (it is a public function) and hash
+the link forward. **Forward is earlier:** the link for end day `d` hashes to the link for
+`d − 1`. So every code computable from a heard one **stops working on or before the day
+the heard one does**, and the next day's code is a preimage of today's — work only the
+key's holder avoids. The tests in `crates/walaa-license/src/unlock.rs`:
+
+| Test | What it shows |
+|---|---|
+| `everything_derivable_from_a_heard_code_stops_working_when_it_does` | A 30-day code hashed forward through every link to the tip: each result is a genuine code for an *earlier* day, refused as `EXPIRED` the moment the heard code ends; past the tip nothing is a code at all. |
+| `tomorrows_code_cannot_be_computed_from_todays` | `step(tomorrow) = today`, `step(today) ≠ tomorrow`, and 7,400 steps forward from today's code never meet tomorrow's. |
+| `a_later_end_day_is_always_further_from_the_tip` | Over sixty consecutive end days each code is the preimage of the one before, whatever the issue date and length. Reversing the chain's direction fails this test. |
+
+### A used code cannot be replayed
+
+A code's window is **fixed when it is issued** — through the end of a calendar day — and is
+not started by typing it. Entering it again changes nothing: there is nothing to consume
+or restart. Once its end and the five grace days are past it is refused as `EXPIRED`,
+judged against the latest time recorded in any of the three places (§12).
+`apps/api/src/__tests__/license-resilience.test.ts`, «a phone code whose window has passed»:
+
+| After the window has passed | Result |
+|---|---|
+| Typed again | refused `EXPIRED`; sales refused |
+| Program reinstalled with a new database — the uninstaller removes only the service and its firewall rule; `%PROGRAMDATA%\Walaa` and the registry value stay (`packaging/service-host/src/main.rs`, `uninstall`) | refused; the mirror file does not put the code back |
+| A backup taken while the code ran is restored, and the clock set back to match | refused — the registry and the data folder remember the later time |
+| The database moved to another PC, whose clock is set back | refused — the moved database carries the later time itself |
+| **Every** record rolled back together: a copy made during the window, on a PC with no registry value and no data folder, its clock set back into the window | **accepted** — until the code's own end plus grace *by that wrong clock*; then it cannot be wound back again |
+
+The last row is the one no offline check can refuse: with every record of time replaced by
+an earlier copy, the program is in exactly the state it was in when the code was typed.
+The test pins it so it cannot widen. Its cost to whoever does it: a manager PC whose date
+is wrong on every receipt and report, and — for each further window — restoring the same
+old copy again, discarding every sale and customer recorded since.
+
+### Capacity: a calendar of end days, not a stock of codes
+
+- The chain has **7,301 end days** (chain days 0–7,300), shared by every shop. Issuing
+  consumes nothing.
+- A code is fixed by **(shop, end day)**: a shop can have at most one distinct code per end
+  day — 7,301 over the chain's life — and every shop has its own.
+- **Several codes for one shop in one week** are several end days: each works on the day it
+  is read, the latest end governs, and the same end day twice is the same code
+  (`issuing_uses_nothing_up_one_code_per_shop_per_end_day`).
+- The chain's last end day is **7,299 days after `keygen`** — just under twenty years. For
+  the development key: made 2026-09-14, last end day 2046-09-08; a one-day code can be
+  issued until 2046-09-06, a thirty-day code until 2046-08-08.
+- **At the end** the issuer refuses — `that date is outside this key's unlock chain` — and
+  nothing changes at any shop: licence codes are signed and do not depend on the chain.
+  Only the phone path ends (`the_chain_runs_out_at_the_provider_not_at_the_shop`). From a
+  year before, `license-issuer unlock` prints the date it ends.
+- **Renewing** means a new tip compiled into a new build. The new chain must come from a
+  **new secret label** (`walaa-unlock-secret-v2|…`), never the same secret under a later
+  epoch: the same links under a later epoch would move every code ever read onto later
+  dates.
+
 ## 8. Statuses, warnings and what each does
 
 | Status | Meaning | Recording |
@@ -250,34 +307,85 @@ withheld.
 | A clock record lost | the other two outvote it; a disagreement is recorded | automatic |
 | The clock wrong (dead battery, mistake) | a perpetual licence ignores it; a trial is `TAMPERED` until corrected | fix the clock — it clears by itself — or an emergency code |
 | Windows reinstalled / system disk replaced | stored ID kept if the database survives or is restored | automatic; otherwise emergency code, then a new licence ([§3](#3-the-device-id--and-what-changes-it)) |
-| **The licensing module missing, or a bug in the check** | the gate uses **the last status it recorded**: a shop last seen licensed keeps trading, with an amber banner «تعذّر التحقق من الترخيص»; recorded as `license.check_failed` | reinstall when convenient; nothing stops meanwhile |
+| **The licensing module missing or corrupt, or a bug in the check** | the gate applies **the last status the module recorded**, bounded as below, with a red banner on every screen naming the day recording stops; recorded as `license.check_failed` | reinstall from the full installer — a phone code cannot be entered until then, because the module checks it |
 | A trial or emergency window ends | five days of `GRACE`, full operation, red banner | a licence or another emergency code |
 | A sale queued offline arrives after the licence lapsed | accepted — it happened while licensed ([§11](#11-the-offline-queue)) | automatic |
 
-The fallback in the second-last row is bounded both ways: a status last recorded as
-time-limited lasts only until it would have ended anyway, and a copy last recorded as
-read-only stays read-only — deleting the module is not a way to get a licence. The
-service **starts** without the module; it no longer refuses to.
+### What the last recorded status may authorise, and for how long
+
+Falling back buys time and says so loudly. It never grants more than the module would.
+
+| Last recorded by the module | While the module is out | For how long |
+|---|---|---|
+| `PERPETUAL` | recording | until the module is back. The clock is ignored, as the module ignores it for a perpetual licence: there is no end to stretch, and PERPETUAL is only ever recorded after the module verified a perpetual licence here |
+| `TRIAL`, `EMERGENCY`, `GRACE` | recording | until the **earlier** of its own recorded end (grace included) and **7 days after the module last confirmed it** (`last_status_at`, refreshed every ten minutes while the module works) |
+| `UNLICENSED`, `EXPIRED`, `TAMPERED`; a time-limited status with no recorded end; nothing | nothing | — |
+
+Time is judged as the module judges it: against the later of the clock and the latest
+recorded time (the database and the data-folder file — the registry value is the
+module's). A clock more than two hours behind that record refuses outright (shown as
+`TAMPERED`), and the fallback keeps moving the record forward, so time spent without the
+module still counts. It never writes the status it falls back on, so it cannot ratchet
+itself up. Removing the module adds no day to anything; for a long trial it takes days
+away.
+
+**Tested as an attacker would** — «the fallback, attacked» in `license-resilience.test.ts`.
+All seven failed against the previous fallback, which judged time by the system clock
+alone, so a deleted module plus a wound-back clock ran a trial indefinitely:
+
+| Attack | Result |
+|---|---|
+| Module deleted mid-trial, clock wound back to put off the end | refused, `TAMPERED` |
+| Module deleted, the trial runs out, clock wound back | refused |
+| Module deleted, an older database restored, the service restarted, clock wound back | refused — the data-folder record outvotes the database |
+| Module deleted with 60 trial days left | trades for 7 days, the banner naming the day; the module back → the trial, its days intact |
+| The recorded end removed from the database | refused |
+| Many sales while the module is out | the recorded status unchanged; the recorded time moved on |
+| Perpetual, module deleted, clock wound back 30 days | trades; red banner; no end date |
+
+The service **starts** without the module.
 
 ## 10. At the till
 
 When the manager PC's licence is read-only and the cashier scans a customer's card and
 invoice:
 
-- **What the cashier sees:** one amber card —
-  «لم تُحتسب هذه الفاتورة للزبون الآن» and underneath «حُفظت على هذه المحطة وستُحتسب له
-  تلقائياً عند تفعيل البرنامج على جهاز المدير — تابع خدمة الزبون كالمعتاد، ولا قسيمة خصم
-  لهذه الفاتورة.» — with the usual full-width «مسح للزبون التالي» bar (Escape works; it
-  clears itself after 90 seconds). Nothing is stuck and nothing needs retrying.
-- **What happens to that customer's invoice:** the invoice itself was already captured
-  from the register by the capture agent — capture is never refused — so it is in the
-  shop's records. What waits is only its link to the customer: it is kept in the till's
-  queue **pinned to that exact invoice number**, and sent on every sync. The moment the
-  program is activated (or an emergency code entered) the link is applied and the
-  customer's spend is credited. No discount slip is issued for that invoice later —
-  the customer has paid and left, exactly as for any scan made while offline.
-- **The header** says «N محفوظة بانتظار التفعيل» for the held links, and a strip under it
-  explains the read-only state before the first scan.
+- **What the cashier sees:** one amber card — «لم تُحتسب هذه الفاتورة للزبون الآن», then
+  «حُفظت على هذه المحطة، وتُضاف إلى سجل الزبون تلقائياً عند تفعيل البرنامج على جهاز
+  المدير. لا خصم على هذه الفاتورة، لا الآن ولا بعد التفعيل — تابع خدمة الزبون كالمعتاد.»,
+  then, set apart under «قل للزبون:», the sentence to say to him (below) — with the usual
+  full-width «مسح للزبون التالي» bar (Escape works; it clears itself after 90 seconds).
+  Nothing is stuck and nothing needs retrying.
+- **What the customer experiences:** he pays full price for this basket and **does not get
+  its discount — not now, and not after activation.** The discount is worked out from each
+  invoice at the moment of sale and applied on the register by the cashier; a link that
+  waits is credited later with `issueDiscount: false` (`scan.service.ts`, `ScanOptions`),
+  because a voucher issued after he has paid and left is a discount the drawer cannot
+  account for. What he keeps is the purchase on his card's history — lifetime totals are
+  for reporting (CLAUDE_UPDATE_4.md), not an input to any discount. What the cashier says:
+
+  > **«عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة — لكنها محفوظة على بطاقتك.»**
+
+  True whatever happens next; it promises no discount later, because there will be none.
+- **What happens to the invoice:** it was already captured from the register — capture is
+  never refused. What waits is its link to the customer, kept on the till **pinned to that
+  exact invoice number** and sent on every flush. On activation (or an emergency code) it
+  is credited at the price paid, with no discount and no voucher — tested: «held for the
+  licence, are counted on the manager screens until credited — in full, with no discount».
+- **The header** says «N محفوظة بانتظار التفعيل» — the whole queue, once the manager PC has
+  refused any of it for the licence — and a strip under it explains the read-only state
+  before the first scan.
+
+### Held sales have an end
+
+| Question | Answer |
+|---|---|
+| Do they accumulate without limit? | No. A till holds at most **2,000** (`HELD_CAP`, `apps/station/src/lib/queue.ts`) — about a week at a few hundred linked sales a day, and about 430,000 characters of browser storage. |
+| What happens at the cap? | A further refused link is **not** kept. The cashier gets a red card — «لم تُحتسب هذه الفاتورة ولم تُحفظ … أبلغ المدير الآن ليفعّل البرنامج أو يتصل بالمزوّد لرمز طوارئ» — and a sentence for the customer: «عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة، ولن تُسجَّل على بطاقتك.» The invoice itself stays captured. A browser that refuses the write gets the same honesty instead of a stuck screen. |
+| Are they visible? | At the till, the header count. On the manager PC, the red read-only banner on every screen adds «الفواتير المحفوظة على المحطات بانتظار التفعيل: N، أقدمها من …», and «الإعدادات ← الترخيص» shows «فواتير محفوظة على المحطات: N على محطة واحدة، أقدمها من …». Each till reports with every flush — every 30 seconds while it holds any — so after a service restart the figure is back within a minute; a till switched off keeps its last report. |
+| Can they expire past the 30-day window? | No. The 30 days decide only what can be credited **before** activation, judged by when it happened. After activation every held sale is credited whatever its age (tested: «is not judged by its own date when older than thirty days — it waits for activation instead»). Nothing on the till expires. |
+| Can they be lost? | Only with the till's storage: its browser data cleared, or the tablet reset or replaced, before activation. The manager screens will have shown the count, so such a loss is visible rather than silent. |
+| After activation | Held links go after everything else in each batch — they never block a sale that can be credited — and drain back to back rather than a hundred every thirty seconds. |
 - **Registering a new customer** is refused with «لا يمكن تسجيل زبون جديد الآن: … لم
   يُسجَّل شيء — أكمل البيع كالمعتاد، واحتفظ بالبطاقة لتسجيله لاحقاً.» The form stays
   filled. It is not queued: a registration binds a card and checks the phone number now.
@@ -381,9 +489,9 @@ an emergency code if the message cannot arrive in time.
 
 | Where | Run | Covers |
 |---|---|---|
-| `crates/walaa-license` | `cargo test` | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened |
+| `crates/walaa-license` | `cargo test` | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened; the chain's direction — nothing derivable from a heard code outlives it, tomorrow's is not computable from today's; capacity and the chain's end |
 | `tools/license-issuer` | `cargo test` | key sealing, payload rules, the log of licences and emergency codes |
-| `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @walaa/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore |
+| `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @walaa/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore; a used phone code after a reinstall, a restore and a move; the fallback attacked — clock wound back, an older database, a long trial, a missing end; held sales counted and credited in full |
 | `packaging` | `pnpm package:verify` | a clean production-mode install: unlicensed → refused in Arabic → activated → trades; then **the recovery drill**: licence destroyed (rows deleted, mirror overwritten) → read-only → emergency code typed as heard → trades with no restart → licensing module deleted → service starts and still trades |
 
 ## 18. What this does not protect against
@@ -392,8 +500,10 @@ Stated plainly, so nobody overestimates it — the bar is deterrence against cas
 
 - **The gate runs in the API's JavaScript bundle.** An administrator who edits
   `walaa-api.cjs` bypasses licensing.
-- **The last-status fallback is a database column.** Someone who deletes the licensing
-  module *and* edits that column to a working status gets a working shop.
+- **The fallback trusts database columns.** Someone who deletes the licensing module *and*
+  edits `last_status` to `PERPETUAL` gets a working shop; a time-limited status buys at
+  most the week `last_status_at` allows, which is a column too. The fallback does not
+  re-check signatures.
 - **Emergency codes are 64-bit.** Forging one means inverting a 64-bit hash, ~2⁶⁴ work —
   beyond casual, not beyond a determined attacker. The device mixing is a public
   function: someone technical who hears one shop's code could derive another shop's code
@@ -408,4 +518,5 @@ Stated plainly, so nobody overestimates it — the bar is deterrence against cas
   activation; an emergency code cannot. In that one combination the way back is the long
   code by message.
 - **The till's queue lives in the tablet's browser storage.** Clearing the browser's data
-  on the till loses links it was holding — offline or for activation.
+  on the till loses links it was holding — offline or for activation. The manager screens
+  show how many each till held, so the loss is visible.

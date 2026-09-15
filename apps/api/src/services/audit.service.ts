@@ -127,6 +127,16 @@ export const AUDIT_ACTIONS = {
   LICENSE_CHECK_FAILED: 'license.check_failed',
   /** A queued sale arrived while read-only and was accepted because it happened while licensed. */
   LICENSE_ACCEPTED_BY_OCCURRENCE: 'license.accepted_by_occurrence',
+  /**
+   * A sale refused because the licence is read-only, kept on this PC to be applied on
+   * activation, with the discount it would have earned (scan.service.ts,
+   * `holdForActivation`). It waits while no `sale.held_applied` or `sale.held_closed`
+   * with the same entity id follows it.
+   */
+  SALE_HELD: 'sale.held_for_activation',
+  SALE_HELD_APPLIED: 'sale.held_applied',
+  /** A held sale that cannot be applied — its invoice went to another customer, or the card was refused. */
+  SALE_HELD_CLOSED: 'sale.held_closed',
   /** A copy fetched, decrypted and checked beside the live database — nothing replaced. */
   BACKUP_RESTORE_STAGED: 'backup.restore_staged',
   /** The owner confirmed a staged restore; applied at the next start. */

@@ -68,7 +68,7 @@ export const formatTime = (
 ): string => new Date(value).toLocaleTimeString(DATE_LOCALE, options);
 
 export const locale = {
-  appName: 'Customer loyalty',
+  appName: 'ولاء',
   appTagline: 'إدارة المتجر',
 
   nav: {
@@ -149,8 +149,16 @@ export const locale = {
     emergencyTitle: (date: string) => `يعمل البرنامج برمز طوارئ حتى ${date}`,
     emergencyBody: 'رمز الطوارئ مؤقت. اطلب من المزوّد رمز التفعيل والصقه في «الإعدادات ← الترخيص» قبل ذلك التاريخ.',
     degradedTitle: 'تعذّر التحقق من الترخيص',
+    /** A perpetual licence: nothing stops, but nothing can be entered either. */
     degradedBody:
-      'البرنامج يعمل بآخر حالة ترخيص مسجّلة. هذه مشكلة في التثبيت وليست في بياناتك — أعد تشغيل جهاز المدير، وإن استمرت فأعد تثبيت البرنامج أو تواصل مع المزوّد.',
+      'وحدة التحقق من الترخيص لا تعمل على هذا الجهاز. الترخيص دائم فالتسجيل مستمر، لكن أعد تثبيت البرنامج من ملف التثبيت الكامل عند أول فرصة — لا يمكن إدخال رمز تفعيل ولا رمز طوارئ قبل ذلك. بياناتك لم تتأثر.',
+    /** A trial or an emergency window: at most a week, never past its own end. */
+    degradedUntilBody: (date: string) =>
+      `وحدة التحقق من الترخيص لا تعمل على هذا الجهاز. يستمر تسجيل المبيعات حتى ${date} فقط، ثم يتوقف إلى أن يُعاد تثبيت البرنامج. هذه مشكلة في التثبيت وليست في بياناتك — أعد تثبيت البرنامج من ملف التثبيت الكامل قبل ذلك التاريخ.`,
+    heldAtStations: (count: number, oldest: string, forgone: string) =>
+      `الفواتير المحفوظة على هذا الجهاز بانتظار التفعيل: ${count}، أقدمها من ${oldest}. تُحتسب لأصحابها تلقائياً عند التفعيل دون خصم، والخصم الذي لم يُطبَّق عليها ${forgone}.`,
+    degradedStoppedBody:
+      'توقف تسجيل المبيعات لأن وحدة التحقق من الترخيص لا تعمل، وآخر حالة سجّلتها لا تسمح به الآن. بياناتك كاملة ومتاحة. أعد تثبيت البرنامج من ملف التثبيت الكامل فيعود التسجيل بالترخيص المحفوظ — رمز الطوارئ لا يُقبل قبل إعادة التثبيت.',
     countdownEmergency: (days: string) => `تشغيل مؤقت — يبقى ${days}`,
     tamperedClockBody: (behind: string) =>
       `تاريخ هذا الجهاز ووقته متأخران عن آخر وقت سجّله البرنامج بنحو ${behind}. صحّح التاريخ والوقت في Windows — يعود التسجيل تلقائياً فور تصحيحهما، وبياناتك لم تتأثر.`,
@@ -308,7 +316,7 @@ export const locale = {
     none: 'لا يوجد',
     enabled: 'مفعّل',
     disabled: 'غير مفعّل',
-    error: 'حدث خطأ',
+    error: 'تعذّر إكمال العملية',
     /* Shown only when a screen's own request failed and the server gave no sentence of
        its own. It said «تحقّق من الاتصال بالخادم» — the guess `BackendGate` exists to
        stop making: by the time a screen is rendering, the backend was answering. Reopening
@@ -545,6 +553,18 @@ export const locale = {
         TAMPERED: 'موقوف',
       } as Record<string, string>,
       degraded: 'تعذّر التحقق — تُستعمل آخر حالة مسجّلة',
+      degradedUntilLabel: 'يتوقف التسجيل في',
+      heldLabel: 'فواتير بانتظار التفعيل',
+      heldValue: (count: number, stations: number, oldest: string, forgone: string) =>
+        `${count} على ${
+          stations === 1
+            ? 'محطة واحدة'
+            : stations === 2
+              ? 'محطتين'
+              : stations <= 10
+                ? `${stations} محطات`
+                : `${stations} محطة`
+        }، أقدمها من ${oldest} — خصم لم يُطبَّق: ${forgone}`,
       kindLabel: 'نوع الترخيص',
       kind: { trial: 'تجريبي', perpetual: 'دائم', emergency: 'رمز طوارئ' } as Record<string, string>,
       expiresLabel: 'ينتهي في',

@@ -8,6 +8,7 @@ import {
   type EnterUnlockRequest,
 } from '@walaa/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
+import { applyHeldSales, withHeldSummary } from '../services/held-sale.service';
 import {
   activateLicense,
   enterUnlock,
@@ -26,12 +27,13 @@ import {
 export async function licenseRoutes(app: FastifyInstance): Promise<void> {
   app.get('/', { config: { roles: STATION_ROLES } }, async (request) => {
     requireAuth(request);
-    return licenseState();
+    return withHeldSummary(await licenseState());
   });
 
   app.get('/activations', { config: { roles: DASHBOARD_ROLES } }, async (request) => {
     requireDashboardRole(request);
-    return licenseOverview();
+    const overview = await licenseOverview();
+    return { ...overview, state: await withHeldSummary(overview.state) };
   });
 
   app.post(
@@ -43,7 +45,10 @@ export async function licenseRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const auth = requireDashboardRole(request);
       const { code } = request.body as ActivateLicenseRequest;
-      return activateLicense({ merchantId: auth.merchantId, userId: auth.sub }, code);
+      const result = await activateLicense({ merchantId: auth.merchantId, userId: auth.sub }, code);
+      // Sales held while read-only are credited with the request that ends it.
+      await applyHeldSales();
+      return { ...result, state: await withHeldSummary(await licenseState()) };
     },
   );
 
@@ -60,7 +65,9 @@ export async function licenseRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const auth = requireDashboardRole(request);
       const { code } = request.body as EnterUnlockRequest;
-      return enterUnlock({ merchantId: auth.merchantId, userId: auth.sub }, code);
+      const result = await enterUnlock({ merchantId: auth.merchantId, userId: auth.sub }, code);
+      await applyHeldSales();
+      return { ...result, state: await withHeldSummary(await licenseState()) };
     },
   );
 

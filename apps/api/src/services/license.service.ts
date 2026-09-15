@@ -1,5 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  ftruncateSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import {
@@ -97,8 +110,16 @@ const DAY_MS = 86_400_000;
 const OCCURRENCE_WINDOW_DAYS = 30;
 /** A failing check is recorded at most this often — once is evidence, every request is noise. */
 const CHECK_FAILED_RECORD_INTERVAL_MS = 3600_000;
-/** Statuses in which the shop trades. */
-const WORKING: ReadonlySet<LicenseStatusName> = new Set(['TRIAL', 'EMERGENCY', 'GRACE', 'PERPETUAL']);
+const DAY_SECONDS = 86_400;
+/**
+ * How long the gate trusts a time-limited status it can no longer check: a week from the
+ * last time the module confirmed it. Time to reinstall — not a way to run out a trial.
+ */
+const FALLBACK_DAYS = 7;
+/** Working statuses that end. The fallback bounds each by its recorded end and `FALLBACK_DAYS`. */
+const TIME_LIMITED: ReadonlySet<LicenseStatusName> = new Set(['TRIAL', 'EMERGENCY', 'GRACE']);
+/** The data-folder clock file's first word (crates/walaa-license/src/anchors.rs). */
+const ANCHOR_HEADER = 'walaa-clock-v1';
 
 type Log = (message: string, extra?: Record<string, unknown>) => void;
 
@@ -655,6 +676,8 @@ function toState(result: NativeStatus, deviceId: string): LicenseState {
     clockBehindMinutes: result.clockBehindBy ? Math.ceil(result.clockBehindBy / 60) : null,
     storedLicenseInvalid: result.status === 'TAMPERED' && !license && result.invalidCodes > 0,
     degraded: false,
+    degradedUntil: null,
+    heldAtStations: null,
     // An emergency window over a destroyed licence keeps every feature: the shop's
     // Drive backups must not stop because its licence file did.
     features: license?.features ?? (basis === 'emergency' ? [...LICENSE_FEATURES] : []),
@@ -677,10 +700,12 @@ async function noteStoredCodes(result: NativeStatus): Promise<void> {
 }
 
 let rememberWrite: Promise<void> | null = null;
+let rememberedAt = 0;
 
 /**
- * The last status, kept for the moment the check itself fails. Written only when it
- * changes — and never on the sale's time.
+ * The last status, kept for the moment the check itself fails. Written when it changes,
+ * and every ten minutes while it holds: `lastStatusAt` is when the module last confirmed
+ * it, and the fallback trusts a time-limited status for a week from then, no longer.
  *
  * Claimed in memory before the write, so ten checks arriving together write once; and
  * not awaited, because this runs at the top of every scan. An awaited write here put
@@ -691,8 +716,9 @@ let rememberWrite: Promise<void> | null = null;
 function rememberStatus(state: LicenseState): void {
   const until = state.status === 'PERPETUAL' ? null : state.graceEndsAt;
   const key = `${state.status}|${until ?? ''}`;
-  if (key === rememberedStatus) return;
+  if (key === rememberedStatus && Date.now() - rememberedAt < TOUCH_INTERVAL_MS) return;
   rememberedStatus = key;
+  rememberedAt = Date.now();
   rememberWrite = prisma.installationState
     .update({
       where: { id: 1 },
@@ -701,6 +727,7 @@ function rememberStatus(state: LicenseState): void {
     .then(() => undefined)
     .catch(() => {
       rememberedStatus = null;
+      rememberedAt = 0;
     });
 }
 
@@ -724,48 +751,183 @@ async function evaluateNow(): Promise<LicenseState> {
   return state;
 }
 
+/* ── The fallback: when the check itself fails ─────────────────────────────── */
+
+/*
+  The clock record, without the module. Deleting the module must not also delete the
+  gate's sense of time — otherwise removing it and winding the clock back would stretch a
+  trial for ever. The database and the data-folder file are plain enough to read and
+  write from here; the registry value is the module's, and the fallback does without it.
+*/
+
+function readAnchorFileDirect(): number | null {
+  try {
+    const [header, value] = readFileSync(anchorFile(), 'utf8').trim().split(/\s+/);
+    if (header !== ANCHOR_HEADER || !value) return null;
+    const seconds = Number.parseInt(value, 10);
+    return Number.isSafeInteger(seconds) ? seconds : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAnchorFileDirect(value: number): void {
+  const path = anchorFile();
+  mkdirSync(dirname(path), { recursive: true });
+  // Opened in place, never created over: Windows refuses to create over a hidden file,
+  // and the module marks this one hidden (anchors.rs, `write_file`).
+  let fd: number;
+  try {
+    fd = openSync(path, 'r+');
+  } catch {
+    fd = openSync(path, 'w');
+  }
+  try {
+    ftruncateSync(fd, 0);
+    writeSync(fd, `${ANCHOR_HEADER} ${value}\n`, 0, 'utf8');
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+let lastFallbackTouchAt = 0;
+
 /**
- * When the check itself fails — the module is missing, the registry cannot be read, a
- * bug — the gate does not guess and does not stop. It uses the last status it recorded:
- * a shop last seen licensed keeps trading (until that status would have run out anyway),
- * a copy last seen read-only stays read-only. So deleting the licensing module is not a
- * way to get a licence, and a bug in it is not a way to lose one.
+ * Moves the recorded time forward while the module is out, as `touch` does while it is
+ * in: time spent without the module still counts. Never backward, and never while the
+ * clock is behind the record.
+ */
+async function touchWithoutModule(recorded: number | null): Promise<void> {
+  const now = nowSeconds();
+  if (recorded !== null && now <= recorded) return;
+  if (Date.now() - lastFallbackTouchAt < TOUCH_INTERVAL_MS) return;
+  lastFallbackTouchAt = Date.now();
+  if (installation) installation.latestSeen = Math.max(installation.latestSeen ?? 0, now);
+  const at = new Date(now * 1000);
+  await prisma.installationState
+    .updateMany({ where: { id: 1, OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: at } }] }, data: { lastSeenAt: at } })
+    .catch((error: unknown) => log('licence: the recorded time could not be moved on', { error: String(error) }));
+  try {
+    writeAnchorFileDirect(Math.max(now, readAnchorFileDirect() ?? 0));
+  } catch (error) {
+    log('licence: the file clock anchor could not be written without the module', { error: String(error) });
+  }
+}
+
+interface FallbackVerdict {
+  working: boolean;
+  /** When the fallback stops recording, for a time-limited status. */
+  until: number | null;
+  /** The status the screens show. */
+  shown: LicenseStatusName;
+}
+
+/**
+ * What the last status the module recorded may still authorise while it cannot check.
+ * Never more than the module itself would allow; often less.
+ *
+ *  - **PERPETUAL** — recording, until the module is back. The clock is ignored, as the
+ *    module ignores it for a perpetual licence: there is no end to stretch, and the only
+ *    way to have PERPETUAL recorded is for the module to have verified a perpetual
+ *    licence here.
+ *  - **TRIAL, EMERGENCY, GRACE** — recording until the EARLIER of the end the module
+ *    recorded (grace included) and `FALLBACK_DAYS` after it last confirmed the status;
+ *    judged by the later of the clock and the recorded time, and refused outright while
+ *    the clock sits behind that record. Removing the module never adds a day.
+ *  - **Anything else** — a read-only status, a time-limited one with no recorded end, or
+ *    no record at all — authorises nothing.
+ */
+function fallbackVerdict(
+  status: LicenseStatusName,
+  recordedEnd: number | null,
+  confirmedAt: number | null,
+  now: number,
+  recorded: number | null,
+  behind: number | null,
+): FallbackVerdict {
+  if (status === 'PERPETUAL') return { working: true, until: null, shown: 'PERPETUAL' };
+  if (!TIME_LIMITED.has(status)) return { working: false, until: null, shown: status };
+  if (recordedEnd === null || confirmedAt === null) return { working: false, until: null, shown: 'EXPIRED' };
+  const until = Math.min(recordedEnd, confirmedAt + FALLBACK_DAYS * DAY_SECONDS);
+  if (behind !== null) return { working: false, until, shown: 'TAMPERED' };
+  return Math.max(now, recorded ?? now) < until
+    ? { working: true, until, shown: status }
+    : { working: false, until, shown: 'EXPIRED' };
+}
+
+const toSeconds = (value: Date | null | undefined): number | null =>
+  value ? Math.floor(value.getTime() / 1000) : null;
+
+/**
+ * When the check itself fails — the module is missing or corrupt, a bug — the gate does
+ * not guess and does not stop. It applies `fallbackVerdict` to the last status the module
+ * recorded: a paid shop keeps trading, a running trial or emergency window gets at most a
+ * week and never past its own end, a read-only copy stays read-only. Every screen says
+ * so in red. Deleting the module is not a way to get a licence, and a bug in it is not a
+ * way to lose one.
  */
 async function degradedState(error: unknown): Promise<LicenseState> {
   await rememberWrite;
   const last = await prisma.installationState.findUnique({ where: { id: 1 } }).catch(() => null);
   const status = (last?.lastStatus ?? 'UNLICENSED') as LicenseStatusName;
-  const until = last?.lastStatusUntil ?? null;
-  const working = WORKING.has(status) && (!until || until.getTime() > Date.now());
+  const now = nowSeconds();
+
+  // The latest time recorded anywhere this can read without the module.
+  const readings = [toSeconds(last?.lastSeenAt), readAnchorFileDirect(), installation?.latestSeen ?? null].filter(
+    (value): value is number => value !== null,
+  );
+  const recorded = readings.length > 0 ? Math.max(...readings) : null;
+  const behind = recorded !== null && now + TOLERANCE_SECONDS < recorded ? recorded - now : null;
+
+  const verdict = fallbackVerdict(
+    status,
+    toSeconds(last?.lastStatusUntil),
+    toSeconds(last?.lastStatusAt),
+    now,
+    recorded,
+    behind,
+  );
+  if (behind === null) await touchWithoutModule(recorded);
 
   if (Date.now() - lastCheckFailedRecordedAt > CHECK_FAILED_RECORD_INTERVAL_MS) {
     lastCheckFailedRecordedAt = Date.now();
-    log('licence: the check failed; the last recorded status is used', { error: String(error), status, working });
+    log('licence: the check failed; the last recorded status is used', {
+      error: String(error),
+      status,
+      working: verdict.working,
+    });
     await recordEvent(AUDIT_ACTIONS.LICENSE_CHECK_FAILED, {
       error: String(error).slice(0, 300),
       lastStatus: status,
       lastStatusAt: last?.lastStatusAt?.toISOString() ?? null,
-      trading: working,
+      trading: verdict.working,
+      tradingUntil: iso(verdict.until),
+      clockBehindMinutes: behind ? Math.ceil(behind / 60) : null,
     }).catch(() => undefined);
   }
 
+  const recordedEnd = iso(toSeconds(last?.lastStatusUntil));
   return {
-    status: working ? status : WORKING.has(status) ? 'EXPIRED' : status,
-    readOnly: !working,
+    status: verdict.shown,
+    readOnly: !verdict.working,
     deviceId: last?.deviceId ?? installation?.deviceId ?? '—',
     kind: null,
     basis: null,
     licenseId: null,
     issuedAt: null,
-    expiresAt: until?.toISOString() ?? null,
-    graceEndsAt: until?.toISOString() ?? null,
-    daysLeft: null,
+    expiresAt: recordedEnd,
+    graceEndsAt: recordedEnd,
+    daysLeft:
+      verdict.working && verdict.until !== null ? Math.max(0, Math.ceil((verdict.until - now) / DAY_SECONDS)) : null,
     warning: 'urgent',
     emergencyUntil: null,
-    clockBehindMinutes: null,
+    clockBehindMinutes: behind ? Math.ceil(behind / 60) : null,
     storedLicenseInvalid: false,
     degraded: true,
-    features: working ? [...LICENSE_FEATURES] : [],
+    degradedUntil: verdict.working ? iso(verdict.until) : null,
+    heldAtStations: null,
+    features: verdict.working ? [...LICENSE_FEATURES] : [],
     note: null,
   };
 }
@@ -789,11 +951,18 @@ const EMERGENCY_HINT = 'وإن تعذّر ذلك الآن، فاتصل بالم�
 
 /** The sentence a refused sale, registration or redemption carries. */
 export function readOnlyMessage(state: LicenseState): string {
+  // No emergency-code hint here: a phone code is checked by the module, so it cannot be
+  // entered until the program is reinstalled.
+  if (state.degraded && state.clockBehindMinutes) {
+    return (
+      `لم تُسجَّل العملية: وحدة التحقق من الترخيص لا تعمل على جهاز المدير، وتاريخه ووقته متأخران عن آخر وقت سجّله البرنامج بنحو ${humanDelay(state.clockBehindMinutes)}. ` +
+      'صحّح التاريخ والوقت في Windows، ثم أعد تثبيت البرنامج من ملف التثبيت الكامل. البيانات سليمة.'
+    );
+  }
   if (state.degraded) {
     return (
-      'لم تُسجَّل العملية: تعذّر التحقق من الترخيص على جهاز المدير، وآخر حالة مسجّلة لا تسمح بالتسجيل. ' +
-      'البيانات سليمة. أعد تشغيل جهاز المدير، ' +
-      EMERGENCY_HINT
+      'لم تُسجَّل العملية: وحدة التحقق من الترخيص لا تعمل على جهاز المدير، وآخر حالة سجّلتها لا تسمح بالتسجيل الآن. ' +
+      'البيانات سليمة. أعد تثبيت البرنامج على جهاز المدير من ملف التثبيت الكامل — يُقرأ الترخيص المحفوظ بعدها كما هو.'
     );
   }
   switch (state.status) {
@@ -1159,10 +1328,15 @@ export async function initLicensing(bootLog: Log): Promise<LicenseState> {
   return state;
 }
 
-/** Keeps the recorded time moving while the service runs. Returns the stop function. */
-export function startLicenseClock(): () => void {
+/**
+ * Keeps the recorded time moving while the service runs, and runs `onTick` on the same
+ * beat (the held-sales pass — injected, because that service imports this one). Returns
+ * the stop function.
+ */
+export function startLicenseClock(onTick?: () => Promise<unknown>): () => void {
   const timer = setInterval(() => {
     void touch(true).catch((error: unknown) => log('licence: clock anchor refresh failed', { error: String(error) }));
+    if (onTick) void onTick().catch((error: unknown) => log('licence: a periodic task failed', { error: String(error) }));
   }, TOUCH_INTERVAL_MS);
   timer.unref?.();
   return () => clearInterval(timer);
@@ -1177,7 +1351,9 @@ export function reloadLicensingForTests(): void {
   lastTouchAt = 0;
   reportedInvalidCodes = false;
   rememberedStatus = null;
+  rememberedAt = 0;
   rememberWrite = null;
+  lastFallbackTouchAt = 0;
   checks = 0;
   lastWallMs = Date.now();
   lastMonoMs = performance.now();

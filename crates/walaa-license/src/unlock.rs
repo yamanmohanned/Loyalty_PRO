@@ -369,6 +369,140 @@ mod tests {
         assert!(issue(&SECRET, &mismatched, DEVICE, NOW, 7).is_err());
     }
 
+    /// The chain link inside a code, with the shop's mixing taken off. The mixing is a
+    /// public function, so this is exactly what anyone who hears a code can compute.
+    fn link_of(code: &str, device: &str) -> u64 {
+        decode(code).unwrap() ^ bind(device)
+    }
+
+    fn code_of(link: u64, device: &str) -> String {
+        encode(link ^ bind(device))
+    }
+
+    #[test]
+    fn everything_derivable_from_a_heard_code_stops_working_when_it_does() {
+        // The most a provider can read out: thirty days.
+        let heard = issue(&SECRET, &chain(), DEVICE, NOW, 30).unwrap();
+        let mut x = link_of(&heard.code, DEVICE);
+        // Hash forward from it as far as the chain goes — every link to the tip.
+        for k in 1..=heard.day {
+            x = step(x);
+            let derived = read(&code_of(x, DEVICE), DEVICE, &chain()).unwrap();
+            // Each is a genuine code, and each is for an EARLIER day…
+            assert_eq!(derived.day, heard.day - k);
+            assert!(derived.valid_until < heard.valid_until);
+            // …so none of them works a second after the heard code stops.
+            assert_eq!(
+                verify(&code_of(x, DEVICE), DEVICE, &chain(), heard.valid_until),
+                Err(UnlockError::Expired { valid_until: derived.valid_until })
+            );
+        }
+        assert_eq!(x, chain().tip);
+        // Past the tip the chain is over: nothing further is a code at all.
+        for _ in 0..10 {
+            x = step(x);
+            assert_eq!(read(&code_of(x, DEVICE), DEVICE, &chain()), Err(UnlockError::NotValid));
+        }
+    }
+
+    #[test]
+    fn tomorrows_code_cannot_be_computed_from_todays() {
+        let today = issue(&SECRET, &chain(), DEVICE, NOW, 7).unwrap();
+        let tomorrow = issue(&SECRET, &chain(), DEVICE, NOW + DAY, 7).unwrap();
+        assert_eq!(tomorrow.day, today.day + 1);
+        let (t, n) = (link_of(&today.code, DEVICE), link_of(&tomorrow.code, DEVICE));
+
+        // The direction: tomorrow's link hashes to today's, never the other way.
+        assert_eq!(step(n), t);
+        assert_ne!(step(t), n);
+        // Walking forward from today's code — the whole chain and beyond — never meets
+        // tomorrow's. Reaching it means finding a preimage of today's link under
+        // SHA-256 cut to 64 bits: only the key's holder avoids that work.
+        let mut x = t;
+        for _ in 0..CHAIN_LENGTH + 100 {
+            x = step(x);
+            assert_ne!(x, n);
+        }
+    }
+
+    #[test]
+    fn a_later_end_day_is_always_further_from_the_tip() {
+        // Pins the direction for every future change: over sixty consecutive end days, a
+        // code ending one day later is the preimage of the code ending one day earlier.
+        // Flip `value` and this fails.
+        let links: Vec<(i64, u64)> = (0..60)
+            .map(|offset| {
+                let issued = issue(&SECRET, &chain(), DEVICE, NOW + offset * DAY, 1).unwrap();
+                (issued.valid_until, link_of(&issued.code, DEVICE))
+            })
+            .collect();
+        for pair in links.windows(2) {
+            assert_eq!(pair[1].0 - pair[0].0, DAY);
+            assert_eq!(step(pair[1].1), pair[0].1);
+        }
+        // The link is chosen by the end day alone, whatever the issue date and length:
+        // every (date, length) the issuer allows lands on the same ordered line.
+        for days in [2, 7, 13, MAX_DAYS] {
+            let issued = issue(&SECRET, &chain(), DEVICE, NOW + 10 * DAY - i64::from(days) * DAY, days).unwrap();
+            let one_day = issue(&SECRET, &chain(), DEVICE, NOW + 9 * DAY, 1).unwrap();
+            assert_eq!(issued.valid_until, one_day.valid_until);
+            assert_eq!(link_of(&issued.code, DEVICE), link_of(&one_day.code, DEVICE));
+        }
+    }
+
+    #[test]
+    fn issuing_uses_nothing_up_one_code_per_shop_per_end_day() {
+        // Six codes for one shop in one week. Each end day is its own code; every one
+        // works on the day it is read; none consumes anything.
+        let week = [(0, 1), (0, 7), (1, 3), (2, 30), (4, 7), (6, 2)];
+        let mut codes = std::collections::BTreeSet::new();
+        for (offset, days) in week {
+            let at = NOW + offset * DAY;
+            let issued = issue(&SECRET, &chain(), DEVICE, at, days).unwrap();
+            assert!(verify(&issued.code, DEVICE, &chain(), at).is_ok());
+            codes.insert(issued.code);
+        }
+        assert_eq!(codes.len(), week.len());
+        // The same end day twice is the same code: reading it again is reading it again.
+        assert_eq!(
+            issue(&SECRET, &chain(), DEVICE, NOW, 7).unwrap().code,
+            issue(&SECRET, &chain(), DEVICE, NOW + 3 * DAY, 4).unwrap().code
+        );
+        // A thousand shops on one day: one chain link, a thousand different codes, each
+        // working only in its own shop.
+        let link = link_of(&issue(&SECRET, &chain(), DEVICE, NOW, 7).unwrap().code, DEVICE);
+        let shops: Vec<String> = (0..1000).map(|i| format!("WL-{i:04}-TEST")).collect();
+        let codes: std::collections::BTreeSet<String> = shops.iter().map(|shop| code_of(link, shop)).collect();
+        assert_eq!(codes.len(), shops.len());
+        for shop in shops.iter().take(20) {
+            let issued = issue(&SECRET, &chain(), shop, NOW, 7).unwrap();
+            assert_eq!(issued.code, code_of(link, shop));
+            assert!(verify(&issued.code, shop, &chain(), NOW).is_ok());
+            assert_eq!(read(&issued.code, DEVICE, &chain()), Err(UnlockError::NotValid));
+        }
+    }
+
+    #[test]
+    fn the_chain_runs_out_at_the_provider_not_at_the_shop() {
+        let c = chain();
+        // 7,301 end days: chain days 0 to 7,300 inclusive.
+        let first_end = c.valid_until(0);
+        let last_end = c.valid_until(c.length);
+        assert_eq!((last_end - first_end) / DAY + 1, i64::from(CHAIN_LENGTH) + 1);
+
+        // The last one-day code is issued two days before the chain's last end day.
+        let last_issue_day = last_end / DAY - 2;
+        let last = issue(&SECRET, &c, DEVICE, last_issue_day * DAY, 1).unwrap();
+        assert_eq!((last.day, last.valid_until), (c.length, last_end));
+        assert!(verify(&last.code, DEVICE, &c, last_issue_day * DAY).is_ok());
+        // One day later the issuer refuses, and says why; the shop sees nothing.
+        let refused = issue(&SECRET, &c, DEVICE, (last_issue_day + 1) * DAY, 1).unwrap_err();
+        assert!(refused.contains("outside this key's unlock chain"), "{refused}");
+        // A thirty-day code stops being issuable twenty-nine days earlier.
+        assert!(issue(&SECRET, &c, DEVICE, (last_issue_day - 29) * DAY, 30).is_ok());
+        assert!(issue(&SECRET, &c, DEVICE, (last_issue_day - 28) * DAY, 30).is_err());
+    }
+
     #[test]
     fn a_one_day_code_on_the_keys_first_day_is_inside_the_chain() {
         let created = Chain::new(&SECRET, NOW / DAY - EPOCH_LEAD_DAYS, CHAIN_LENGTH);

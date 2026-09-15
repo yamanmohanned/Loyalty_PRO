@@ -48,6 +48,8 @@ export class ApiRequestError extends Error {
     readonly code: string,
     message: string,
     readonly fields?: Array<{ path: string; message: string }>,
+    /** The envelope's `details` — e.g. whether a refused sale is held on the manager PC. */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -91,8 +93,10 @@ async function parse<T>(response: Response): Promise<T> {
   throw new ApiRequestError(
     response.status,
     envelope?.error?.code ?? 'INTERNAL_ERROR',
-    envelope?.error?.message ?? 'حدث خطأ غير متوقّع',
+    envelope?.error?.message ??
+      'ردّ جهاز المدير بجواب لم يُفهم. تحقّق من النتيجة قبل إعادة العملية، وإن تكرّر ذلك فأعد تحميل هذه الصفحة وأبلغ المدير.',
     envelope?.error?.fields,
+    envelope?.error?.details,
   );
 }
 
