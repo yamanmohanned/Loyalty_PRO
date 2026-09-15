@@ -579,7 +579,12 @@ async function recoveryDrill() {
     third.proc.kill();
     return;
   }
-  const other = phoneCodeFor('WL-2222-2222').code;
+  // With the production key the provider supplies this machine's code in the environment,
+  // and `phoneCodeFor` would hand back that same code for any device — accepted, because it
+  // IS this machine's. Another shop's code has to be issued for another shop.
+  const other = process.env.WALAA_VERIFY_UNLOCK_CODE
+    ? (process.env.WALAA_VERIFY_OTHER_UNLOCK_CODE ?? null)
+    : phoneCodeFor('WL-2222-2222').code;
   const wrongShop = other ? await api('POST', '/license/unlock', { code: other }, owner) : { status: 0, json: null };
   check(
     wrongShop.status === 422 && wrongShop.json?.error?.details?.reason === 'NOT_VALID',

@@ -731,10 +731,14 @@ has a way back with no visit and no internet:
   while it is out. The service starts without the licensing module.
 - **A queued sale is judged by when it happened** (the till's `queuedAt`, capped at now,
   up to 30 days back) OR by now; otherwise it stays queued. Never dropped.
-- **The till keeps a refused link**, pinned to its invoice — at most **2,000 per till** —
-  and it is credited on activation **at the price paid, with no discount**: a discount the
-  register did not apply is never issued later. The manager screens show how many are
-  held and since when; they never expire. The cashier has one sentence for the customer:
+- **A refused sale is held on the manager PC** (operator decision, 2026-09-15), not on the
+  till: the server that refused it records it (`sale.held_for_activation`, append-only)
+  and applies it itself after activation, a phone code, at start-up and every ten
+  minutes — **at the price paid, with no discount**. v4 does not allow a later credit:
+  every strategy settles a discount at the payment of its own invoice. The loss is shown
+  instead — the forgone amount on the cashier's card and, totalled, on the manager's
+  screens. A till restart, reboot or cleared browser loses nothing; the till keeps a copy
+  (cap 2,000) only if the server could not. The cashier's sentence for the customer:
   «عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة — لكنها محفوظة على بطاقتك.»
 - **Tamper events are permanent**: audit trail plus an append-only `license-events.log`
   merged back after a restore, with the evidence (`cause`, uptime, phase, previous

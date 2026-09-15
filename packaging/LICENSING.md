@@ -357,35 +357,43 @@ invoice:
   full-width «مسح للزبون التالي» bar (Escape works; it clears itself after 90 seconds).
   Nothing is stuck and nothing needs retrying.
 - **What the customer experiences:** he pays full price for this basket and **does not get
-  its discount — not now, and not after activation.** The discount is worked out from each
-  invoice at the moment of sale and applied on the register by the cashier; a link that
-  waits is credited later with `issueDiscount: false` (`scan.service.ts`, `ScanOptions`),
-  because a voucher issued after he has paid and left is a discount the drawer cannot
-  account for. What he keeps is the purchase on his card's history — lifetime totals are
-  for reporting (CLAUDE_UPDATE_4.md), not an input to any discount. What the cashier says:
+  its discount — not now, and not after activation.** This is a decision, recorded:
+  crediting it later is not something v4 allows. Every settlement strategy settles a
+  discount *at the payment of the invoice it came from* — "a cashier must never collect
+  less cash than the POS recorded without a corresponding voucher record"
+  (`settlement/strategy.ts`) — and that payment is over. A voucher issued at activation
+  would be a discount with no payment to settle it against. So the loss is **made visible
+  instead of silent, at the moment it happens**: the server works out the discount the
+  invoice would have earned and records it with the hold; the cashier's card says «الخصم
+  الذي كانت هذه الفاتورة تستحقه: X د.ع — لن يُطبَّق»; the dashboard's red banner and
+  licence screen show the total forgone, refreshed every minute while read-only. What he
+  keeps is the purchase on his card's history. What the cashier says:
 
   > **«عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة — لكنها محفوظة على بطاقتك.»**
 
   True whatever happens next; it promises no discount later, because there will be none.
 - **What happens to the invoice:** it was already captured from the register — capture is
-  never refused. What waits is its link to the customer, kept on the till **pinned to that
-  exact invoice number** and sent on every flush. On activation (or an emergency code) it
-  is credited at the price paid, with no discount and no voucher — tested: «held for the
-  licence, are counted on the manager screens until credited — in full, with no discount».
-- **The header** says «N محفوظة بانتظار التفعيل» — the whole queue, once the manager PC has
-  refused any of it for the licence — and a strip under it explains the read-only state
-  before the first scan.
+  never refused. What waits is its link to the customer, and it is **kept on the manager
+  PC**, by the server that refused it (it answered, so it could write it down): an
+  append-only `sale.held_for_activation` event carrying the card, the invoice number, the
+  till, when it happened and the discount forgone (`scan.service.ts`,
+  `holdForActivation`). The server applies it itself (`held-sale.service.ts`) — after a
+  licence is activated or a phone code entered, at start-up, and every ten minutes — at
+  the price paid, with no discount and no voucher. Nothing on the tablet is needed.
+- **The strip** under the till's header explains the read-only state before the first scan
+  and says how many sales the manager PC holds.
 
 ### Held sales have an end
 
 | Question | Answer |
 |---|---|
-| Do they accumulate without limit? | No. A till holds at most **2,000** (`HELD_CAP`, `apps/station/src/lib/queue.ts`) — about a week at a few hundred linked sales a day, and about 430,000 characters of browser storage. |
-| What happens at the cap? | A further refused link is **not** kept. The cashier gets a red card — «لم تُحتسب هذه الفاتورة ولم تُحفظ … أبلغ المدير الآن ليفعّل البرنامج أو يتصل بالمزوّد لرمز طوارئ» — and a sentence for the customer: «عذراً، نظام الخصومات متوقف اليوم، فلا خصم على هذه الفاتورة، ولن تُسجَّل على بطاقتك.» The invoice itself stays captured. A browser that refuses the write gets the same honesty instead of a stuck screen. |
-| Are they visible? | At the till, the header count. On the manager PC, the red read-only banner on every screen adds «الفواتير المحفوظة على المحطات بانتظار التفعيل: N، أقدمها من …», and «الإعدادات ← الترخيص» shows «فواتير محفوظة على المحطات: N على محطة واحدة، أقدمها من …». Each till reports with every flush — every 30 seconds while it holds any — so after a service restart the figure is back within a minute; a till switched off keeps its last report. |
-| Can they expire past the 30-day window? | No. The 30 days decide only what can be credited **before** activation, judged by when it happened. After activation every held sale is credited whatever its age (tested: «is not judged by its own date when older than thirty days — it waits for activation instead»). Nothing on the till expires. |
-| Can they be lost? | Only with the till's storage: its browser data cleared, or the tablet reset or replaced, before activation. The manager screens will have shown the count, so such a loss is visible rather than silent. |
-| After activation | Held links go after everything else in each batch — they never block a sale that can be credited — and drain back to back rather than a hundred every thirty seconds. |
+| Where are they? | In the manager PC's database. A till restart, a reboot or a cleared browser on the tablet cannot lose them — tested: «refused at the till for the licence, is kept on the manager PC — the till can be wiped — and credited on activation without the discount it would have had». A queued sale refused on replay is answered `HELD` and the till lets it go. |
+| Do they accumulate without limit? | They accumulate in the database for as long as the shop stays read-only; each is a few hundred bytes. The till keeps a copy only if the server could not write one, and at most **2,000** (`HELD_CAP`). |
+| Can the cap discard a sale silently? | No. The cap applies only to that fallback copy. A refusal past it gets a red card — «لم تُحتسب هذه الفاتورة ولم تُحفظ … أبلغ المدير الآن» — and its own sentence for the customer; a browser that refuses the write is said aloud too. |
+| Are they visible? | The cashier's card at once, with the discount forgone. The till's strip. On the manager PC, the red read-only banner on every screen — «الفواتير المحفوظة على هذا الجهاز بانتظار التفعيل: N، أقدمها من …، والخصم الذي لم يُطبَّق عليها X» — and «الإعدادات ← الترخيص» «فواتير بانتظار التفعيل». |
+| Can they expire past the 30-day window? | No. The 30 days decide only what can be credited **before** activation, judged by when it happened. After activation every held sale is credited whatever its age. |
+| What if its invoice went to someone else meanwhile, or the card was voided? | It is closed (`sale.held_closed`, with the reason), never applied twice. |
+| Can they be lost? | Only with the manager PC's database — the same as every other sale; the backups cover them. |
 - **Registering a new customer** is refused with «لا يمكن تسجيل زبون جديد الآن: … لم
   يُسجَّل شيء — أكمل البيع كالمعتاد، واحتفظ بالبطاقة لتسجيله لاحقاً.» The form stays
   filled. It is not queued: a registration binds a card and checks the phone number now.

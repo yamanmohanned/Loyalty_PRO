@@ -105,7 +105,20 @@ Take the SHA-256 and put it wherever you record releases:
 Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.2.3 (signed, current):** `ولاء_0.2.3_x64-setup.exe`, 33,700,381 bytes ·
+**0.3.0 (signed, current — the handover build):** `ولاء_0.3.0_x64-setup.exe`, 33,877,004 bytes ·
+`68AE613ECC0C9A2CB677227F55769174359D6C5F3001F7C43C36A345D75EB12B` — offline licensing
+with the provider's **production** key (fingerprint `FCA66207230B90CA`, confirmed by
+`verify-license-key.mjs`; emergency codes until 2046-09-09), bounded fail-open, sales held
+on the manager PC. Built from `84f20cc` by `pnpm version:check && pnpm package:build &&
+pnpm package:verify && pnpm package:installer`, all exit 0; `package:verify` ran with
+`WALAA_VERIFY_LICENSE_CODE`, `WALAA_VERIFY_UNLOCK_CODE` and `WALAA_VERIFY_OTHER_UNLOCK_CODE`
+issued for the build machine (`WL-34V4-WZNE`) and a non-existent shop. `verify-signing
+--post` confirmed the `.sig` (420 bytes,
+`8527AE1DCA2224C51CADA82C97B9E44ECB0F5E8DD4E9FFD5FC168F333D05B386`) is by key
+`BE2E4C7B42C8D100`. **Adds two migrations — never publish it to the update feed for 0.2.x
+shops (§7); install in person.** Not Authenticode-signed: SmartScreen will warn.
+
+**0.2.3 (signed, superseded):** `ولاء_0.2.3_x64-setup.exe`, 33,700,381 bytes ·
 `2656D60856CDBAC5C4453E72426FF996C6436F3F8A9778E0AC9C9600C25D49D1` — failed screens say
 what failed and why; the restore test runs from its own card and records passes and
 failures; restoring a chosen copy (local, USB, Google Drive) from the Backup screen;

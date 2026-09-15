@@ -1,9 +1,9 @@
 {
   "file": "walaa-template.db",
   "bytes": 364544,
-  "sha256": "cb497505fdd566f3e52910b754eafbc265a3cd65c0d1c3d0ddf240e05ad55839",
+  "sha256": "fbcae7c7756fe391998d39fe5431ee1b523534933907eb3b9cfccf2d17b051c4",
   "productVersion": "0.3.0",
-  "installationId": "d71ce178-da43-4ed3-a7b2-6d8f757f047e",
+  "installationId": "447be820-8f21-4146-bbb2-42633582e4b2",
   "schemaHash": "2d3a854bb6a10b738b32567cb01aa9151fa4422cb1597460bfbe1325e05f714f",
   "migrationsFingerprint": "3d93269f4b3225cf18bc3eb2dbc6e2575494ec7f81a9afde0ee7808b6feef713",
   "migrations": [
@@ -17,5 +17,5 @@
     "20260914090000_offline_licensing",
     "20260915090000_licensing_resilience"
   ],
-  "builtAt": "2026-09-14T22:49:33.622Z"
+  "builtAt": "2026-09-15T08:28:16.360Z"
 }
