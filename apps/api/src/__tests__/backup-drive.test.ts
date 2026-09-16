@@ -416,6 +416,27 @@ describe('the consent flow', () => {
     expect(((await exchanged.json()) as { error: string }).error).toBe('invalid_grant');
   });
 
+  it('hands back the attempt already waiting instead of opening another listener', async () => {
+    // «ربط حساب Google» pressed again — the tab was closed, or never appeared — must
+    // reopen the same page. A second listener would leave the first page pointing at a
+    // port nobody listens on, and every press would open one more.
+    const first = await beginConnect({ merchantId: world.merchantId, actorUserId: null });
+    const again = await beginConnect({ merchantId: world.merchantId, actorUserId: null });
+    expect(again.authUrl).toBe(first.authUrl);
+    expect(again.redirectUri).toBe(first.redirectUri);
+
+    // The first page still completes.
+    const authorised = await fetch(again.authUrl, { redirect: 'manual' });
+    await fetch(authorised.headers.get('location')!);
+    expect(connectProgress().state).toBe('CONNECTED');
+
+    // Once that attempt is over, a press starts a new one.
+    const next = await beginConnect({ merchantId: world.merchantId, actorUserId: null });
+    expect(new URL(next.authUrl).searchParams.get('state')).not.toBe(
+      new URL(first.authUrl).searchParams.get('state'),
+    );
+  });
+
   it('refuses a callback whose state does not match', async () => {
     const start = await beginConnect({ merchantId: world.merchantId, actorUserId: null });
     const response = await fetch(`${start.redirectUri}/?code=stolen&state=wrong`);

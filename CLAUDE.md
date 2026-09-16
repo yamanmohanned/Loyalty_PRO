@@ -752,3 +752,33 @@ because gating restore would strand a merchant replacing a dead PC.
 edits that bundle bypasses it; the signature, device and clock checks raise the cost of
 cheating, they do not make it impossible. `pnpm package:installer` refuses a build that
 embeds the development key (`verify-license-key.mjs`).
+
+### 13.11 A rate limit counts attempts at its operation, never refusals before it
+*(recorded 2026-09-17, 0.3.1; found when «ربط حساب Google» answered «عدد كبير من المحاولات»)*
+
+The limiter runs in `preHandler` (`app.ts`), after authentication, the role check and
+validation. A route's cheap preconditions — no backup key yet, a backup already running,
+nothing staged — are declared as that route's own `preHandler`, which Fastify runs before
+the limiter's (the plugin appends its hook). So a refused press spends nothing, and a
+wrong password still counts. `rate-limit-attempts.test.ts` pins it and fails against the
+old `onRequest` hook. The 429 sentence names the wait in minutes.
+
+`POST /backup/drive/connect` has no limit of its own: `beginConnect` hands back the
+attempt already waiting (same listener, same URL) instead of opening another, so presses
+cannot multiply listeners. The consent page opens through the shell's opener plugin
+(`lib/external.ts`); `window.open` returns null in the packaged WebView and does nothing.
+
+### 13.12 The issuer's password is normalised on every way in; renewal is its own command
+*(recorded 2026-09-17, 0.3.1; the password failed twice for encoding reasons)*
+
+`tools/license-issuer/src/password.rs` decodes UTF-8/UTF-16 and strips a BOM anywhere and
+whitespace, line endings and invisible marks at either end — at `keygen` and at every use,
+from the prompt, `--password-stdin` or `--password-file`. A key sealed behind a U+FEFF
+before 2026-09-15 still opens. Windows PowerShell 5.1 turns non-ASCII into `?` in a pipe;
+nothing can undo that, so the documented commands use `--password-file`.
+
+`issue` is a device's first licence and refuses a device already licensed in the log;
+`renew --days N` adds to the end of its latest trial (or to today, if ended),
+`renew --perpetual` upgrades; note and features carry forward. `check` opens the key and
+writes nothing. The default key folder is whichever of `%USERPROFILE%\.walaa-issuer` and
+`%APPDATA%\walaa-license-issuer` holds a key.

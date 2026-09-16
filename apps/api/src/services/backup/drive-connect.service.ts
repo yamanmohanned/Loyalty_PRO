@@ -58,11 +58,19 @@ const CONSENT_TIMEOUT_MS = 10 * 60 * 1000;
 /** The folder created in the merchant's Drive, so archives do not litter the root. */
 const FOLDER_NAME = 'Walaa Backups';
 
+/**
+ * A waiting attempt with at least this long left is handed back rather than replaced —
+ * long enough to sign in on the page it opens.
+ */
+const REUSE_MIN_REMAINING_MS = 3 * 60 * 1000;
+
 interface Pending {
   server: Server;
   state: string;
   verifier: string;
   redirectUri: string;
+  authUrl: string;
+  clientId: string;
   expiresAt: number;
   timer: NodeJS.Timeout;
   merchantId: string;
@@ -119,15 +127,32 @@ function resultPage(ok: boolean): string {
 /**
  * Starts a consent attempt and returns the URL a person must open.
  *
- * Any previous attempt is cancelled first — two listeners would mean two ports and a
- * `state` that matches only one of them, and the merchant who clicked twice would be
- * told the second attempt failed for a reason that makes no sense to him.
+ * **An attempt already waiting is handed back, not replaced.** Pressing «ربط حساب Google»
+ * again — because the browser tab was closed, or never appeared — must reopen the same
+ * page, not open a second listener: two listeners would mean two ports and a `state` that
+ * matches only one of them, and the merchant who clicked twice would be told the first
+ * page failed for a reason that makes no sense to him. It also means no number of presses
+ * opens more than one listener. A new attempt is made only when none is waiting, when the
+ * one waiting is about to expire, or when the OAuth client was changed since it began.
  */
 export async function beginConnect(input: {
   merchantId: string;
   actorUserId: string | null;
 }): Promise<DriveConnectStart> {
   const { clientId, endpoints } = requireClient();
+
+  if (
+    pending &&
+    outcome.state === 'WAITING' &&
+    pending.clientId === clientId &&
+    pending.expiresAt - Date.now() > REUSE_MIN_REMAINING_MS
+  ) {
+    return {
+      authUrl: pending.authUrl,
+      redirectUri: pending.redirectUri,
+      expiresAt: new Date(pending.expiresAt).toISOString(),
+    };
+  }
 
   closePending();
 
@@ -155,21 +180,10 @@ export async function beginConnect(input: {
   // for a consent nobody is going to complete.
   timer.unref?.();
 
-  pending = {
-    server,
-    state,
-    verifier,
-    redirectUri: `http://127.0.0.1:${port}`,
-    expiresAt,
-    timer,
-    merchantId: input.merchantId,
-    actorUserId: input.actorUserId,
-  };
-  outcome = { state: 'WAITING', failure: null };
-
+  const redirectUri = `http://127.0.0.1:${port}`;
   const authUrl = new URL(`${endpoints.accountsBase}/o/oauth2/v2/auth`);
   authUrl.searchParams.set('client_id', clientId);
-  authUrl.searchParams.set('redirect_uri', pending.redirectUri);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', DRIVE_SCOPE);
   // `offline` is what makes Google issue a refresh token at all; `consent` forces the
@@ -183,9 +197,23 @@ export async function beginConnect(input: {
   authUrl.searchParams.set('code_challenge', challenge);
   authUrl.searchParams.set('code_challenge_method', 'S256');
 
-  return {
+  pending = {
+    server,
+    state,
+    verifier,
+    redirectUri,
     authUrl: authUrl.toString(),
-    redirectUri: pending.redirectUri,
+    clientId,
+    expiresAt,
+    timer,
+    merchantId: input.merchantId,
+    actorUserId: input.actorUserId,
+  };
+  outcome = { state: 'WAITING', failure: null };
+
+  return {
+    authUrl: pending.authUrl,
+    redirectUri,
     expiresAt: new Date(expiresAt).toISOString(),
   };
 }

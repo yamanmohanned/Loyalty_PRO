@@ -44,9 +44,19 @@ export interface FormErrorState {
   fields: FieldErrors;
   /** One sentence for the panel above the button. Never a generic one. */
   summary: string | null;
+  /**
+   * What the last action achieved, when it succeeded.
+   *
+   * Held HERE, beside the failure, rather than in a `notice` state of each screen's own:
+   * two independent states were how a green «تم» and a red refusal from a later press
+   * came to sit on one card together, each true once and contradicting the other. One
+   * holder means an outcome replaces the previous one, and `<FormOutcome>` can only ever
+   * show one of them.
+   */
+  success: string | null;
 }
 
-const EMPTY: FormErrorState = { fields: {}, summary: null };
+const EMPTY: FormErrorState = { fields: {}, summary: null, success: null };
 
 /**
  * Turns anything a submit can throw into fields plus a sentence.
@@ -62,7 +72,7 @@ export function toFormErrors(caught: unknown): FormErrorState {
       // reports both for one empty value, and the second is noise.
       if (!(entry.path in fields)) fields[entry.path] = entry.message;
     }
-    return { fields, summary: caught.message };
+    return { fields, summary: caught.message, success: null };
   }
 
   /*
@@ -71,7 +81,7 @@ export function toFormErrors(caught: unknown): FormErrorState {
     one sentence in the product that means "this is not your fault".
   */
   console.error('[form] submit failed', caught);
-  return { fields: {}, summary: locale.common.errorBody };
+  return { fields: {}, summary: locale.common.errorBody, success: null };
 }
 
 /**
@@ -158,7 +168,7 @@ export function useFormErrors() {
         fields[path] = issue.message;
         issues.push({ path, message: issue.message });
       }
-      reject({ fields, summary: summarizeFieldErrors(issues) });
+      reject({ fields, summary: summarizeFieldErrors(issues), success: null });
       return null;
     },
     [reject],
@@ -181,12 +191,12 @@ export function useFormErrors() {
       if (!(path in current.fields)) return current;
       const next = { ...current.fields };
       delete next[path];
-      return { fields: next, summary: Object.keys(next).length > 0 ? current.summary : null };
+      return { ...current, fields: next, summary: Object.keys(next).length > 0 ? current.summary : null };
     });
   }, []);
 
   const rejectField = useCallback(
-    (path: string, message: string) => reject({ fields: { [path]: message }, summary: message }),
+    (path: string, message: string) => reject({ fields: { [path]: message }, summary: message, success: null }),
     [reject],
   );
 
@@ -198,7 +208,13 @@ export function useFormErrors() {
    * defect dressed as a usability improvement.
    */
   const rejectForm = useCallback(
-    (message: string) => setState({ fields: {}, summary: message }),
+    (message: string) => setState({ fields: {}, summary: message, success: null }),
+    [],
+  );
+
+  /** The action worked: its sentence replaces whatever the last outcome was. */
+  const succeed = useCallback(
+    (message: string) => setState({ fields: {}, summary: null, success: message }),
     [],
   );
 
@@ -206,11 +222,13 @@ export function useFormErrors() {
     ref,
     fields: state.fields,
     summary: state.summary,
+    success: state.success,
     clear,
     fail,
     validate,
     rejectField,
     rejectForm,
+    succeed,
     clearField,
   };
 }

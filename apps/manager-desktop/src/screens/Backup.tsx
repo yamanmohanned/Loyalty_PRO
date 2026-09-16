@@ -70,13 +70,24 @@ export function BackupScreen() {
     void queryClient.invalidateQueries({ queryKey: ['backup'] });
   };
 
+  /*
+    Each action resets the other on start, so the screen never carries the refusal of an
+    earlier press beside the result of a later one.
+  */
   const run = useMutation({
-    mutationFn: () => api.post<unknown>('/backup/run'),
+    mutationFn: () =>
+      api.post<{ ok: boolean; destinations: Array<{ kind: string; ok: boolean }> }>('/backup/run'),
+    onMutate: (): void => {
+      verify.reset();
+    },
     onSettled: invalidate,
   });
 
   const verify = useMutation({
     mutationFn: () => api.post<VerificationResult>('/backup/verify'),
+    onMutate: (): void => {
+      run.reset();
+    },
     onSettled: invalidate,
   });
 
@@ -173,8 +184,12 @@ export function BackupScreen() {
               ) : null}
             </div>
             {run.error ? (
-              <div className="px-6 pb-6">
+              <div className="px-6 pb-6" role="alert">
                 <Notice tone="danger">{failureSentence(run.error)}</Notice>
+              </div>
+            ) : run.data ? (
+              <div className="px-6 pb-6" role="status">
+                <RunOutcome run={run.data} />
               </div>
             ) : null}
           </Card>
@@ -318,6 +333,18 @@ export function BackupScreen() {
   );
 }
 
+/** What «أخذ نسخة الآن» achieved, named by destination. */
+function RunOutcome({ run }: { run: { ok: boolean; destinations: Array<{ kind: string; ok: boolean }> } }) {
+  const name = (kind: string) => locale.backup.destinationShort[kind] ?? kind;
+  const landed = run.destinations.filter((d) => d.ok).map((d) => name(d.kind));
+  const missed = run.destinations.filter((d) => !d.ok).map((d) => name(d.kind));
+  if (!run.ok || landed.length === 0) return <Notice tone="danger">{locale.backup.runNowhere}</Notice>;
+  if (missed.length > 0) {
+    return <Notice tone="warning">{locale.backup.runPartial(landed.join('، '), missed.join('، '))}</Notice>;
+  }
+  return <Notice tone="accent">{locale.backup.runDone(landed.join('، '))}</Notice>;
+}
+
 /* ── Restoring a copy ──────────────────────────────────────────────────────── */
 
 /** How long to wait for the service to come back before reloading anyway. */
@@ -370,6 +397,10 @@ function RestoreCard({ data, onChanged }: { data: BackupOverview; onChanged: () 
   const stage = useMutation({
     mutationFn: (input: { kind: string; id: string; key?: string }) =>
       api.post<StagedRestore>('/backup/restore/stage', input),
+    onMutate: () => {
+      apply.reset();
+      cancel.reset();
+    },
     onSuccess: () => {
       setNeedsKey(null);
       setTypedKey('');
@@ -394,11 +425,19 @@ function RestoreCard({ data, onChanged }: { data: BackupOverview; onChanged: () 
 
   const cancel = useMutation({
     mutationFn: () => api.delete('/backup/restore/stage'),
+    onMutate: () => {
+      stage.reset();
+      apply.reset();
+    },
     onSettled: onChanged,
   });
 
   const apply = useMutation({
     mutationFn: () => api.post<{ restarting: boolean }>('/backup/restore/apply', { confirm: true }),
+    onMutate: () => {
+      stage.reset();
+      cancel.reset();
+    },
     onSuccess: ({ restarting }) => {
       if (restarting) {
         setPhase('restarting');
@@ -441,9 +480,13 @@ function RestoreCard({ data, onChanged }: { data: BackupOverview; onChanged: () 
             onCancel={() => cancel.mutate()}
           />
         ) : null}
-        {apply.error ? <Notice tone="danger">{failureSentence(apply.error)}</Notice> : null}
-
-        {stage.error ? <Notice tone="danger">{failureSentence(stage.error)}</Notice> : null}
+        {/* One failure at a time — each action clears the others' on start. «إلغاء» failing
+            used to say nothing at all. */}
+        {apply.error ?? stage.error ?? cancel.error ? (
+          <div role="alert">
+            <Notice tone="danger">{failureSentence(apply.error ?? stage.error ?? cancel.error)}</Notice>
+          </div>
+        ) : null}
 
         {needsKey && !staged ? (
           <div className="space-y-3 rounded-md border border-border p-4">

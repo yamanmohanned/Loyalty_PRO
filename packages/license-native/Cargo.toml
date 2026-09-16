@@ -1,6 +1,6 @@
 [package]
 name = "walaa-license-node"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 publish = false
 description = "The API's native licensing module: device ID, code verification, status and clock anchors, in Rust."

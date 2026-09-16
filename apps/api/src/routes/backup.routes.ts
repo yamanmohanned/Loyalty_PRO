@@ -1,16 +1,24 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { DASHBOARD_ROLES } from '@walaa/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import {
+  assertBackupsEnabled,
+  assertKeyExists,
   confirmKey,
   ensureKeyGenerated,
   keyStatus,
   revealKey,
 } from '../services/backup/key-ceremony.service';
-import { listBackups, runBackup, verifyRestore } from '../services/backup/backup.service';
+import {
+  assertNoBackupRunning,
+  listBackups,
+  runBackup,
+  verifyRestore,
+} from '../services/backup/backup.service';
 import { recentBackupHistory } from '../services/backup/history.service';
 import {
+  assertRestoreStaged,
   cancelStagedRestore,
   requestApply,
   restoreStatus,
@@ -36,8 +44,22 @@ import { scheduleStatus } from '../services/backup/schedule.service';
  * against the real one, so an unlimited endpoint is an oracle; reveal hands out the
  * secret itself. Neither is called more than a handful of times in the life of an
  * installation, so a tight limit costs nothing real.
+ *
+ * **A limit counts attempts at the operation, never refusals before it.** The limiter
+ * runs in `preHandler` (app.ts), after authentication and validation, and each route's
+ * cheap preconditions — no key yet, a backup already running, nothing staged — are its
+ * own `preHandler`, which runs before the limiter's. A person who presses a button too
+ * early is told why and loses nothing; before, «نسخ احتياطي الآن» pressed six times
+ * before the key ceremony locked the real backup out for an hour.
  */
 export async function backupRoutes(app: FastifyInstance): Promise<void> {
+  /** The refusals that mean a backup would not start. */
+  const backupCanStart = async (request: FastifyRequest): Promise<void> => {
+    const auth = requireDashboardRole(request);
+    await assertBackupsEnabled(auth.merchantId);
+    assertNoBackupRunning();
+  };
+
   /* ── The ceremony ───────────────────────────────────────────────────────── */
 
   app.get('/key', { config: { roles: DASHBOARD_ROLES } }, async (request) => {
@@ -66,6 +88,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     {
       // OWNER only, and audited on every call.
       config: { roles: ['OWNER'], rateLimit: { max: 10, timeWindow: '1 hour' } },
+      preHandler: async () => assertKeyExists(),
     },
     async (request) => {
       const auth = requireDashboardRole(request);
@@ -83,6 +106,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     '/key/confirm',
     {
       config: { roles: DASHBOARD_ROLES, rateLimit: { max: 10, timeWindow: '1 hour' } },
+      preHandler: async () => assertKeyExists(),
       schema: {
         body: z
           .object({
@@ -128,11 +152,16 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
    * Takes a backup now.
    *
    * Slow by nature — it copies the whole database, encrypts it and pushes it to every
-   * destination — so the rate limit is about not stacking them, not about abuse.
+   * destination. The lock already stops two stacking; the limit bounds how many archives
+   * an hour can write. Twenty rather than six: «ارفع نسخة الآن» on the Drive panel runs
+   * this too, and an owner fixing a Drive setting retries it.
    */
   app.post(
     '/run',
-    { config: { roles: DASHBOARD_ROLES, rateLimit: { max: 6, timeWindow: '1 hour' } } },
+    {
+      config: { roles: DASHBOARD_ROLES, rateLimit: { max: 20, timeWindow: '1 hour' } },
+      preHandler: backupCanStart,
+    },
     async (request) => {
       const auth = requireDashboardRole(request);
       return runBackup({ merchantId: auth.merchantId, actorUserId: auth.sub });
@@ -142,7 +171,10 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
   /** The monthly restore test of §7.3, as one call (§12.17). */
   app.post(
     '/verify',
-    { config: { roles: DASHBOARD_ROLES, rateLimit: { max: 6, timeWindow: '1 hour' } } },
+    {
+      config: { roles: DASHBOARD_ROLES, rateLimit: { max: 6, timeWindow: '1 hour' } },
+      preHandler: backupCanStart,
+    },
     async (request) => {
       const auth = requireDashboardRole(request);
       return verifyRestore({ merchantId: auth.merchantId, actorUserId: auth.sub });
@@ -191,6 +223,7 @@ export async function backupRoutes(app: FastifyInstance): Promise<void> {
     '/restore/apply',
     {
       config: { roles: ['OWNER'], rateLimit: { max: 6, timeWindow: '1 hour' } },
+      preHandler: async () => assertRestoreStaged(),
       schema: { body: z.object({ confirm: z.literal(true) }).strict() },
     },
     async (request, reply) => {

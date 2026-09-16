@@ -1,6 +1,6 @@
 {
   "name": "@walaa/manager-desktop",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Walaa manager desktop app — Tauri 2 + Vite + React, RTL Arabic.",

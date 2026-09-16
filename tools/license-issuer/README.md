@@ -41,7 +41,9 @@ cargo build --release
 ```
 
 The program is `tools/license-issuer/target/release/license-issuer.exe`. The examples
-below call it `license-issuer`.
+below call it `license-issuer` for readability; it is not on `PATH`. **The exact commands to
+type, verified in a fresh PowerShell window, are in [`packaging/ON-SITE-CARD.md`](../../packaging/ON-SITE-CARD.md)**
+and `packaging/LICENSING.md` §5.
 
 ## Where it keeps things
 
@@ -52,8 +54,24 @@ One folder, called the **home**:
 | `issuer-key.json` | The private key, encrypted with your password. **The irreplaceable file.** |
 | `issued.db` | A log (SQLite) of every code issued: licence ID, device, type, dates, features, note, the code itself. |
 
-Default home: `%APPDATA%\walaa-license-issuer`. Override with `--home <folder>` or the
-`WALAA_ISSUER_HOME` environment variable.
+Home: `--home <folder>`, else `WALAA_ISSUER_HOME`, else whichever of
+`%USERPROFILE%\.walaa-issuer` and `%APPDATA%\walaa-license-issuer` holds `issuer-key.json`
+(`keygen` with neither creates the first). When no key is found the error names both folders.
+
+## The password
+
+Asked for at a prompt by default. `--password-file <file>` reads it from a file and
+`--password-stdin` from standard input. Every way in is normalised the same way, at `keygen`
+and at every later use (`src/password.rs`): UTF-8 or UTF-16, a byte-order mark anywhere, and
+whitespace, line endings and invisible direction marks at either end are removed; spaces inside
+are kept. No wrapper is ever needed. A key sealed before 2026-09-15 behind an invisible U+FEFF
+still opens with the plain password.
+
+The one thing no program can repair: **Windows PowerShell 5.1 sends a pipe as ASCII**, so any
+non-English character piped in arrives as `?`. Use `--password-file` or the prompt.
+
+`license-issuer check` opens the key and says so — nothing issued, nothing written. Run it
+before leaving for a shop.
 
 ## Generating the key pair — once
 
@@ -106,18 +124,21 @@ like `WL-7K3M-9QXP`. Every `issue` asks for the key's password once.
 
 | You want | Command |
 |---|---|
-| A 14-day trial | `license-issuer issue --device WL-7K3M-9QXP --days 14` |
-| 5 more days on top of the device's latest trial | `license-issuer issue --device WL-7K3M-9QXP --days 5 --extend` |
-| A permanent licence (one-time payment received) | `license-issuer issue --device WL-7K3M-9QXP --perpetual` |
-| Only some features | add `--feat drive_backup` (comma-separated; default `drive_backup,multi_device`) |
-| The store's name inside the code | add `--note "سوبرماركت النور"` (up to 120 characters) |
+| A new shop PC's first licence: a 14-day trial | `license-issuer issue --device WL-7K3M-9QXP --days 14 --note "سوبرماركت النور"` |
+| A new shop PC that has already paid | `license-issuer issue --device WL-7K3M-9QXP --perpetual --note "سوبرماركت النور"` |
+| 30 more days for a PC that already has a licence | `license-issuer renew --device WL-7K3M-9QXP --days 30` |
+| The shop paid: make its licence permanent | `license-issuer renew --device WL-7K3M-9QXP --perpetual` |
+| Only some features | add `--feat drive_backup` (comma-separated; default `drive_backup,multi_device`; `renew` keeps the previous licence's) |
 
-- `--days` is 1 to 3650. Without `--extend` a trial runs from **now**; with it, from the
-  device's latest trial expiry in your log (or now, if that has already passed).
-- The trial length is entirely yours: the application has no built-in trial and no
-  default length. A new installation is unlicensed until it is given a code.
-- A perpetual code makes any trial irrelevant. The application refuses a trial code on
-  a device that already holds a perpetual licence.
+- `issue` is a device's **first** licence: it refuses a device that already has one in your
+  log, because `--days` counts from today and could end before the licence the shop holds.
+- `renew --days N` adds N days to the **end** of the device's latest trial in your log, or to
+  today if that has ended; note and features carry forward. It refuses a device with no licence
+  in the log (that is `issue`) and one already perpetual.
+- The merchant pastes a renewal exactly like the first code. Nothing is done to the old one: the
+  program keeps every code and runs on the perpetual one, else the trial that ends last.
+- `--days` is 1 to 3650. The trial length is entirely yours: the application has no built-in
+  trial and no default length.
 
 Real output (the password came from `--password-stdin`; you will see a prompt instead):
 
@@ -139,18 +160,23 @@ ZV9iYWNrdXAiLCJtdWx0aV9kZXZpY2UiXSwibm90ZSI6Itiz2YjYqNix2YXY
 p9ix2YPYqiDYp9mE2YbZiNixIn0.O36rm0WdBqUYDyQkWyaOhGRZt-GLH2sk
 PDBT8Cv65IQ40lkhZrCx3egled1r94Vdzj3l6HxzfQgwCDSwRz8WDQ
 
-$ license-issuer issue --device WL-7K3M-9QXP --days 5 --extend
-Licence issued
+$ license-issuer renew --device WL-7K3M-9QXP --days 30
+Licence renewed
   device    WL-7K3M-9QXP
-  type      trial (extension) — until 2026-10-03 04:54 UTC
+  was       trial — until 2026-09-28 04:54 UTC (still running)
+  now       trial — until 2026-10-28 04:54 UTC (the days were added to the end of the current licence)
   …
 
-$ license-issuer issue --device WL-7K3M-9QXP --perpetual --note "سوبرماركت النور"
-Licence issued
+$ license-issuer renew --device WL-7K3M-9QXP --perpetual
+Licence renewed
   device    WL-7K3M-9QXP
-  type      perpetual — never expires
+  was       trial — until 2026-10-28 04:54 UTC (still running)
+  now       perpetual — never expires
   …
 ```
+
+(The `renew` output above is from the 2026-09-17 run on the real key for a test device, with the
+device number and dates of this example substituted.)
 
 Send the whole block of code lines by WhatsApp, e-mail or SMS. The merchant pastes it
 as it arrives; line breaks, spaces and the invisible direction marks some message apps
@@ -245,7 +271,7 @@ again — it is in the log.
 Do this right after `keygen`, and again whenever you want the log (`issued.db`) backed up
 too.
 
-1. **Copy the whole home folder** (`%APPDATA%\walaa-license-issuer`, or your `--home`) to
+1. **Copy the whole home folder** (`%USERPROFILE%\.walaa-issuer`, or your `--home`) to
    **two** places that are not this computer — for example two USB sticks kept in
    different buildings, or one USB stick and an encrypted cloud folder. The key file is
    encrypted, so a copy on its own gives nobody the power to sign.
@@ -260,8 +286,8 @@ too.
    ```
 
 If only `issued.db` is lost, nothing is lost that matters for signing: you can still
-issue every kind of code. `--extend` then counts from today for that device, and `list`
-starts empty.
+issue every kind of code. `list` starts empty, so a device that already had a licence gets its
+next one with `issue` (counted from today) — `renew` needs the log.
 
 ## The development key (not for shops)
 
@@ -277,5 +303,7 @@ cd tools/license-issuer && cargo test
 ```
 
 Covers key sealing (a wrong password fails, a damaged file fails, the stored public key
-must match), building payloads (`--extend`, day limits, unknown features refused) and the
-log.
+must match, a key sealed behind a BOM opens), the password normaliser (every shape a shell
+delivers), building payloads (renewal of a running and an ended trial, perpetual, day limits,
+unknown features refused, `issue` and `renew` refusing each other's case), the log, and — in
+`tests/cli.rs` — the built program with the password delivered by file and by pipe.

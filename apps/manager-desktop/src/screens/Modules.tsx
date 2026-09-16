@@ -2,6 +2,7 @@ import { Boxes } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { FeatureFlagKey } from '@walaa/shared-types';
 import { api } from '../lib/api';
+import { failureSentence } from '../lib/failure';
 import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, cn, ErrorState, Notice, PageHeader, SkeletonTable } from '../components/ui';
 
@@ -101,6 +102,12 @@ export function ModulesScreen() {
             })}
           </ul>
         )}
+        {/* A switch that did not switch used to snap back without a word. */}
+        {toggle.error ? (
+          <div className="px-6 pb-6" role="alert">
+            <Notice tone="danger">{failureSentence(toggle.error)}</Notice>
+          </div>
+        ) : null}
       </Card>
 
       <div className="mt-6">

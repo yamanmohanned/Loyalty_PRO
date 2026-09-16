@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Cloud,
   CloudOff,
+  Copy,
   ExternalLink,
   KeyRound,
   Link2Off,
@@ -17,10 +18,12 @@ import {
   type DriveClientUpdate,
   type DriveConnectProgress,
   type DriveConnectStart,
+  type DriveFailure,
   type DriveStatus,
   type DriveTestResult,
 } from '@walaa/shared-types';
 import { api } from '../../lib/api';
+import { openInBrowser } from '../../lib/external';
 import { useFormErrors } from '../../lib/form';
 import { formatDateTime, locale } from '../../lib/locale';
 import {
@@ -29,65 +32,94 @@ import {
   CardHeader,
   Chip,
   Field,
+  FormOutcome,
   InlineFailure,
   Input,
   Notice,
+  Skeleton,
 } from '../../components/ui';
 
 /**
  * Google Drive, as the merchant sees it.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- *  Additive by construction — this panel can only ever report
+ *  One status, one outcome, a pending label on every button
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Backing up to Drive is a second destination, not a change of plan. The local backup
- * runs whether or not any of this works, and a Drive failure degrades to «the local
- * copy was written and the upload was not» rather than to a failed backup. Nothing on
- * this panel can stop a backup happening.
+ * On 2026-09-16 this card showed a red refusal, a green «فُتحت صفحة الموافقة» and a red
+ * «عدد كبير من المحاولات» at once — three independent pieces of state, each true when it
+ * was set and never cleared by the next. And the button that produced them did nothing
+ * visible. So the card is now built from two things only:
  *
- * Top to bottom, in the order a person setting it up actually goes:
+ *   1. **The status** — exactly one of: not configured · configured but not linked ·
+ *      linked (with the account) · error (with the reason and what to do). Derived from
+ *      the service's answer and the last consent attempt, never stored beside them, so it
+ *      cannot go stale. Every Drive failure is described HERE and nowhere else.
+ *   2. **The outcome of the last action** — its success or its failure, one or the other
+ *      (`useFormErrors`), cleared when the next action starts. A success is never shown
+ *      while the status is an error.
  *
- *   1. **The OAuth client** — two values from the owner's Google Cloud project, typed
- *      here once. The secret is stored encrypted by the service and never shown again;
- *      it is never in `walaa.env`, never in a log, never in a response.
- *   2. **The account** — «ربط حساب Google» opens Google's consent page in the browser;
- *      once granted, the panel shows WHICH account holds the backups.
- *   3. **Is it working** — the last successful upload, the next scheduled one, how many
- *      copies Drive holds, «ارفع نسخة الآن», and «اختبار الاتصال», which proves the
- *      whole chain: authorise, upload, read back, delete.
- *
- * Every failure the API classifies is rendered verbatim — its sentence and its remedy.
+ * Backing up to Drive is additive: the local backup runs whether or not any of this works,
+ * and nothing on this card can stop it.
  *
  * ── Why the browser opens rather than a window inside the app ────────────────
  *
- * Google's consent screen refuses to load in an embedded webview, and it is right to:
- * a merchant typing a Google password should be looking at his own browser's address
- * bar. The API starts a loopback listener, hands back the URL, and this polls until
- * the grant comes home.
+ * Google's consent screen refuses to load in an embedded webview, and it is right to: a
+ * merchant typing a Google password should be looking at his own browser's address bar.
+ * The service opens a loopback listener on 127.0.0.1 and hands back the URL; the shell
+ * gives it to Windows (`openInBrowser`, the opener plugin); this card polls until the grant
+ * comes home. If the browser cannot be opened the card says why, and shows the link to copy.
  */
+
+type Status =
+  | { kind: 'not-configured' }
+  | { kind: 'not-linked' }
+  | { kind: 'linked' }
+  | { kind: 'error'; title: string; remedy: string };
+
+/** Failures that describe a state the other three statuses already name. */
+const NOT_AN_ERROR = new Set(['NOT_CONFIGURED', 'NOT_CONNECTED']);
+
+function statusOf(data: DriveStatus, consentFailure: DriveFailure | null): Status {
+  const text = locale.settings.drive.status;
+  if (consentFailure && !data.connected) {
+    return { kind: 'error', title: text.connectFailedTitle, remedy: `${consentFailure.message} ${consentFailure.remedy}` };
+  }
+  if (data.failure && !NOT_AN_ERROR.has(data.failure.code)) {
+    return { kind: 'error', title: data.failure.message, remedy: data.failure.remedy };
+  }
+  if (!data.configured) return { kind: 'not-configured' };
+  if (!data.connected) return { kind: 'not-linked' };
+  return { kind: 'linked' };
+}
+
+/** A consent page waiting for the merchant, and whether his browser actually got it. */
+interface Waiting {
+  authUrl: string;
+  refusal: 'blocked' | 'failed' | null;
+}
+
 export function DriveSection() {
   const text = locale.settings.drive;
   const queryClient = useQueryClient();
-  const [notice, setNotice] = useState<string | null>(null);
-  const [uploadProblem, setUploadProblem] = useState<string | null>(null);
+  /* The one outcome slot for the whole card — field marks included (client id, secret,
+     retention), so a refusal and a success can never both be on screen. */
+  const outcome = useFormErrors();
   const [test, setTest] = useState<DriveTestResult | null>(null);
   const [editingClient, setEditingClient] = useState(false);
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  /* Two forms on one card: a refusal about the client belongs under the client fields,
-     one about retention under the retention box. */
-  const errors = useFormErrors();
-  const clientErrors = useFormErrors();
+  const [waiting, setWaiting] = useState<Waiting | null>(null);
+  const [consentFailure, setConsentFailure] = useState<DriveFailure | null>(null);
+  const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>('idle');
   const pollTimer = useRef<number | null>(null);
 
   const status = useQuery({
     queryKey: ['drive'],
     queryFn: () => api.get<DriveStatus>('/backup/drive'),
   });
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: ['drive'] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['drive'] });
 
-  /** Stops the consent poll — on success, on failure, and on unmount. */
   const stopPolling = () => {
     if (pollTimer.current !== null) {
       window.clearInterval(pollTimer.current);
@@ -96,401 +128,558 @@ export function DriveSection() {
   };
   useEffect(() => stopPolling, []);
 
+  /** Every action starts from a clean slate: no earlier outcome, test or copy note. */
+  const begin = () => {
+    outcome.clear();
+    setCopied('idle');
+  };
+
+  const poll = () => {
+    stopPolling();
+    pollTimer.current = window.setInterval(() => {
+      api
+        .get<DriveConnectProgress>('/backup/drive/connect/status')
+        .then((progress) => {
+          if (progress.state === 'CONNECTED') {
+            stopPolling();
+            setWaiting(null);
+            void refresh();
+          } else if (progress.state === 'FAILED' || progress.state === 'IDLE') {
+            // IDLE while we wait means the service restarted and the attempt is gone.
+            stopPolling();
+            setWaiting(null);
+            setConsentFailure(
+              progress.failure ?? {
+                code: 'NOT_CONNECTED',
+                message: text.status.connectFailedTitle,
+                remedy: locale.failure.unexpected,
+                at: new Date().toISOString(),
+              },
+            );
+          }
+        })
+        .catch(() => {
+          /* One unanswered poll is not a failure; the next one may answer. The attempt
+             itself expires on the service and says so. */
+        });
+    }, 1500);
+  };
+
   const connect = useMutation({
     mutationFn: () => api.post<DriveConnectStart>('/backup/drive/connect', {}),
-    onSuccess: (start) => {
-      errors.clear();
-      setNotice(text.consentOpened);
-
-      /*
-        The URL is opened in the merchant's own browser. `window.open` is what the
-        Tauri shell turns into a real browser launch; in a plain browser it is a tab.
-        Either way the app keeps polling, so a merchant who closes the tab is not left
-        with a panel that waits forever — the attempt expires and says so.
-      */
-      window.open(start.authUrl, '_blank', 'noopener,noreferrer');
-
-      stopPolling();
-      pollTimer.current = window.setInterval(() => {
-        void api
-          .get<DriveConnectProgress>('/backup/drive/connect/status')
-          .then((progress) => {
-            if (progress.state === 'CONNECTED') {
-              stopPolling();
-              setNotice(text.connected);
-              refresh();
-            } else if (progress.state === 'FAILED') {
-              stopPolling();
-              setNotice(null);
-              errors.rejectForm(
-                progress.failure
-                  ? `${progress.failure.message} ${progress.failure.remedy}`
-                  : locale.failure.unexpected,
-              );
-            }
-          })
-          .catch(() => {
-            /* A poll that fails is not itself a failure; the next one may answer. */
-          });
-      }, 1500);
+    onMutate: () => {
+      begin();
+      setConsentFailure(null);
     },
-    onError: (caught: Error) => {
-      setNotice(null);
-      errors.fail(caught);
+    onSuccess: async (start) => {
+      const result = await openInBrowser(start.authUrl);
+      setWaiting({ authUrl: start.authUrl, refusal: result.opened ? null : result.reason });
+      poll();
     },
+    onError: (caught: Error) => outcome.fail(caught),
   });
+
+  const reopen = async () => {
+    if (!waiting) return;
+    setCopied('idle');
+    const result = await openInBrowser(waiting.authUrl);
+    setWaiting({ ...waiting, refusal: result.opened ? null : result.reason });
+  };
+
+  const copyLink = async () => {
+    if (!waiting) return;
+    try {
+      await navigator.clipboard.writeText(waiting.authUrl);
+      setCopied('copied');
+    } catch {
+      setCopied('failed');
+    }
+  };
+
+  const cancelWaiting = () => {
+    stopPolling();
+    setWaiting(null);
+    setCopied('idle');
+  };
 
   const disconnect = useMutation({
     mutationFn: () => api.post('/backup/drive/disconnect', {}),
-    onSuccess: () => {
-      errors.clear();
+    onMutate: () => {
+      begin();
       setTest(null);
-      setNotice(text.disconnected);
-      refresh();
+      setConsentFailure(null);
     },
-    onError: (caught: Error) => errors.fail(caught),
+    onSuccess: () => refresh(),
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
-  const save = useMutation({
-    mutationFn: (update: { enabled?: boolean; keep?: number }) =>
-      api.patch('/backup/drive/settings', update),
-    onSuccess: () => {
-      errors.clear();
-      setNotice(locale.common.saved);
-      refresh();
+  const saveKeep = useMutation({
+    mutationFn: (update: { enabled?: boolean; keep?: number }) => api.patch('/backup/drive/settings', update),
+    onMutate: begin,
+    onSuccess: async () => {
+      await refresh();
+      outcome.succeed(text.keepSaved);
     },
-    onError: (caught: Error) => errors.fail(caught),
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
   const saveClient = useMutation({
     mutationFn: (update: DriveClientUpdate) => api.put<DriveStatus>('/backup/drive/client', update),
     onSuccess: () => {
-      clientErrors.clear();
       setEditingClient(false);
       setClientId('');
       // The secret is dropped from memory the moment the service has it.
       setClientSecret('');
-      setNotice(text.clientSaved);
-      refresh();
+      setConsentFailure(null);
+      void refresh();
     },
-    onError: (caught: Error) => clientErrors.fail(caught),
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
   const clearClient = useMutation({
     mutationFn: () => api.delete<DriveStatus>('/backup/drive/client'),
-    onSuccess: () => {
-      clientErrors.clear();
-      setNotice(text.clientCleared);
-      refresh();
+    onMutate: () => {
+      begin();
+      setConsentFailure(null);
     },
-    onError: (caught: Error) => clientErrors.fail(caught),
+    onSuccess: () => refresh(),
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
   const runTest = useMutation({
     mutationFn: () => api.post<DriveTestResult>('/backup/drive/test'),
-    onSuccess: (result) => {
-      errors.clear();
-      setTest(result);
-      refresh();
+    onMutate: () => {
+      begin();
+      setTest(null);
     },
-    onError: (caught: Error) => errors.fail(caught),
+    onSuccess: (result) => {
+      setTest(result);
+      void refresh();
+    },
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
   const uploadNow = useMutation({
     mutationFn: () => api.post<{ destinations: Array<{ kind: string; ok: boolean }> }>('/backup/run'),
-    onSuccess: (run) => {
-      errors.clear();
+    onMutate: () => {
+      begin();
+      setTest(null);
+    },
+    onSuccess: async (run) => {
+      const fresh = await status.refetch();
       const drive = run.destinations.find((destination) => destination.kind === 'drive');
       if (drive?.ok) {
-        setUploadProblem(null);
-        setNotice(text.uploadedNow);
-      } else {
-        setNotice(null);
-        // The classified reason arrives with the refreshed status, above.
-        setUploadProblem(drive ? text.uploadFailed : text.uploadNotRegistered);
+        outcome.succeed(text.uploadedNow);
+        return;
       }
-      refresh();
+      // A classified reason is the status's to show; say something here only if it has none.
+      if (!fresh.data || statusOf(fresh.data, null).kind !== 'error') {
+        outcome.rejectForm(drive ? text.uploadFailedNoReason : text.uploadNotRegistered);
+      }
     },
-    onError: (caught: Error) => {
-      setNotice(null);
-      errors.fail(caught);
-    },
+    onError: (caught: Error) => outcome.fail(caught),
   });
 
   const submitClient = () => {
-    const parsed = clientErrors.validate(DriveClientUpdateSchema, { clientId, clientSecret });
+    begin();
+    const parsed = outcome.validate(DriveClientUpdateSchema, { clientId, clientSecret });
     if (parsed) saveClient.mutate(parsed);
   };
 
   const data = status.data;
+
+  if (status.isError) {
+    return (
+      <Card>
+        <CardHeader title={text.title} />
+        <div className="p-6">
+          <InlineFailure what={locale.failure.what.drive} error={status.error} onRetry={() => void status.refetch()} />
+        </div>
+      </Card>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Card>
+        <CardHeader title={text.title} />
+        <div className="space-y-3 p-6" aria-busy="true">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-24" />
+        </div>
+      </Card>
+    );
+  }
+
+  const current = statusOf(data, consentFailure);
+  const busy =
+    connect.isPending ||
+    disconnect.isPending ||
+    saveClient.isPending ||
+    clearClient.isPending ||
+    runTest.isPending ||
+    uploadNow.isPending ||
+    saveKeep.isPending;
 
   return (
     <Card>
       <CardHeader
         title={text.title}
         action={
-          data ? (
-            <Chip tone={data.connected ? 'success' : data.configured ? 'warning' : 'neutral'}>
-              {data.connected
-                ? text.stateConnected
-                : data.configured
+          <Chip
+            tone={
+              current.kind === 'linked'
+                ? 'success'
+                : current.kind === 'error'
+                  ? 'danger'
+                  : current.kind === 'not-linked'
+                    ? 'warning'
+                    : 'neutral'
+            }
+          >
+            {current.kind === 'linked'
+              ? text.stateConnected
+              : current.kind === 'error'
+                ? text.stateError
+                : current.kind === 'not-linked'
                   ? text.stateNotConnected
                   : text.stateNotConfigured}
-            </Chip>
-          ) : undefined
+          </Chip>
         }
       />
       <div className="space-y-6 p-6">
-        {status.isError ? (
-          <InlineFailure
-            what={locale.failure.what.drive}
-            error={status.error}
-            onRetry={() => void status.refetch()}
-          />
-        ) : status.isLoading || !data ? (
-          <p className="text-steel">{locale.common.loading}</p>
-        ) : (
-          <>
-            {/* 1 ── The OAuth client ─────────────────────────────────────── */}
-            <section className="space-y-3">
-              <h3 className="text-base font-semibold text-ink">{text.clientTitle}</h3>
-              <p className="text-sm leading-relaxed text-steel">{text.clientIntro}</p>
+        {/* ── The one status ─────────────────────────────────────────────── */}
+        <StatusPanel status={current} data={data} />
 
-              {data.client && !editingClient ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4">
-                    <KeyRound size={20} className="shrink-0 text-accent" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-steel">{text.clientIdLabel}</p>
-                      <p className="break-all font-mono text-sm text-ink" dir="ltr">
-                        {data.client.clientId}
-                      </p>
-                      <p className="text-sm text-steel">
-                        {data.client.source === 'settings'
-                          ? text.secretStored(data.client.savedAt ? formatDateTime(data.client.savedAt) : '—')
-                          : text.clientFromEnvironment}
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingClient(true);
-                        setClientId(data.client?.clientId ?? '');
-                        setClientSecret('');
-                      }}
-                    >
-                      {text.clientChange}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={data.connected || clearClient.isPending}
-                      onClick={() => clearClient.mutate()}
-                    >
-                      {text.clientClear}
-                    </Button>
-                  </div>
-                  {data.connected ? <p className="text-sm text-steel">{text.clientClearBlocked}</p> : null}
-                </>
-              ) : (
-                <form
-                  className="space-y-4"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    submitClient();
+        {/* 1 ── The OAuth client ─────────────────────────────────────────── */}
+        <section className="space-y-3">
+          <h3 className="text-base font-semibold text-ink">{text.clientTitle}</h3>
+          <p className="text-sm leading-relaxed text-steel">{text.clientIntro}</p>
+
+          {data.client && !editingClient ? (
+            <>
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4">
+                <KeyRound size={20} className="shrink-0 text-accent" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-steel">{text.clientIdLabel}</p>
+                  <p className="break-all font-mono text-sm text-ink" dir="ltr">
+                    {data.client.clientId}
+                  </p>
+                  <p className="text-sm text-steel">
+                    {data.client.source === 'settings'
+                      ? text.secretStored(data.client.savedAt ? formatDateTime(data.client.savedAt) : '—')
+                      : text.clientFromEnvironment}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  disabled={busy || data.connected}
+                  onClick={() => {
+                    begin();
+                    setEditingClient(true);
+                    setClientId(data.client?.clientId ?? '');
+                    setClientSecret('');
                   }}
                 >
-                  <Field label={text.clientIdLabel} hint={text.clientIdHint} error={clientErrors.fields.clientId}>
-                    <Input
-                      name="clientId"
-                      value={clientId}
-                      onChange={(event) => {
-                        setClientId(event.target.value);
-                        clientErrors.clearField('clientId');
-                      }}
-                      dir="ltr"
-                      className="font-mono text-start"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                  </Field>
-                  <Field
-                    label={text.clientSecretLabel}
-                    hint={text.clientSecretHint}
-                    error={clientErrors.fields.clientSecret}
-                  >
-                    <Input
-                      name="clientSecret"
-                      type="password"
-                      value={clientSecret}
-                      onChange={(event) => {
-                        setClientSecret(event.target.value);
-                        clientErrors.clearField('clientSecret');
-                      }}
-                      dir="ltr"
-                      className="font-mono text-start"
-                      autoComplete="new-password"
-                      spellCheck={false}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-3">
-                    <Button type="submit" disabled={saveClient.isPending}>
-                      {text.clientSave}
-                    </Button>
-                    {data.client ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setEditingClient(false);
-                          setClientSecret('');
-                          clientErrors.clear();
-                        }}
-                      >
-                        {locale.common.cancel}
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className="text-sm text-steel">{text.clientStoredNote}</p>
-                </form>
-              )}
-              {clientErrors.summary ? <Notice tone="danger">{clientErrors.summary}</Notice> : null}
-            </section>
-
-            {/* The API's own classification, verbatim: what happened, then what to do. */}
-            {data.failure ? (
-              <Notice
-                tone={data.failure.code === 'NOT_CONFIGURED' ? 'warning' : 'danger'}
-                title={data.failure.message}
-              >
-                {data.failure.remedy}
-              </Notice>
-            ) : null}
-
-            {/* 2 ── The Google account ───────────────────────────────────── */}
-            {data.configured ? (
-              <section className="space-y-3 border-t border-border pt-6">
-                <h3 className="text-base font-semibold text-ink">{text.accountTitle}</h3>
-                {data.connected ? (
-                  <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4">
-                    <span className="flex size-10 items-center justify-center rounded-md bg-accent-tint text-accent">
-                      <Cloud size={20} aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-steel">{text.accountLinked}</p>
-                      {data.account?.email ? (
-                        <p className="break-all font-mono text-sm text-ink" dir="ltr">
-                          {data.account.email}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-ink">{text.accountUnknown}</p>
-                      )}
-                      {data.account?.name ? <p className="text-sm text-ink">{data.account.name}</p> : null}
-                      {data.connectedAt ? (
-                        <p className="text-sm text-steel">{text.connectedSince(formatDateTime(data.connectedAt))}</p>
-                      ) : null}
-                    </div>
-                    <Button
-                      variant="secondary"
-                      onClick={() => disconnect.mutate()}
-                      disabled={disconnect.isPending}
-                    >
-                      <Link2Off size={18} aria-hidden />
-                      {text.disconnect}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-md bg-canvas text-steel">
-                      <CloudOff size={20} aria-hidden />
-                    </span>
-                    <Button onClick={() => connect.mutate()} disabled={connect.isPending}>
-                      <ExternalLink size={18} aria-hidden />
-                      {connect.isPending ? text.connecting : text.connect}
-                    </Button>
-                  </div>
-                )}
-                <p className="text-sm leading-relaxed text-steel">{text.scopeNote}</p>
-              </section>
-            ) : null}
-
-            {/* 3 ── Is it working ────────────────────────────────────────── */}
-            {data.connected ? (
-              <section className="space-y-4 border-t border-border pt-6">
-                <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div>
-                    <dt className="text-sm text-steel">{text.lastSuccess}</dt>
-                    <dd className="font-mono text-sm text-ink">
-                      {data.lastSuccessAt ? formatDateTime(data.lastSuccessAt) : text.never}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-steel">{text.nextUpload}</dt>
-                    <dd className="font-mono text-sm text-ink">
-                      {data.enabled && data.schedule.enabled && data.schedule.nextRunAt
-                        ? formatDateTime(data.schedule.nextRunAt)
-                        : text.noSchedule}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-steel">{text.copiesInDrive}</dt>
-                    <dd className="font-mono text-sm text-ink">{text.copiesCount(data.backups.length, data.keep)}</dd>
-                  </div>
-                </dl>
-
-                {/* Retention: how many copies Drive keeps before the oldest is dropped. */}
-                <Field label={text.keepLabel} hint={text.keepHint} error={errors.fields.keep}>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={365}
-                    defaultValue={data.keep}
-                    dir="ltr"
-                    className="text-start"
-                    onBlur={(event) => {
-                      const keep = Number(event.target.value);
-                      if (Number.isInteger(keep) && keep >= 1 && keep !== data.keep) {
-                        save.mutate({ keep });
-                      }
+                  {text.clientChange}
+                </Button>
+                <Button variant="ghost" disabled={busy || data.connected} onClick={() => clearClient.mutate()}>
+                  {clearClient.isPending ? text.clearing : text.clientClear}
+                </Button>
+              </div>
+              {data.connected ? <p className="text-sm text-steel">{text.clientClearBlocked}</p> : null}
+            </>
+          ) : (
+            <form
+              ref={outcome.ref}
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitClient();
+              }}
+            >
+              <Field label={text.clientIdLabel} hint={text.clientIdHint} error={outcome.fields.clientId}>
+                <Input
+                  name="clientId"
+                  value={clientId}
+                  onChange={(event) => {
+                    setClientId(event.target.value);
+                    outcome.clearField('clientId');
+                  }}
+                  dir="ltr"
+                  className="font-mono text-start"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              <Field label={text.clientSecretLabel} hint={text.clientSecretHint} error={outcome.fields.clientSecret}>
+                <Input
+                  name="clientSecret"
+                  type="password"
+                  value={clientSecret}
+                  onChange={(event) => {
+                    setClientSecret(event.target.value);
+                    outcome.clearField('clientSecret');
+                  }}
+                  dir="ltr"
+                  className="font-mono text-start"
+                  autoComplete="new-password"
+                  spellCheck={false}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-3">
+                <Button type="submit" disabled={busy}>
+                  {saveClient.isPending ? text.saving : text.clientSave}
+                </Button>
+                {data.client ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={saveClient.isPending}
+                    onClick={() => {
+                      setEditingClient(false);
+                      setClientSecret('');
+                      outcome.clear();
                     }}
-                  />
-                </Field>
+                  >
+                    {locale.common.cancel}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-sm text-steel">{text.clientStoredNote}</p>
+            </form>
+          )}
+        </section>
 
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button onClick={() => uploadNow.mutate()} disabled={uploadNow.isPending || !data.enabled}>
-                    {uploadNow.isPending ? text.uploading : text.uploadNow}
-                  </Button>
-                  <Button variant="secondary" onClick={() => runTest.mutate()} disabled={runTest.isPending}>
-                    {runTest.isPending ? text.testing : text.test}
-                  </Button>
-                  <Button variant="ghost" onClick={() => void status.refetch()} disabled={status.isFetching}>
-                    <RefreshCw size={18} aria-hidden />
-                    {locale.common.retry}
-                  </Button>
+        {/* 2 ── The Google account ───────────────────────────────────────── */}
+        {data.configured ? (
+          <section className="space-y-3 border-t border-border pt-6">
+            <h3 className="text-base font-semibold text-ink">{text.accountTitle}</h3>
+            {data.connected ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border p-4">
+                <span className="flex size-10 items-center justify-center rounded-md bg-accent-tint text-accent">
+                  <Cloud size={20} aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-steel">{text.accountLinked}</p>
+                  {data.account?.email ? (
+                    <p className="break-all font-mono text-sm text-ink" dir="ltr">
+                      {data.account.email}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-ink">{text.accountUnknown}</p>
+                  )}
+                  {data.account?.name ? <p className="text-sm text-ink">{data.account.name}</p> : null}
+                  {data.connectedAt ? (
+                    <p className="text-sm text-steel">{text.connectedSince(formatDateTime(data.connectedAt))}</p>
+                  ) : null}
                 </div>
+                <Button variant="secondary" onClick={() => disconnect.mutate()} disabled={busy}>
+                  <Link2Off size={18} aria-hidden />
+                  {disconnect.isPending ? text.disconnecting : text.disconnect}
+                </Button>
+              </div>
+            ) : waiting ? (
+              <WaitingPanel
+                waiting={waiting}
+                copied={copied}
+                onReopen={() => void reopen()}
+                onCopy={() => void copyLink()}
+                onCancel={cancelWaiting}
+              />
+            ) : (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex size-10 items-center justify-center rounded-md bg-canvas text-steel">
+                  <CloudOff size={20} aria-hidden />
+                </span>
+                <Button onClick={() => connect.mutate()} disabled={busy}>
+                  <ExternalLink size={18} aria-hidden />
+                  {connect.isPending ? text.connecting : text.connect}
+                </Button>
+              </div>
+            )}
+            <p className="text-sm leading-relaxed text-steel">{text.scopeNote}</p>
+          </section>
+        ) : null}
 
-                {uploadProblem ? <Notice tone="danger">{uploadProblem}</Notice> : null}
-                {test ? <TestResult result={test} /> : null}
+        {/* 3 ── Is it working ────────────────────────────────────────────── */}
+        {data.connected ? (
+          <section className="space-y-4 border-t border-border pt-6">
+            <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-sm text-steel">{text.lastSuccess}</dt>
+                <dd className="font-mono text-sm text-ink">
+                  {data.lastSuccessAt ? formatDateTime(data.lastSuccessAt) : text.never}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-steel">{text.nextUpload}</dt>
+                <dd className="font-mono text-sm text-ink">
+                  {data.enabled && data.schedule.enabled && data.schedule.nextRunAt
+                    ? formatDateTime(data.schedule.nextRunAt)
+                    : text.noSchedule}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-steel">{text.copiesInDrive}</dt>
+                <dd className="font-mono text-sm text-ink">{text.copiesCount(data.backups.length, data.keep)}</dd>
+              </div>
+            </dl>
 
-                <p className="text-sm text-steel">
-                  {text.restoreHint}{' '}
-                  <Link to="/backup" className="text-accent underline">
-                    {text.restoreLink}
-                  </Link>
-                </p>
-              </section>
-            ) : null}
+            {/* Retention: how many copies Drive keeps before the oldest is dropped. */}
+            <Field
+              label={text.keepLabel}
+              hint={saveKeep.isPending ? text.saving : text.keepHint}
+              error={outcome.fields.keep}
+            >
+              <Input
+                type="number"
+                min={1}
+                max={365}
+                defaultValue={data.keep}
+                dir="ltr"
+                className="text-start"
+                disabled={saveKeep.isPending}
+                onBlur={(event) => {
+                  const keep = Number(event.target.value);
+                  if (Number.isInteger(keep) && keep >= 1 && keep !== data.keep) saveKeep.mutate({ keep });
+                }}
+              />
+            </Field>
 
-            {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
-            {notice ? <Notice tone="accent">{notice}</Notice> : null}
-          </>
-        )}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={() => uploadNow.mutate()} disabled={busy || !data.enabled}>
+                {uploadNow.isPending ? text.uploading : text.uploadNow}
+              </Button>
+              <Button variant="secondary" onClick={() => runTest.mutate()} disabled={busy}>
+                {runTest.isPending ? text.testing : text.test}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  begin();
+                  void status.refetch();
+                }}
+                disabled={busy || status.isFetching}
+              >
+                <RefreshCw size={18} aria-hidden />
+                {status.isFetching ? text.refreshing : locale.common.retry}
+              </Button>
+            </div>
+
+            {test ? <TestResult result={test} statusShowsError={current.kind === 'error'} /> : null}
+
+            <p className="text-sm text-steel">
+              {text.restoreHint}{' '}
+              <Link to="/backup" className="text-accent underline">
+                {text.restoreLink}
+              </Link>
+            </p>
+          </section>
+        ) : null}
+
+        {/* The last action's outcome — one or none; never a success beside an error status. */}
+        <FormOutcome form={{ summary: outcome.summary, success: current.kind === 'error' ? null : outcome.success }} />
       </div>
     </Card>
   );
 }
 
+function StatusPanel({ status, data }: { status: Status; data: DriveStatus }) {
+  const text = locale.settings.drive.status;
+  switch (status.kind) {
+    case 'error':
+      return (
+        <div role="alert">
+          <Notice tone="danger" title={status.title}>
+            {status.remedy}
+          </Notice>
+        </div>
+      );
+    case 'not-configured':
+      return (
+        <Notice tone="neutral" title={text.notConfiguredTitle}>
+          {text.notConfiguredBody}
+        </Notice>
+      );
+    case 'not-linked':
+      return (
+        <Notice tone="warning" title={text.notLinkedTitle}>
+          {text.notLinkedBody}
+        </Notice>
+      );
+    case 'linked':
+      return (
+        <Notice tone="accent" title={text.linkedTitle(data.account?.email ?? null)}>
+          {data.enabled
+            ? data.connectedAt
+              ? locale.settings.drive.connectedSince(formatDateTime(data.connectedAt))
+              : null
+            : text.linkedPaused}
+        </Notice>
+      );
+  }
+}
+
+/** A consent page is open (or could not be): what to do, and the link to use by hand. */
+function WaitingPanel({
+  waiting,
+  copied,
+  onReopen,
+  onCopy,
+  onCancel,
+}: {
+  waiting: Waiting;
+  copied: 'idle' | 'copied' | 'failed';
+  onReopen: () => void;
+  onCopy: () => void;
+  onCancel: () => void;
+}) {
+  const text = locale.settings.drive;
+  const refused = waiting.refusal !== null;
+  return (
+    <div className="space-y-3 rounded-md border border-border p-4" aria-live="polite">
+      {refused ? (
+        <div role="alert">
+          <Notice tone="danger">{waiting.refusal === 'blocked' ? text.browserBlocked : text.browserFailed}</Notice>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3">
+          <Skeleton className="mt-1 size-4 shrink-0 rounded-full" />
+          <div>
+            <p className="font-semibold text-ink">{text.waitingTitle}</p>
+            <p className="text-sm leading-relaxed text-steel">{text.waitingBody}</p>
+          </div>
+        </div>
+      )}
+      <p className="text-sm text-steel">{text.manualLinkLabel}</p>
+      <p className="max-h-20 overflow-y-auto break-all rounded-md bg-canvas p-2 font-mono text-xs text-ink select-all" dir="ltr">
+        {waiting.authUrl}
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="secondary" onClick={onReopen}>
+          <ExternalLink size={18} aria-hidden />
+          {text.reopen}
+        </Button>
+        <Button variant="ghost" onClick={onCopy}>
+          <Copy size={18} aria-hidden />
+          {text.copyLink}
+        </Button>
+        <Button variant="ghost" onClick={onCancel}>
+          {text.stopWaiting}
+        </Button>
+        {copied !== 'idle' ? (
+          <span className="text-sm text-steel" role="status">
+            {copied === 'copied' ? text.linkCopied : text.linkCopyFailed}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /** «اختبار الاتصال», step by step — a step not reached says so instead of passing. */
-function TestResult({ result }: { result: DriveTestResult }) {
+function TestResult({ result, statusShowsError }: { result: DriveTestResult; statusShowsError: boolean }) {
   const text = locale.settings.drive;
   const failed = result.steps.find((step) => step.ok === false);
   return (
@@ -511,10 +700,11 @@ function TestResult({ result }: { result: DriveTestResult }) {
           </li>
         ))}
       </ol>
-      {failed?.failure ? (
-        <Notice tone="danger" title={failed.failure.message}>
-          {failed.failure.remedy}
-        </Notice>
+      {/* The reason is the status panel's when it is showing one; said here only if not. */}
+      {failed?.failure && !statusShowsError ? (
+        <p className="text-sm text-ink">
+          {failed.failure.message} {failed.failure.remedy}
+        </p>
       ) : null}
       {result.ok && result.account?.email ? (
         <p className="text-sm text-steel" dir="auto">
@@ -524,3 +714,4 @@ function TestResult({ result }: { result: DriveTestResult }) {
     </div>
   );
 }
+

@@ -15,6 +15,7 @@ import {
   CardHeader,
   Chip,
   Field,
+  FormOutcome,
   InlineFailure,
   Input,
   Notice,
@@ -57,7 +58,8 @@ const BRANCH_BOUND = new Set(['STATION', 'AGENT']);
 export function StaffSection() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  /* One outcome for the card — a success and a refusal from two different actions used to
+     sit on screen together, and a failed enable/disable was written into the closed form. */
   const errors = useFormErrors();
 
   const [form, setForm] = useState<CreateUserRequest>({
@@ -78,10 +80,9 @@ export function StaffSection() {
   const create = useMutation({
     mutationFn: (body: CreateUserRequest) => api.post('/users', body),
     onSuccess: () => {
-      setNotice(locale.settings.staff.created(form.username.trim().toLowerCase()));
+      errors.succeed(locale.settings.staff.created(form.username.trim().toLowerCase()));
       setOpen(false);
       setForm({ name: '', username: '', password: '', role: 'STATION', branchId: null });
-      errors.clear();
       void invalidate();
     },
     onError: (failure: Error) => errors.fail(failure),
@@ -90,8 +91,9 @@ export function StaffSection() {
   const setActive = useMutation({
     mutationFn: (params: { id: string; isActive: boolean }) =>
       api.patch(`/users/${params.id}`, { isActive: params.isActive }),
+    onMutate: () => errors.clear(),
     onSuccess: (_data, params) => {
-      setNotice(params.isActive ? locale.settings.staff.enabled : locale.settings.staff.disabled);
+      errors.succeed(params.isActive ? locale.settings.staff.enabled : locale.settings.staff.disabled);
       void invalidate();
     },
     onError: (failure: Error) => errors.fail(failure),
@@ -138,7 +140,13 @@ export function StaffSection() {
         title={locale.settings.staff.title}
         subtitle={locale.settings.staff.subtitle}
         action={
-          <Button variant="secondary" onClick={() => setOpen((v) => !v)}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              errors.clear();
+              setOpen((v) => !v);
+            }}
+          >
             <Plus size={18} aria-hidden />
             {locale.settings.staff.add}
           </Button>
@@ -146,7 +154,8 @@ export function StaffSection() {
       />
 
       <div className="space-y-5 p-6">
-        {notice ? <Notice tone="accent">{notice}</Notice> : null}
+        {/* The outcome sits beside the form's button while the form is open, here otherwise. */}
+        {open ? null : <FormOutcome form={errors} />}
 
         {staff.isLoading ? (
           <p className="text-steel">{locale.common.loading}</p>
@@ -192,10 +201,14 @@ export function StaffSection() {
                 ) : (
                   <Button
                     variant="ghost"
-                    disabled={setActive.isPending}
+                    disabled={setActive.isPending || create.isPending}
                     onClick={() => setActive.mutate({ id: user.id, isActive: !user.isActive })}
                   >
-                    {user.isActive ? locale.settings.staff.disable : locale.settings.staff.enable}
+                    {setActive.isPending && setActive.variables?.id === user.id
+                      ? locale.common.saving
+                      : user.isActive
+                        ? locale.settings.staff.disable
+                        : locale.settings.staff.enable}
                   </Button>
                 )}
               </li>
@@ -280,7 +293,7 @@ export function StaffSection() {
                 path — and the reason a staff password CAN be reset from here. */}
             <Notice tone="warning">{locale.settings.staff.writeItDown}</Notice>
 
-            {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
+            <FormOutcome form={errors} />
 
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? locale.settings.staff.creating : locale.settings.staff.submit}

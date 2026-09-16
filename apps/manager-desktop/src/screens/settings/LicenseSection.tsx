@@ -10,7 +10,8 @@ import type {
   LicenseState,
 } from '@walaa/shared-types';
 import { formatIqd } from '@walaa/shared-types';
-import { api, ApiRequestError } from '../../lib/api';
+import { failureSentence } from '../../lib/failure';
+import { api } from '../../lib/api';
 import { formatDate, formatDateTime, locale } from '../../lib/locale';
 import { LICENSE_QUERY_KEY, licenseNotice, useLicense } from '../../components/LicenseBanner';
 import {
@@ -62,8 +63,8 @@ const TONE: Record<LicenseState['status'], 'success' | 'accent' | 'warning' | 'd
 const OVERVIEW_KEY = [...LICENSE_QUERY_KEY, 'overview'] as const;
 const EVENTS_KEY = [...LICENSE_QUERY_KEY, 'events'] as const;
 
-const refusal = (error: unknown): string | null =>
-  error instanceof ApiRequestError && error.status > 0 ? error.message : error ? locale.failure.unexpected : null;
+/** The refusal's own sentence; a network failure gets the network one, not «unexpected». */
+const refusal = (error: unknown): string | null => (error ? failureSentence(error) : null);
 
 function DeviceNumber({ deviceId }: { deviceId: string }) {
   const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -199,7 +200,12 @@ function ActivationForm() {
       <Field label={t.codeLabel} hint={t.codeHint} error={error ?? undefined}>
         <textarea
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onChange={(event) => {
+            setCode(event.target.value);
+            // A new code is a new situation: the last result no longer describes it.
+            setDone(null);
+            if (activate.error) activate.reset();
+          }}
           dir="ltr"
           rows={6}
           spellCheck={false}
@@ -245,7 +251,11 @@ function EmergencyForm() {
       <Field label={e.label} hint={e.hint} error={error ?? undefined}>
         <input
           value={code}
-          onChange={(event) => setCode(event.target.value.toUpperCase())}
+          onChange={(event) => {
+            setCode(event.target.value.toUpperCase());
+            setDone(null);
+            if (enter.error) enter.reset();
+          }}
           dir="ltr"
           maxLength={32}
           spellCheck={false}

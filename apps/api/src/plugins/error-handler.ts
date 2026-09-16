@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { StorageFailureCause } from '@walaa/shared-types';
-import { AppError, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
+import { AppError, rateLimitedMessage, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
 import { isDatabaseDamaged, isUniqueViolation, storageFailureCause } from '../lib/prisma';
 import { isContentionError } from '../lib/write-transaction';
 import { lastStorageLevel } from '../services/storage.service';
@@ -90,11 +90,13 @@ export function registerErrorHandler(app: FastifyInstance): void {
     // so a throttle arrives here and must be recognised by its statusCode.
     const status = statusCodeOf(error);
     if (status === 429) {
+      const retryAfter = (error as { retryAfterSeconds?: unknown }).retryAfterSeconds;
       reply.status(429).send({
         error: {
           code: 'RATE_LIMITED',
-          message: 'عدد كبير من المحاولات — انتظر قليلاً ثم أعد المحاولة',
+          message: rateLimitedMessage(typeof retryAfter === 'number' ? retryAfter : null),
           requestId: request.id,
+          details: { retryAfterSeconds: typeof retryAfter === 'number' ? retryAfter : null },
         },
       });
       return;

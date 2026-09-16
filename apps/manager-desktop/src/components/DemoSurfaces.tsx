@@ -125,6 +125,7 @@ export function DemoResetCard() {
   const [done, setDone] = useState(false);
 
   const reset = useMutation({
+    onMutate: () => setDone(false),
     mutationFn: () => api.post<{ invoices: number }>('/system/demo/reset', {}),
     onSuccess: () => {
       setDone(true);

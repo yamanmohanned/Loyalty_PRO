@@ -113,6 +113,28 @@ export const internalError = (cause?: unknown) =>
   new AppError('INTERNAL_ERROR', UNEXPECTED_FAILURE_MESSAGE, { cause });
 
 /**
+ * The throttle's sentence, naming how long to wait.
+ *
+ * «انتظر قليلاً» told a person who had just been refused nothing he could act on, and the
+ * wait could be an hour. Whole minutes, rounded up, in the Arabic counted forms.
+ */
+export function rateLimitedMessage(retryAfterSeconds: number | null | undefined): string {
+  if (!retryAfterSeconds || !Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
+    return 'عدد كبير من المحاولات لهذه العملية — انتظر دقيقة ثم أعد المحاولة.';
+  }
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  const wait =
+    minutes === 1
+      ? 'دقيقة واحدة'
+      : minutes === 2
+        ? 'دقيقتين'
+        : minutes <= 10
+          ? `${minutes} دقائق`
+          : `${minutes} دقيقة`;
+  return `عدد كبير من المحاولات لهذه العملية — انتظر ${wait} ثم أعد المحاولة. لم يُنفَّذ هذا الطلب.`;
+}
+
+/**
  * The datastore refused a write — a full disk, in the case this exists for
  * (CLAUDE_v3.md §12.15).
  *

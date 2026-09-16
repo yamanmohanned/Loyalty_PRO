@@ -92,17 +92,21 @@ export function KeyCeremonyScreen({
 
   const generate = useMutation({
     mutationFn: () => api.post<KeyStatus>('/backup/key/generate'),
+    onMutate: () => setError(null),
     onSuccess: (next) => queryClient.setQueryData(['backup', 'key'], next),
+    onError: (e) => setError(failureSentence(e)),
   });
 
   const reveal = useMutation({
     mutationFn: () => api.post<{ key: string }>('/backup/key/reveal'),
+    onMutate: () => setError(null),
     onSuccess: ({ key }) => setRevealed(key),
     onError: (e) => setError(failureSentence(e)),
   });
 
   const confirm = useMutation({
     mutationFn: (key: string) => api.post<KeyStatus>('/backup/key/confirm', { key }),
+    onMutate: () => setError(null),
     onSuccess: (next) => {
       queryClient.setQueryData(['backup', 'key'], next);
       // Cleared immediately on success: there is no reason for the key to stay in a
@@ -221,6 +225,14 @@ export function KeyCeremonyScreen({
               {reveal.isPending ? locale.keyCeremony.revealing : locale.keyCeremony.reveal}
             </Button>
           </Card>
+        ) : null}
+
+        {/* Before the key is on screen there is no field to mark: a failed «توليد» or
+            «إظهار» used to be written into the confirmation box of a step not yet shown. */}
+        {error && !revealed ? (
+          <div className="print:hidden" role="alert">
+            <Notice tone="danger">{error}</Notice>
+          </div>
         ) : null}
 
         {revealed && key?.fingerprint ? (

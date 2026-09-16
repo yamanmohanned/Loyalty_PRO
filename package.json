@@ -1,8 +1,8 @@
 {
   "name": "walaa",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
-  "description": "Supermarket Loyalty Platform (ولاء) — monorepo root",
+  "description": "Supermarket Loyalty Platform (ÙˆÙ„Ø§Ø¡) â€” monorepo root",
   "packageManager": "pnpm@10.34.4",
   "engines": {
     "node": ">=20.11.0"

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -62,13 +62,15 @@ function licenceCodeFor(deviceId) {
   if (key.kind !== 'development' || !deviceId || !existsSync(issuer)) {
     return { code: null, source: `${key.kind} key, no WALAA_VERIFY_LICENSE_CODE` };
   }
+  /*
+    A copy of the development key with an empty log, every run: `issue` is a device's
+    first licence and refuses one this log has already licensed (a renewal is `renew`).
+  */
+  const home = mkdtempSync(join(tmpdir(), 'walaa-dev-issuer-'));
+  copyFileSync(join(REPO, 'tools', 'license-issuer', 'dev-key', 'issuer-key.json'), join(home, 'issuer-key.json'));
   const output = execFileSync(
     issuer,
-    [
-      '--home', join(REPO, 'tools', 'license-issuer', 'dev-key'),
-      '--password-stdin',
-      'issue', '--device', deviceId, '--perpetual', '--note', 'verify-runtime',
-    ],
+    ['--home', home, '--password-stdin', 'issue', '--device', deviceId, '--perpetual', '--note', 'verify-runtime'],
     { input: 'walaa-development-only-key\n', encoding: 'utf8' },
   );
   const marker = output.indexOf('Send the merchant this code');

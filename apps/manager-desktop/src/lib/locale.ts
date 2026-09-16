@@ -750,19 +750,50 @@ export const locale = {
      */
     drive: {
       title: 'النسخ الاحتياطي إلى Google Drive',
-      stateConnected: 'متصل',
-      stateNotConnected: 'غير متصل',
+      stateConnected: 'مربوط',
+      stateNotConnected: 'غير مربوط',
       stateNotConfigured: 'غير مُعدّ',
+      stateError: 'خطأ',
+      /* The one status the section shows — exactly one of these four at any time. */
+      status: {
+        notConfiguredTitle: 'لم تُدخل إعدادات الربط مع Google بعد',
+        notConfiguredBody: 'أدخل معرّف العميل وسرّه أدناه، ثم اربط حساب Google.',
+        notLinkedTitle: 'إعدادات الربط محفوظة، ولم يُربط حساب Google بعد',
+        notLinkedBody: 'اضغط «ربط حساب Google» — تُفتح صفحة Google في متصفّح هذا الجهاز.',
+        linkedTitle: (email: string | null) =>
+          email ? `مربوط بحساب Google: ${email}` : 'مربوط بحساب Google',
+        linkedPaused: 'الرفع إلى Drive موقوف مؤقتاً — تستمر النسخ على هذا الجهاز.',
+        connectFailedTitle: 'لم يكتمل ربط حساب Google',
+      },
+      /* While a consent page is open. */
+      waitingTitle: 'بانتظار موافقتك في صفحة Google',
+      waitingBody:
+        'فُتحت صفحة Google في المتصفّح. اختر الحساب ووافق هناك، ثم عد إلى هذه الشاشة — تتحدّث وحدها.',
+      reopen: 'افتح الصفحة مرة أخرى',
+      stopWaiting: 'إلغاء',
+      manualLinkLabel: 'أو انسخ هذا الرابط وافتحه في أي متصفّح على هذا الجهاز:',
+      copyLink: 'نسخ الرابط',
+      linkCopied: 'نُسخ الرابط.',
+      linkCopyFailed: 'تعذّر النسخ — حدّد الرابط وانسخه يدوياً.',
+      /** Why the browser did not open — said on the spot, never a dead button. */
+      browserBlocked:
+        'لم يُفتح المتصفّح: إعدادات الأمان في البرنامج منعت فتحه. انسخ الرابط أدناه وافتحه في المتصفّح يدوياً، وأبلغ المزوّد.',
+      browserFailed:
+        'لم يُفتح المتصفّح: لم يستجب Windows لطلب فتحه (قد لا يكون هناك متصفّح افتراضي). انسخ الرابط أدناه وافتحه في المتصفّح يدوياً.',
+      saving: 'جارٍ الحفظ…',
+      clearing: 'جارٍ الحذف…',
+      disconnecting: 'جارٍ الفصل…',
+      refreshing: 'جارٍ التحديث…',
+      keepSaved: 'حُفظ عدد النسخ.',
+      uploadFailedNoReason:
+        'أُخذت النسخة على هذا الجهاز، لكنها لم تُرفع إلى Google Drive. اضغط «اختبار الاتصال» لمعرفة السبب.',
       lastSuccess: 'آخر نسخة ناجحة:',
       /* Said plainly, before he grants anything: this app cannot read his Drive. */
       scopeNote:
         'يطلب البرنامج صلاحية «drive.file» فقط — أي أنه لا يرى ولا يفتح أي ملف في حسابك عدا النسخ الاحتياطية التي ينشئها هو. لا يمكنه الاطلاع على بقية ملفاتك.',
       connect: 'ربط حساب Google',
-      connecting: 'جارٍ فتح صفحة الموافقة…',
-      consentOpened: 'فُتحت صفحة الموافقة في المتصفّح. أكمل الموافقة هناك ثم عد إلى هذه الشاشة.',
-      connected: 'تم ربط الحساب بنجاح.',
+      connecting: 'جارٍ تجهيز صفحة Google…',
       disconnect: 'فصل الحساب',
-      disconnected: 'تم فصل الحساب. تستمر النسخ الاحتياطية على هذا الجهاز كالمعتاد.',
       keepLabel: 'عدد النسخ المحفوظة في Drive',
       keepHint: 'عند تجاوز هذا العدد تُحذف أقدم نسخة تلقائياً',
 
@@ -779,10 +810,8 @@ export const locale = {
       clientSecretHint:
         'يظهر مرة واحدة فقط عند إنشاء العميل — انسخه واحفظه فوراً. إن فُقد فاضغط «Add Secret» في صفحة العميل نفسها في Google Cloud وأدخل السرّ الجديد هنا.',
       clientSave: 'حفظ إعدادات الربط',
-      clientSaved: 'حُفظت إعدادات الربط على هذا الجهاز والسرّ مشفّر. اضغط الآن «ربط حساب Google».',
       clientChange: 'تغيير',
       clientClear: 'حذف الإعدادات',
-      clientCleared: 'حُذفت إعدادات الربط من هذا الجهاز.',
       clientClearBlocked: 'لحذف إعدادات الربط أو استبدالها بعميل آخر افصل حساب Google أولاً.',
       secretStored: (at: string) => `السرّ محفوظ مشفّراً على هذا الجهاز منذ ${at}.`,
       clientFromEnvironment:
@@ -802,8 +831,6 @@ export const locale = {
       uploadNow: 'ارفع نسخة الآن',
       uploading: 'جارٍ أخذ نسخة ورفعها…',
       uploadedNow: 'أُخذت نسخة جديدة ورُفعت إلى Google Drive.',
-      uploadFailed:
-        'أُخذت النسخة على هذا الجهاز، لكنها لم تُرفع إلى Google Drive — السبب وما يجب فعله في التنبيه أعلاه.',
       uploadNotRegistered: 'أُخذت النسخة على هذا الجهاز فقط، لأن Google Drive غير مربوط أو الرفع متوقف.',
       test: 'اختبار الاتصال',
       testing: 'جارٍ الاختبار…',
@@ -1045,6 +1072,7 @@ export const locale = {
     prev: 'السابق',
     next: 'التالي',
     exportCsv: 'تصدير CSV',
+    exportingCsv: 'جارٍ تجهيز الملف…',
     /**
      * The export carries phone numbers, which §7.11 calls the one identifier worth
      * protecting. Said on the screen rather than assumed, for the same reason the
@@ -1214,6 +1242,11 @@ export const locale = {
 
     runNow: 'أخذ نسخة الآن',
     running: 'جاري النسخ…',
+    /* The outcome of «أخذ نسخة الآن», under its button. */
+    runDone: (where: string) => `أُخذت نسخة احتياطية الآن وحُفظت في: ${where}.`,
+    runPartial: (landed: string, missed: string) =>
+      `أُخذت نسخة احتياطية الآن وحُفظت في: ${landed}. لم تصل إلى: ${missed} — السبب في «سجل النسخ» أدناه.`,
+    runNowhere: 'لم تُحفظ النسخة في أي مكان — السبب في «سجل النسخ» أدناه.',
     verifyNow: 'اختبار الاستعادة الآن',
     verifying: 'جاري الاختبار…',
     nextRun: 'النسخة المجدولة القادمة',

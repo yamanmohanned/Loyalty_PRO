@@ -1,6 +1,6 @@
 [package]
 name = "walaa-license"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 publish = false
 description = "Offline licensing for ولاء: device identity, the signed license format, status rules and clock anchors."

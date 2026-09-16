@@ -26,6 +26,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  FormOutcome,
   Input,
   Notice,
   PageHeader,
@@ -57,7 +58,6 @@ export function CardsScreen() {
   const queryClient = useQueryClient();
   const [quantity, setQuantity] = useState('');
   const [note, setNote] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
   /*
     Rejections land on the box they are about. The quantity field is the one that
     actually gets refused — a batch size over the ceiling, or a zero — and it used to
@@ -78,9 +78,9 @@ export function CardsScreen() {
         quantity: Number(quantity),
         ...(note.trim() ? { note: note.trim() } : {}),
       }),
+    onMutate: () => errors.clear(),
     onSuccess: (response) => {
-      setNotice(locale.cards.generated(response.batch.serialRangeFormatted));
-      errors.clear();
+      errors.succeed(locale.cards.generated(response.batch.serialRangeFormatted));
       setQuantity('');
       setNote('');
       void invalidate();
@@ -93,9 +93,9 @@ export function CardsScreen() {
       api.post<{ voided: number }>(`/cards/batches/${params.batchId}/void`, {
         reason: params.reason,
       }),
+    onMutate: () => errors.clear(),
     onSuccess: (response) => {
-      setNotice(locale.cards.voidedCount(response.voided));
-      errors.clear();
+      errors.succeed(locale.cards.voidedCount(response.voided));
       void invalidate();
     },
     onError: (failure: Error) => errors.fail(failure),
@@ -144,8 +144,8 @@ export function CardsScreen() {
       {header}
 
       <div className="space-y-6">
-        {notice ? <Notice tone="accent">{notice}</Notice> : null}
-        {errors.summary ? <Notice tone="danger">{errors.summary}</Notice> : null}
+        {/* One outcome: the last action's success or its refusal, never both. */}
+        <FormOutcome form={errors} />
 
         {/* ── The reorder signal ──────────────────────────────────────────── */}
 
@@ -281,10 +281,8 @@ export function CardsScreen() {
                 batch={batch}
                 onVoid={() => askVoid(batch)}
                 voidPending={voidBatch.isPending}
-                onNotice={(message) => {
-                  setNotice(message);
-                  errors.clear();
-                }}
+                onStart={() => errors.clear()}
+                onNotice={(message) => errors.succeed(message)}
                 onError={(message: string) => errors.rejectForm(message)}
                 onExported={() => void invalidate()}
               />
@@ -328,6 +326,7 @@ function BatchPanel({
   batch,
   onVoid,
   voidPending,
+  onStart,
   onNotice,
   onError,
   onExported,
@@ -335,6 +334,7 @@ function BatchPanel({
   batch: CardBatch;
   onVoid: () => void;
   voidPending: boolean;
+  onStart: () => void;
   onNotice: (message: string) => void;
   onError: (message: string) => void;
   onExported: () => void;
@@ -367,6 +367,10 @@ function BatchPanel({
   const exportBatch = useMutation({
     mutationFn: (range: { serialFrom: number; serialTo: number } | null) =>
       api.post<CardBatchExportResponse>(`/cards/batches/${batch.id}/export`, range ?? {}),
+    onMutate: () => {
+      errors.clear();
+      onStart();
+    },
     onSuccess: (response) => {
       // The filename says which file this is. A reprint slice and a whole batch
       // landing in the same downloads folder with the same name is how the wrong one

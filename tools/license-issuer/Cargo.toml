@@ -1,6 +1,6 @@
 [package]
 name = "license-issuer"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 publish = false
 description = "Issues ولاء license codes. Holds the private key. Never shipped with the application."

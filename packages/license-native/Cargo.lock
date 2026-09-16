@@ -485,7 +485,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "walaa-license"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64",
  "ed25519-dalek",
@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "walaa-license-node"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "napi",
  "napi-build",

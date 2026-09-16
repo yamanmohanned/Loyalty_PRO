@@ -153,10 +153,13 @@ let inFlight: Promise<unknown> | null = null;
 /** Whether a backup or verification is running right now. */
 export const isBackupRunning = (): boolean => inFlight !== null;
 
+/** Throws while a backup or verification is running — checked again inside the lock. */
+export function assertNoBackupRunning(): void {
+  if (inFlight) throw backupBlocked('هناك نسخة احتياطية قيد التنفيذ بالفعل');
+}
+
 async function withBackupLock<T>(operation: () => Promise<T>): Promise<T> {
-  if (inFlight) {
-    throw backupBlocked('هناك نسخة احتياطية قيد التنفيذ بالفعل');
-  }
+  assertNoBackupRunning();
 
   const task = operation();
   inFlight = task;

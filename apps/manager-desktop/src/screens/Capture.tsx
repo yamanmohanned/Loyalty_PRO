@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Printer, ShieldCheck } from 'lucide-react';
 import { PAPER_WIDTHS, type CaptureStatus, type PaperWidth } from '@walaa/shared-types';
 import { api } from '../lib/api';
+import { failureSentence } from '../lib/failure';
 import { formatDate, locale } from '../lib/locale';
 import {
   Button,
@@ -259,6 +260,7 @@ function PaperWidthPanel(): JSX.Element {
             value={current === undefined ? '' : String(current)}
             disabled={printing.isPending || save.isPending}
             onChange={(e) => save.mutate(Number(e.target.value) as PaperWidth)}
+            aria-busy={save.isPending}
           >
             {PAPER_WIDTHS.map((width) => (
               <option key={width} value={String(width)}>
@@ -271,6 +273,13 @@ function PaperWidthPanel(): JSX.Element {
         {/* Said out loud because it is the one thing a manager would otherwise discover
             by walking to the station and finding nothing changed. */}
         <p className="text-xs text-steel">{locale.capture.paperPropagation}</p>
+        {save.isPending ? <p className="text-sm text-steel">{locale.common.saving}</p> : null}
+        {/* A choice that was not stored snapped back to the old value without a word. */}
+        {save.error ? (
+          <div role="alert">
+            <Notice tone="danger">{failureSentence(save.error)}</Notice>
+          </div>
+        ) : null}
       </div>
     </Card>
   );

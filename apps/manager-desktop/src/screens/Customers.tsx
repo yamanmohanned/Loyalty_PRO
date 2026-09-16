@@ -9,6 +9,7 @@ import {
   type DiscountConfigResponse,
 } from '@walaa/shared-types';
 import { api } from '../lib/api';
+import { failureSentence } from '../lib/failure';
 import { locale, formatDate } from '../lib/locale';
 import {
   Button,
@@ -63,7 +64,10 @@ export function CustomersScreen() {
     setPage(1);
   };
   const [exporting, setExporting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  /* The export's outcome: the reminder that the file holds phone numbers, or why there is
+     no file. A failed export used to reject into nothing — the button came back and no
+     file and no sentence appeared. */
+  const [exported, setExported] = useState<{ ok: boolean; text: string } | null>(null);
 
   const pageSize = 25;
   const trimmed = phone.trim();
@@ -90,6 +94,7 @@ export function CustomersScreen() {
 
   async function exportCsv(): Promise<void> {
     setExporting(true);
+    setExported(null);
     try {
       const response = await api.post<{ csv: string }>('/customers/export', {});
       const url = URL.createObjectURL(
@@ -100,7 +105,9 @@ export function CustomersScreen() {
       anchor.download = 'walaa-customers.csv';
       anchor.click();
       URL.revokeObjectURL(url);
-      setNotice(locale.customers.exportWarning);
+      setExported({ ok: true, text: locale.customers.exportWarning });
+    } catch (caught) {
+      setExported({ ok: false, text: failureSentence(caught) });
     } finally {
       setExporting(false);
     }
@@ -119,12 +126,16 @@ export function CustomersScreen() {
         action={
           <Button variant="ghost" onClick={() => void exportCsv()} disabled={exporting}>
             <Download size={18} aria-hidden />
-            {locale.customers.exportCsv}
+            {exporting ? locale.customers.exportingCsv : locale.customers.exportCsv}
           </Button>
         }
       />
 
-      {notice ? <Notice tone="warning">{notice}</Notice> : null}
+      {exported ? (
+        <div role={exported.ok ? 'status' : 'alert'}>
+          <Notice tone={exported.ok ? 'warning' : 'danger'}>{exported.text}</Notice>
+        </div>
+      ) : null}
 
       <Card className="mb-6">
         <div className="flex flex-wrap items-end gap-4 p-6">

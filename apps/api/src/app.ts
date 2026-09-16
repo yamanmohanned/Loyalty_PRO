@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { loadEnv } from './config/env';
 import { API_VERSION } from './config/version';
 import { isDemoBuild } from './lib/demo-guard';
+import { rateLimitedMessage } from './lib/errors';
 import { prisma } from './lib/prisma';
 import { auth } from './plugins/auth';
 import { registerErrorHandler } from './plugins/error-handler';
@@ -336,17 +337,29 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     global: true,
     max: env.RATE_LIMIT_MAX,
     timeWindow: env.RATE_LIMIT_WINDOW,
+    /*
+      Counted in `preHandler`, not `onRequest`: after authentication, the role check and
+      validation, and after any `preHandler` a route declares for its own preconditions
+      (those run first — the limiter's hook is appended to the route's list). So a limit
+      counts attempts at the operation it guards, never requests refused before reaching
+      it. At `onRequest` a malformed body, or «نسخ احتياطي الآن» pressed before the key
+      ceremony, spent an attempt of a six-an-hour budget and then locked the real backup
+      out. `rate-limit.test.ts` pins this.
+    */
+    hook: 'preHandler',
     // Key on the authenticated user when there is one, so a busy register does not
     // exhaust the budget for everyone else sharing its NAT address.
     keyGenerator: (request) => request.auth?.sub ?? request.ip,
     // statusCode is load-bearing: @fastify/rate-limit throws this object, and
     // without it the error handler cannot tell a throttle from an unknown failure
     // and would answer 500 where the client needs a 429 to know to back off.
-    errorResponseBuilder: (request) => ({
+    errorResponseBuilder: (request, context) => ({
       statusCode: 429,
+      // The error handler turns this into the sentence, so the merchant is told how long.
+      retryAfterSeconds: Math.ceil(context.ttl / 1000),
       error: {
         code: 'RATE_LIMITED',
-        message: 'عدد كبير من المحاولات — انتظر قليلاً ثم أعد المحاولة',
+        message: rateLimitedMessage(Math.ceil(context.ttl / 1000)),
         requestId: request.id,
       },
     }),

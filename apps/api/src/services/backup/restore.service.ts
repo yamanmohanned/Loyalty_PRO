@@ -343,6 +343,14 @@ export function cancelStagedRestore(): void {
  * in the same list and is restored the same way — and a restore that cannot offer one
  * is refused rather than carried out without it.
  */
+/** Throws unless a checked copy is waiting to be applied. Cheap: no hashing. */
+export function assertRestoreStaged(): void {
+  const directory = restoreDirectory();
+  if (!readStagedManifest(directory) || !existsSync(stagedDatabasePath(directory))) {
+    throw refuse('NOTHING_STAGED', TEXT.nothingStaged);
+  }
+}
+
 export async function requestApply(actor: RestoreActor): Promise<{ restarting: boolean }> {
   const directory = restoreDirectory();
   const manifest = readStagedManifest(directory);

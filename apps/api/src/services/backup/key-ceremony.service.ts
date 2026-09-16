@@ -147,6 +147,14 @@ export async function ensureKeyGenerated(
  * is a question worth being able to answer — the more so because the honest answer to
  * "can this be un-shown" is no.
  */
+/**
+ * Throws unless a key exists to reveal or confirm. The routes run it before their rate
+ * limit counts, so pressing a button too early never uses up an attempt.
+ */
+export function assertKeyExists(): void {
+  if (!currentKey()) throw backupBlocked('لم يتم توليد مفتاح التشفير بعد');
+}
+
 export async function revealKey(merchantId: string, actorUserId: string | null): Promise<string> {
   const key = currentKey();
   if (!key) throw backupBlocked('لم يتم توليد مفتاح التشفير بعد');

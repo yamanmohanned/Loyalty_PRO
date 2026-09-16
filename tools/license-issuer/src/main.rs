@@ -6,8 +6,9 @@
 mod issue;
 mod keystore;
 mod log;
+mod password;
 
-use std::io::{BufRead, IsTerminal};
+use std::io::{BufRead, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -22,15 +23,20 @@ const LOG_FILE: &str = "issued.db";
 #[derive(Parser)]
 #[command(name = "license-issuer", version, about = "Issues ولاء licence codes. Keep the key safe — see README.md.")]
 struct Cli {
-    /// Where the encrypted key and the log live. Default: %APPDATA%\walaa-license-issuer
-    /// (or $WALAA_ISSUER_HOME).
+    /// The folder holding issuer-key.json and issued.db. Default: $WALAA_ISSUER_HOME, else
+    /// whichever of %USERPROFILE%\.walaa-issuer and %APPDATA%\walaa-license-issuer holds a key.
     #[arg(long, global = true)]
     home: Option<PathBuf>,
 
-    /// Read the password from the first line of standard input instead of prompting.
-    /// For scripted use only; the prompt is the normal way.
-    #[arg(long, global = true)]
+    /// Read the password from standard input instead of prompting. Any shell will do:
+    /// byte-order marks, UTF-16, surrounding spaces and line endings are all removed.
+    #[arg(long, global = true, conflicts_with = "password_file")]
     password_stdin: bool,
+
+    /// Read the password from this file instead of prompting (UTF-8 or UTF-16, with or
+    /// without a byte-order mark or a final line ending).
+    #[arg(long, global = true, value_name = "FILE")]
+    password_file: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Command,
@@ -48,24 +54,41 @@ enum Command {
         #[arg(long)]
         development: bool,
     },
-    /// Issue a licence for a device.
+    /// A device's FIRST licence. A device that already has one is renewed instead.
     Issue {
         /// The device ID the merchant sent, WL-XXXX-XXXX.
         #[arg(long)]
         device: String,
-        /// A trial of this many days.
+        /// A trial of this many days, from now.
         #[arg(long, conflicts_with = "perpetual", required_unless_present = "perpetual")]
         days: Option<u32>,
         /// A licence that never expires.
         #[arg(long)]
         perpetual: bool,
-        /// Add the days to this device's latest trial expiry (from this log) instead of to now.
-        #[arg(long, requires = "days")]
-        extend: bool,
         /// Features to grant, comma-separated. Default: drive_backup,multi_device.
         #[arg(long, value_delimiter = ',')]
         feat: Option<Vec<String>>,
         /// Store name or any note, up to 120 characters. Travels inside the code.
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Renew a device that already has a licence: add days to the end of the licence it
+    /// holds (or to today, if that has ended), or make it perpetual. The shop pastes the
+    /// new code the same way; the old licence needs nothing done to it.
+    Renew {
+        /// The device ID, WL-XXXX-XXXX.
+        #[arg(long)]
+        device: String,
+        /// Days to add to the end of the current licence.
+        #[arg(long, conflicts_with = "perpetual", required_unless_present = "perpetual")]
+        days: Option<u32>,
+        /// Make the licence perpetual (the one-time payment was received).
+        #[arg(long)]
+        perpetual: bool,
+        /// Features, comma-separated. Default: those of the licence being renewed.
+        #[arg(long, value_delimiter = ',')]
+        feat: Option<Vec<String>>,
+        /// Note inside the code. Default: that of the licence being renewed.
         #[arg(long)]
         note: Option<String>,
     },
@@ -82,6 +105,9 @@ enum Command {
         #[arg(long)]
         note: Option<String>,
     },
+    /// Open the key with the password and say whether it worked. Issues nothing, writes
+    /// nothing — the thing to run before leaving for a shop.
+    Check,
     /// List every licence and emergency code this issuer has issued.
     List {
         /// Only this device.
@@ -90,17 +116,36 @@ enum Command {
     },
 }
 
+/// Where the password comes from.
+enum PasswordSource {
+    Prompt,
+    Stdin,
+    File(PathBuf),
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let home = cli.home.clone().unwrap_or_else(default_home);
+    let home = match cli.home.clone() {
+        Some(path) => Home { path, searched: None },
+        None => default_home(),
+    };
+    let source = match (cli.password_file.clone(), cli.password_stdin) {
+        (Some(path), _) => PasswordSource::File(path),
+        (None, true) => PasswordSource::Stdin,
+        (None, false) => PasswordSource::Prompt,
+    };
+    let term = |days: Option<u32>, perpetual: bool| if perpetual { issue::Term::Perpetual } else { issue::Term::Days(days.unwrap_or(0)) };
     let result = match cli.command {
-        Command::Keygen { public_key_out, development } => keygen(&home, cli.password_stdin, public_key_out, development),
-        Command::Issue { device, days, perpetual, extend, feat, note } => {
-            let term = if perpetual { issue::Term::Perpetual } else { issue::Term::Days(days.unwrap_or(0)) };
-            issue_command(&home, cli.password_stdin, issue::Request { device, term, extend, features: feat, note })
+        Command::Keygen { public_key_out, development } => keygen(&home.path, &source, public_key_out, development),
+        Command::Issue { device, days, perpetual, feat, note } => {
+            issue_command(&home, &source, IssueKind::First, &device, term(days, perpetual), feat, note)
         }
-        Command::Unlock { device, days, note } => unlock_command(&home, cli.password_stdin, &device, days, note),
-        Command::List { device } => list_command(&home, device),
+        Command::Renew { device, days, perpetual, feat, note } => {
+            issue_command(&home, &source, IssueKind::Renewal, &device, term(days, perpetual), feat, note)
+        }
+        Command::Unlock { device, days, note } => unlock_command(&home, &source, &device, days, note),
+        Command::Check => check_command(&home, &source),
+        Command::List { device } => list_command(&home.path, device),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -111,35 +156,99 @@ fn main() -> ExitCode {
     }
 }
 
-fn default_home() -> PathBuf {
-    if let Ok(home) = std::env::var("WALAA_ISSUER_HOME") {
-        return PathBuf::from(home);
-    }
-    let base = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
-    Path::new(&base).join("walaa-license-issuer")
+/// The key folder, and — when it was not given — every folder looked in for it.
+struct Home {
+    path: PathBuf,
+    searched: Option<Vec<PathBuf>>,
 }
 
-fn read_password(prompt: &str, from_stdin: bool) -> Result<String, String> {
-    if from_stdin {
-        let mut line = String::new();
-        std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
-        return Ok(line.trim_end_matches(['\r', '\n']).to_string());
+/// `$WALAA_ISSUER_HOME`, else the first of the usual folders that holds a key.
+///
+/// The default used to be `%APPDATA%\walaa-license-issuer` alone, while the provider's key
+/// lives in `%USERPROFILE%\.walaa-issuer`, so every command without `--home` failed to find it.
+fn default_home() -> Home {
+    if let Ok(home) = std::env::var("WALAA_ISSUER_HOME") {
+        return Home { path: PathBuf::from(home), searched: None };
     }
-    if !std::io::stdin().is_terminal() {
-        return Err("no terminal to prompt for the password — run this in a terminal, or pass --password-stdin".into());
+    let mut candidates = Vec::new();
+    if let Ok(profile) = std::env::var("USERPROFILE") {
+        candidates.push(Path::new(&profile).join(".walaa-issuer"));
     }
-    rpassword::prompt_password(prompt).map_err(|e| e.to_string())
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        candidates.push(Path::new(&appdata).join("walaa-license-issuer"));
+    }
+    if candidates.is_empty() {
+        candidates.push(PathBuf::from(".walaa-issuer"));
+    }
+    let path = candidates.iter().find(|c| c.join(KEY_FILE).exists()).unwrap_or(&candidates[0]).clone();
+    Home { path, searched: Some(candidates) }
+}
+
+fn read_password(prompt: &str, source: &PasswordSource) -> Result<String, String> {
+    match source {
+        PasswordSource::File(path) => {
+            let bytes = std::fs::read(path).map_err(|e| format!("reading the password file {}: {e}", path.display()))?;
+            password::normalize(&bytes).map_err(|e| format!("{}: {e}", path.display()))
+        }
+        PasswordSource::Stdin => {
+            let stdin = std::io::stdin();
+            let mut bytes = Vec::new();
+            if stdin.is_terminal() {
+                let mut line = String::new();
+                stdin.lock().read_line(&mut line).map_err(|e| e.to_string())?;
+                bytes = line.into_bytes();
+            } else {
+                // All of it, not one line: a UTF-16 pipe carries a zero byte after its newline.
+                stdin.lock().read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+            }
+            password::normalize(&bytes).map_err(|e| format!("standard input: {e}"))
+        }
+        PasswordSource::Prompt => {
+            if !std::io::stdin().is_terminal() {
+                return Err("no terminal to prompt for the password — run this in a terminal, or pass --password-file".into());
+            }
+            let typed = rpassword::prompt_password(prompt).map_err(|e| e.to_string())?;
+            password::normalize(typed.as_bytes())
+        }
+    }
+}
+
+/// Opens the key with the password as normalised — and, for a key sealed before
+/// 2026-09-15 behind an invisible U+FEFF, with that mark put back.
+fn open_key(file: &keystore::KeyFile, password: &str, source: &PasswordSource) -> Result<ed25519_dalek::SigningKey, String> {
+    let refused = |error: String| {
+        // Windows PowerShell 5.1 sends a pipe as ASCII: every other character arrives as a
+        // literal '?', and no program can tell it from a real one.
+        if matches!(source, PasswordSource::Stdin) && password.contains('?') {
+            format!("{error} (a '?' arrived through the pipe — Windows PowerShell replaces characters it cannot send that way; use --password-file instead of a pipe)")
+        } else {
+            error
+        }
+    };
+    match keystore::open(file, password) {
+        Ok(signing) => Ok(signing),
+        Err(error) => match keystore::open(file, &password::legacy_bom_form(password)) {
+            Ok(signing) => {
+                eprintln!(
+                    "note: this key file was sealed with an invisible U+FEFF before its password (a key made before \
+                     2026-09-15); it opened with that mark added back. Nothing to do."
+                );
+                Ok(signing)
+            }
+            Err(_) => Err(refused(error)),
+        },
+    }
 }
 
 fn now_iso() -> String {
     Utc::now().to_rfc3339()
 }
 
-fn date(seconds: i64) -> String {
+pub(crate) fn date(seconds: i64) -> String {
     Utc.timestamp_opt(seconds, 0).single().map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string()).unwrap_or_default()
 }
 
-fn keygen(home: &Path, from_stdin: bool, public_key_out: Option<PathBuf>, development: bool) -> Result<(), String> {
+fn keygen(home: &Path, source: &PasswordSource, public_key_out: Option<PathBuf>, development: bool) -> Result<(), String> {
     let key_path = home.join(KEY_FILE);
     if key_path.exists() {
         return Err(format!(
@@ -150,9 +259,9 @@ fn keygen(home: &Path, from_stdin: bool, public_key_out: Option<PathBuf>, develo
     }
 
     let kind = if development { KeyKind::Development } else { KeyKind::Production };
-    let password = read_password("New password for the private key: ", from_stdin)?;
-    if !from_stdin {
-        let again = read_password("Repeat the password: ", false)?;
+    let password = read_password("New password for the private key: ", source)?;
+    if matches!(source, PasswordSource::Prompt) {
+        let again = read_password("Repeat the password: ", &PasswordSource::Prompt)?;
         if again != password {
             return Err("the two passwords differ — nothing was written".into());
         }
@@ -246,24 +355,52 @@ fn public_key_source(public: &[u8; 32], kind: KeyKind, chain: &unlock::Chain) ->
     )
 }
 
-fn load_key(home: &Path) -> Result<keystore::KeyFile, String> {
-    let key_path = home.join(KEY_FILE);
-    let text = std::fs::read_to_string(&key_path)
-        .map_err(|e| format!("reading {}: {e} — run `license-issuer keygen` first, or pass --home", key_path.display()))?;
+fn load_key(home: &Home) -> Result<keystore::KeyFile, String> {
+    let key_path = home.path.join(KEY_FILE);
+    let text = std::fs::read_to_string(&key_path).map_err(|e| match &home.searched {
+        Some(searched) if !key_path.exists() => format!(
+            "no {KEY_FILE} in {} — pass --home with the folder that holds your key",
+            searched.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(" or ")
+        ),
+        _ => format!("reading {}: {e} — pass --home with the folder that holds your key", key_path.display()),
+    })?;
     serde_json::from_str(&text).map_err(|e| format!("{} is not a key file: {e}", key_path.display()))
 }
 
-fn issue_command(home: &Path, from_stdin: bool, request: issue::Request) -> Result<(), String> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum IssueKind {
+    First,
+    Renewal,
+}
+
+fn issue_command(
+    home: &Home,
+    source: &PasswordSource,
+    kind: IssueKind,
+    device: &str,
+    term: issue::Term,
+    features: Option<Vec<String>>,
+    note: Option<String>,
+) -> Result<(), String> {
     let file = load_key(home)?;
-    let connection = log::open(&home.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
+    let connection = log::open(&home.path.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
 
-    let device = walaa_license::device::normalize_device_id(&request.device);
-    let previous = log::latest_trial_expiry(&connection, &device).map_err(|e| e.to_string())?;
+    let device = walaa_license::device::normalize_device_id(device);
+    let history = log::list(&connection, Some(&device)).map_err(|e| e.to_string())?;
+    let current = issue::Current::from_entries(&history);
+    let request = match kind {
+        IssueKind::First => {
+            issue::refuse_if_already_licensed(&device, current.as_ref())?;
+            issue::Request { device: device.clone(), term, extend: false, features, note }
+        }
+        IssueKind::Renewal => issue::renewal(&device, term, features, note, current.as_ref())?,
+    };
     let now = Utc::now().timestamp();
-    let payload = issue::build(&request, now, previous, uuid::Uuid::new_v4().to_string())?;
+    let was = current.as_ref().and_then(|c| c.trial_until);
+    let payload = issue::build(&request, now, was, uuid::Uuid::new_v4().to_string())?;
 
-    let password = read_password("Password for the private key: ", from_stdin)?;
-    let signing = keystore::open(&file, &password)?;
+    let password = read_password("Password for the private key: ", source)?;
+    let signing = open_key(&file, &password, source)?;
     let bytes = payload.to_bytes();
     let signature = signing.sign(&bytes).to_bytes();
     let license_code = code::encode(&bytes, &signature);
@@ -276,15 +413,32 @@ fn issue_command(home: &Path, from_stdin: bool, request: issue::Request) -> Resu
     log::record(&connection, &payload, request.extend, &file.fingerprint, &license_code)
         .map_err(|e| format!("recording in the log: {e}"))?;
 
-    println!("Licence issued");
-    println!("  device    {}", payload.did);
-    match payload.exp {
-        None => println!("  type      perpetual — never expires"),
-        Some(exp) => println!(
-            "  type      trial{} — until {}",
-            if request.extend { " (extension)" } else { "" },
-            date(exp)
-        ),
+    let describe = |exp: Option<i64>| match exp {
+        None => "perpetual — never expires".to_string(),
+        Some(exp) => format!("trial — until {}", date(exp)),
+    };
+    match kind {
+        IssueKind::First => {
+            println!("Licence issued");
+            println!("  device    {}", payload.did);
+            println!("  type      {}", describe(payload.exp));
+        }
+        IssueKind::Renewal => {
+            println!("Licence renewed");
+            println!("  device    {}", payload.did);
+            match was {
+                Some(until) if until > now => println!("  was       trial — until {} (still running)", date(until)),
+                Some(until) => println!("  was       trial — ended {}", date(until)),
+                None => println!("  was       —"),
+            }
+            match (payload.exp, was) {
+                (Some(exp), Some(until)) if until > now => {
+                    println!("  now       {} (the days were added to the end of the current licence)", describe(Some(exp)))
+                }
+                (Some(exp), _) => println!("  now       {} (counted from today: the old licence had ended)", describe(Some(exp))),
+                (None, _) => println!("  now       {}", describe(None)),
+            }
+        }
     }
     println!("  features  {}", if payload.feat.is_empty() { "none".to_string() } else { payload.feat.join(", ") });
     if let Some(note) = &payload.note {
@@ -295,13 +449,20 @@ fn issue_command(home: &Path, from_stdin: bool, request: issue::Request) -> Resu
         println!("  WARNING   signed with a DEVELOPMENT key — only development builds accept it");
     }
     println!();
+    println!("On the shop PC: Settings > Licensing > paste it into the activation code box > Activate.");
+    if kind == IssueKind::Renewal {
+        println!("It takes effect at once, with no restart - whether the shop is still licensed or already read-only.");
+        println!("The old licence needs nothing done to it: the program runs on whichever licence lasts longest.");
+    }
+    // The code stays the last thing printed: scripts take everything after this line.
+    println!();
     println!("Send the merchant this code (the lines can be pasted as they are):");
     println!();
     println!("{}", code::wrap(&license_code));
     Ok(())
 }
 
-fn unlock_command(home: &Path, from_stdin: bool, device: &str, days: u32, note: Option<String>) -> Result<(), String> {
+fn unlock_command(home: &Home, source: &PasswordSource, device: &str, days: u32, note: Option<String>) -> Result<(), String> {
     let file = load_key(home)?;
     let chain = file
         .unlock
@@ -314,10 +475,10 @@ fn unlock_command(home: &Path, from_stdin: bool, device: &str, days: u32, note: 
             "{device:?} is not a device ID — it looks like WL-XXXX-XXXX and uses only the symbols 2-9 and A-Z without I, L, O, U"
         ));
     }
-    let connection = log::open(&home.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
+    let connection = log::open(&home.path.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
 
-    let password = read_password("Password for the private key: ", from_stdin)?;
-    let signing = keystore::open(&file, &password)?;
+    let password = read_password("Password for the private key: ", source)?;
+    let signing = open_key(&file, &password, source)?;
     let secret = unlock::chain_secret(&signing.to_bytes());
     let now = Utc::now().timestamp();
     let issued = unlock::issue(&secret, &chain, &device, now, days)?;
@@ -351,6 +512,21 @@ fn unlock_command(home: &Path, from_stdin: bool, device: &str, days: u32, note: 
     println!();
     println!("The merchant types it into Settings > Licensing > emergency code. Full operation returns");
     println!("at once, until the date above. It is not a licence: send a licence code when one can be received.");
+    Ok(())
+}
+
+fn check_command(home: &Home, source: &PasswordSource) -> Result<(), String> {
+    let file = load_key(home)?;
+    let password = read_password("Password for the private key: ", source)?;
+    let signing = open_key(&file, &password, source)?;
+    println!("The key opens with this password.");
+    println!("  folder       {}", home.path.display());
+    println!("  kind         {}", file.kind);
+    println!("  fingerprint  {}", key_fingerprint(&signing.verifying_key().to_bytes()));
+    if let Some(chain) = file.unlock.as_ref().map(keystore::UnlockParams::chain).transpose()? {
+        println!("  phone codes  until {}", date(chain.valid_until(chain.length)));
+    }
+    println!("Nothing was issued and nothing was written.");
     Ok(())
 }
 
@@ -397,4 +573,17 @@ fn list_command(home: &Path, device: Option<String>) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_key_sealed_behind_a_bom_opens_with_the_plain_password_and_no_other() {
+        let signing = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
+        let file = keystore::seal(&signing, "\u{FEFF}correct horse battery", KeyKind::Production, "now").unwrap();
+        assert_eq!(open_key(&file, "correct horse battery", &PasswordSource::Prompt).unwrap().to_bytes(), signing.to_bytes());
+        assert!(open_key(&file, "correct horse batterY", &PasswordSource::Prompt).is_err());
+    }
 }

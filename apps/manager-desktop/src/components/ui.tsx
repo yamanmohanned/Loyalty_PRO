@@ -1325,6 +1325,28 @@ export function Notice({
   );
 }
 
+/**
+ * The outcome of the last action on a card: its failure or its success — never both, and
+ * nothing once a new action starts (`useFormErrors` holds them in one state).
+ */
+export function FormOutcome({ form }: { form: { summary: string | null; success: string | null } }) {
+  if (form.summary) {
+    return (
+      <div role="alert">
+        <Notice tone="danger">{form.summary}</Notice>
+      </div>
+    );
+  }
+  if (form.success) {
+    return (
+      <div role="status">
+        <Notice tone="accent">{form.success}</Notice>
+      </div>
+    );
+  }
+  return null;
+}
+
 /* ── Page scaffolding ──────────────────────────────────────────────────────── */
 
 /**

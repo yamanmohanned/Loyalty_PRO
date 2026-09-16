@@ -1,6 +1,6 @@
 //! The issuer's own record of every licence it has issued — local SQLite, beside the key.
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use std::path::Path;
 use walaa_license::Payload;
 
@@ -112,18 +112,6 @@ pub fn record(connection: &Connection, payload: &Payload, extended: bool, finger
     Ok(())
 }
 
-/// The latest trial expiry logged for a device — what `--extend` adds to.
-pub fn latest_trial_expiry(connection: &Connection, device: &str) -> rusqlite::Result<Option<i64>> {
-    connection
-        .query_row(
-            "SELECT MAX(expires_at) FROM issued WHERE device_id = ?1 AND kind = 'trial'",
-            params![device],
-            |row| row.get::<_, Option<i64>>(0),
-        )
-        .optional()
-        .map(Option::flatten)
-}
-
 pub fn list(connection: &Connection, device: Option<&str>) -> rusqlite::Result<Vec<Entry>> {
     let mut statement = connection.prepare(
         "SELECT license_id, device_id, kind, issued_at, expires_at, features, note, extended
@@ -163,15 +151,17 @@ mod tests {
     }
 
     #[test]
-    fn records_lists_and_finds_the_extension_base() {
+    fn records_lists_and_summarises_what_a_device_holds() {
         let connection = Connection::open_in_memory().unwrap();
         migrate(&connection).unwrap();
         record(&connection, &payload("a", Some(1_000)), false, "FP", "code-a").unwrap();
         record(&connection, &payload("b", Some(5_000)), true, "FP", "code-b").unwrap();
         record(&connection, &payload("c", None), false, "FP", "code-c").unwrap();
 
-        assert_eq!(latest_trial_expiry(&connection, "WL-2345-6789").unwrap(), Some(5_000));
-        assert_eq!(latest_trial_expiry(&connection, "WL-9999-9999").unwrap(), None);
+        let current = crate::issue::Current::from_entries(&list(&connection, Some("WL-2345-6789")).unwrap()).unwrap();
+        assert_eq!(current.trial_until, Some(5_000));
+        assert_eq!(current.perpetual_since, Some(100));
+        assert!(crate::issue::Current::from_entries(&list(&connection, Some("WL-9999-9999")).unwrap()).is_none());
         assert_eq!(list(&connection, None).unwrap().len(), 3);
         assert_eq!(list(&connection, Some("WL-9999-9999")).unwrap().len(), 0);
         // The same licence id twice is refused by the database.

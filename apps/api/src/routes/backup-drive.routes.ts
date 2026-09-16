@@ -39,9 +39,16 @@ import { AppError } from '../lib/errors';
  *
  * ## Rate limits
  *
- * `connect` opens a loopback listener and `disconnect` calls Google. Neither is invoked
- * more than a handful of times in the life of an installation, so a tight limit costs
- * nothing real and stops a stuck client from opening a listener every second.
+ * `disconnect` calls Google and is invoked a handful of times in the life of an
+ * installation, so a tight limit costs nothing real.
+ *
+ * `connect` has no limit of its own, deliberately. It had ten an hour, and every press of
+ * a button whose browser never opened spent one: on 2026-09-16 ten presses in two seconds
+ * each opened a listener nobody could reach, and the eleventh was told «عدد كبير من
+ * المحاولات» about an operation that had never once reached Google. The limit was there
+ * to stop a stuck client opening a listener every second; `beginConnect` now hands back
+ * the attempt already waiting instead, so pressing again opens nothing new. The shared
+ * per-user limit still applies.
  */
 export async function backupDriveRoutes(app: FastifyInstance): Promise<void> {
   /**
@@ -76,7 +83,7 @@ export async function backupDriveRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post(
     '/connect',
-    { config: { roles: ['OWNER'], rateLimit: { max: 10, timeWindow: '1 hour' } } },
+    { config: { roles: ['OWNER'] } },
     async (request) => {
       const auth = requireDashboardRole(request);
       try {
