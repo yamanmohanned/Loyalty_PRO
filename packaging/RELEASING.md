@@ -1,6 +1,8 @@
 # Releasing ولاء
 
-Every command here was executed as written. Artefact values are recorded in §5.
+Every command block here was run as written on 2026-09-17, in a fresh Windows PowerShell 5.1
+window on the build PC (a block is one window: its lines run in order). Where a step is not
+runnable as a command, it says so instead of showing one. Artefact values are recorded in §5.
 
 ---
 
@@ -8,11 +10,12 @@ Every command here was executed as written. Artefact values are recorded in §5.
 
 The root `package.json` version is the product version and the only one anybody edits.
 Every other version string — the API, the desktop app, the Station, the Tauri config,
-the Cargo manifest, the shared packages, and the `API_VERSION` compiled into the service
+the Cargo manifests, the shared packages, and the `API_VERSION` compiled into the service
 — is derived from it.
 
-```bash
-# edit "version" in package.json, then:
+```powershell
+# edit "version" in E:\loyalty\package.json first, then:
+Set-Location E:\loyalty
 pnpm version:write
 pnpm version:check
 ```
@@ -28,7 +31,8 @@ and not here: in the shop, when the till is connected.
 
 ## 2. If you touched a migration, regenerate the fingerprints
 
-```bash
+```powershell
+Set-Location E:\loyalty
 pnpm --filter @walaa/api db:template
 git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json
 ```
@@ -44,7 +48,8 @@ are checked like a lockfile, in three places:
 
 Install the hook once per clone:
 
-```bash
+```powershell
+Set-Location E:\loyalty
 git config core.hooksPath .githooks
 ```
 
@@ -55,20 +60,32 @@ with no schema change produces no diff.
 
 ## 3. Build
 
-```bash
-pnpm package:build      # version:check → fingerprint check → template → station → service host → stage
-pnpm package:verify     # clean-room boot of the staged runtime + service-host checks
-pnpm package:installer  # the NSIS installer
+One window, in this order. `package:verify` needs a licence code and two phone codes issued by
+**your production key** (the staged runtime embeds it and accepts nothing else): the first three
+lines issue them for this build PC (`WL-34V4-WZNE`) and for a shop that does not exist, and put
+them where the script reads them. They extend this PC's own licence by one day each release.
+
+```powershell
+Set-Location E:\loyalty
+$env:WALAA_VERIFY_LICENSE_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-34V4-WZNE --days 1 | Out-String) -split 'Send the merchant this code \(the lines can be pasted as they are\):')[1].Trim()
+$env:WALAA_VERIFY_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-34V4-WZNE --days 1 --note "release verification" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
+$env:WALAA_VERIFY_OTHER_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-2222-2222 --days 1 --note "release verification - a shop that does not exist" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
+pnpm package:build
+pnpm package:verify
 ```
 
-`package:build` stages `packaging/dist/runtime` — the exact tree the installer bundles.
-`package:verify` boots that tree in a clean room and runs 25 checks, including that a
-first launch applies **no migration** and installs the shipped template instead — and
+Then the installer — §6 (it needs the update-signing key in the same window).
+
+`package:build` (version:check → fingerprint check → template → station → licensing module →
+service host → stage) stages `packaging/dist/runtime` — the exact tree the installer bundles.
+`package:verify` boots that tree in a clean room and runs its checks (55 on 0.3.1), including
+that a first launch applies **no migration** and installs the shipped template instead — and
 then **drives the staged bundle the way a merchant does**: first-run setup, the till and
-capture-agent accounts, a customer, a captured invoice, and the first sale. That last
-part exists because three blockers (no till account, no agent account, a 500 on every
-installation's first sale) passed every earlier check: each check proved the runtime
-booted, and none proved a shop could use it.
+capture-agent accounts, licensing (unlicensed → refused in Arabic → activated → trades; licence
+destroyed → phone code → trades; module deleted → still trades), a customer, a captured invoice,
+and the first sale. That last part exists because three blockers (no till account, no agent
+account, a 500 on every installation's first sale) passed every earlier check: each check proved
+the runtime booted, and none proved a shop could use it.
 
 `stage` refuses a Station bundle older than its source, the same way it refuses a stale
 service host.
@@ -77,12 +94,12 @@ service host.
 
 ## 4. Run the drills before you ship
 
-```bash
-# a production-mode service on a production-provisioned database is required;
-# see the header of each drill for how it provisions one.
-pnpm --filter @walaa/api drill:contention <baseUrl> <dbPath> 30 <apiLogPath>
+These two run as written and provision everything themselves, against the staged runtime in
+production mode:
+
+```powershell
+Set-Location E:\loyalty
 pnpm --filter @walaa/api drill:kill 3
-pnpm --filter @walaa/api drill:recover <baseUrl> <sourceDbPath> <backupDir>
 node apps/api/drills/matrix.mjs 4971
 ```
 
@@ -91,21 +108,45 @@ Each refuses to run unless the SQLite settings match production — `wal`,
 both its own connections and the service under test. A concurrency result obtained under
 other settings is not a result about what ships.
 
+**`drill:contention` and `drill:recover` are not runnable as commands on 0.3.x, and were not run
+for 0.3.1.** Both need a production-mode service already running on a production-provisioned
+database holding the development accounts (`Walaa!Dev2026`), passed as `<baseUrl> <dbPath>`.
+The dataset they default to (`…f563cfe8…\scratchpad\prod-drill`) was provisioned on 2026-09-08 by
+0.2.x, and 0.3.x refuses that database by design — a shop machine never migrates. Running them
+again means provisioning a new dataset first; until that is scripted there is no correct
+one-line command to write here. Their last passing runs are the 0.2.x records.
+
 ---
 
 ## 5. Record what you built
 
-```
-Installer  apps/manager-desktop/src-tauri/target/release/bundle/nsis/ولاء_<version>_x64-setup.exe
+```text
+Installer  E:\loyalty\apps\manager-desktop\src-tauri\target\release\bundle\nsis\ولاء_<version>_x64-setup.exe
 ```
 
-Take the SHA-256 and put it wherever you record releases:
+Take the SHA-256 and put it wherever you record releases (this is the 0.3.1 file):
 
 ```powershell
-Get-FileHash "...\ولاء_0.2.0_x64-setup.exe" -Algorithm SHA256
+Get-FileHash "E:\loyalty\apps\manager-desktop\src-tauri\target\release\bundle\nsis\ولاء_0.3.1_x64-setup.exe" -Algorithm SHA256
 ```
 
-**0.3.0 (signed, current — the handover build):** `ولاء_0.3.0_x64-setup.exe`, 33,877,004 bytes ·
+**0.3.1 (signed, current — the install-day build):** `ولاء_0.3.1_x64-setup.exe`, 33,881,377 bytes ·
+`7EB47888D3264748C6463E877697B8F2269DAF65E0E5B9BB0A5DC115549B5967`. «ربط حساب Google» opens the
+browser through the shell's opener and the Drive card shows one status at a time; rate limits
+count only attempts that reached their operation; every settings action has a pending label and
+one outcome; the licence issuer takes the password from any shell or file and renews as its own
+command. **No migration** — the update feed is safe for 0.3.0 shops (§7). Production licence key
+`FCA66207230B90CA` (confirmed by `verify-license-key.mjs`). Built 2026-09-17 from commit
+`aa3b5b1` by running §1, §2, §3, §4 and §6 of this file as written, in that order, each block in a
+fresh PowerShell window — all exit 0; `package:verify` 55 checks with the codes issued by §3's own
+lines. (`db:template` gave the template a new identity; that file is committed with this record.)
+An earlier build of the same source that day, `52C3E397…2692`, was used for the scratch walks in
+`HANDOVER-0.3.1.md` §3 and is superseded by this one. `verify-signing --post`
+confirmed the `.sig` (420 bytes, `92518563EDCB263F77E94FB2F5C36DDEA55E949FCC84F9D3654EFDA116479099`)
+is by key `BE2E4C7B42C8D100`. `drill:kill 3` 8/8 and `matrix.mjs 4971` 12/12 against its staged
+runtime. Not Authenticode-signed: SmartScreen will warn.
+
+**0.3.0 (signed, superseded — never installed at a shop):** `ولاء_0.3.0_x64-setup.exe`, 33,877,004 bytes ·
 `68AE613ECC0C9A2CB677227F55769174359D6C5F3001F7C43C36A345D75EB12B` — offline licensing
 with the provider's **production** key (fingerprint `FCA66207230B90CA`, confirmed by
 `verify-license-key.mjs`; emergency codes until 2046-09-09), bounded fail-open, sales held
@@ -154,10 +195,13 @@ first release.
 
 The short version:
 
+In the same window as §3 (after `package:verify`). Once `PASSWORD.txt` is gone from this PC, put
+the password from your password manager between quotes on the second line instead.
+
 ```powershell
+Set-Location E:\loyalty
 $env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.walaa-signing\walaa-updater.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<from your password manager>"
-pnpm package:build
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.walaa-signing\PASSWORD.txt").Trim()
 pnpm package:installer
 ```
 

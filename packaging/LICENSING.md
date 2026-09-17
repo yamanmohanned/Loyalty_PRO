@@ -1,4 +1,4 @@
-# Licensing — ولاء 0.3.0
+# Licensing — ولاء 0.3.1
 
 ولاء is sold to merchants for a **one-time payment**, with a **trial whose length the
 provider chooses** per shop. Licensing is **entirely offline**: no server, no account, no
@@ -38,7 +38,7 @@ Contents
 
 | Who | Does | With |
 |---|---|---|
-| **Provider** | Generates the key pair once; issues trial, extension and perpetual codes; reads emergency codes over the phone | `tools/license-issuer` — never shipped |
+| **Provider** | Generates the key pair once; issues a first licence, renews it (more days, or perpetual); reads emergency codes over the phone | `tools/license-issuer` — never shipped |
 | **Merchant** | Reads the device number out; pastes a licence code or types an emergency code | «الإعدادات ← الترخيص» in the manager dashboard |
 | **Service** | Computes the device ID, verifies codes, decides the status, refuses what read-only refuses | `crates/walaa-license` (Rust), loaded by the API |
 
@@ -102,11 +102,12 @@ The database holds only SHA-256 digests of the two sources.
 **Re-binding without a visit** (the last row — the only one that needs the provider):
 
 1. The merchant reads the new `WL-` number from «الإعدادات ← الترخيص» over the phone.
-2. The provider reads back an **emergency code** for the new number
-   (`license-issuer unlock --device WL-NEW --days 30`). Full operation returns at once
+2. The provider reads back an **emergency code** for the new number — command **4** in
+   [§5](#5-issuing-provider) with `--days 30`. Full operation returns at once
    ([§7](#7-the-emergency-code-read-over-the-phone)).
 3. When the merchant can receive a message, the provider sends a perpetual licence for
-   the new number (`license-issuer issue --device WL-NEW --perpetual --note "replaces WL-OLD"`),
+   the new number — command **1** in §5 with `--perpetual` and `--note "replaces WL-OLD"`
+   (a new number has no licence in the log, so it is a first licence, not a renewal),
    which the merchant pastes. The log keeps both.
 
 Or, simpler still: restore the shop's backup onto the new machine — the licence comes
@@ -139,16 +140,64 @@ whitespace and the invisible direction marks some message apps insert are remove
 
 ## 5. Issuing (provider)
 
-Full instructions and real output: [`tools/license-issuer/README.md`](../tools/license-issuer/README.md).
+Every command below was run as written on 2026-09-17 in a fresh Windows PowerShell 5.1 window
+on the build PC (only the `WL-` number and the note changed). They are the same commands as
+[`ON-SITE-CARD.md`](ON-SITE-CARD.md); change the two paths if the program or the key folder
+live elsewhere. Full reference and real output: [`tools/license-issuer/README.md`](../tools/license-issuer/README.md).
 
-```bash
-license-issuer keygen                                        # once, ever
-license-issuer issue  --device WL-7K3M-9QXP --days 14        # a 14-day trial
-license-issuer issue  --device WL-7K3M-9QXP --days 5 --extend
-license-issuer issue  --device WL-7K3M-9QXP --perpetual      # paid: never expires
-license-issuer unlock --device WL-7K3M-9QXP --days 7         # emergency code, by phone
-license-issuer list
+```powershell
+# 0 · Prove the key and its password open (issues nothing, writes nothing)
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" check
+
+# 1 · A device's FIRST licence — a 14-day trial (a paid shop: --perpetual instead of --days 14)
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" issue --device WL-XXXX-XXXX --days 14 --note "shop name"
+
+# 2 · RENEW a device that already has a licence — 30 more days
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --days 30
+
+# 3 · RENEW as perpetual — the one-time payment was received
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --perpetual
+
+# 4 · An emergency code, read over the phone (1-30 days)
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-XXXX-XXXX --days 7
+
+# 5 · Everything issued to a device (no password)
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" list --device WL-XXXX-XXXX
 ```
+
+**The password, in any shell.** Every way in — the prompt, `--password-file`, `--password-stdin`
+— goes through one normaliser (`tools/license-issuer/src/password.rs`): a byte-order mark
+anywhere, UTF-16, and whitespace, line endings and invisible direction marks at either end are
+removed, the same at `keygen` and at every later use. No wrapper is needed and none should be
+used. A key sealed before 2026-09-15 behind an invisible U+FEFF (the pre-reseal backup folder)
+still opens with the plain password. One limit no program can undo: **Windows PowerShell 5.1
+sends a pipe as ASCII**, so any non-English character piped in arrives as `?` — use
+`--password-file` or the prompt, never `… | &`. Without `PASSWORD.txt`, drop `--password-file`
+and type the password when asked.
+
+**Where the key is found.** `--home`, else `$WALAA_ISSUER_HOME`, else whichever of
+`%USERPROFILE%\.walaa-issuer` and `%APPDATA%\walaa-license-issuer` holds `issuer-key.json`. A
+missing key names both folders it looked in.
+
+**First licence and renewal are two commands, on purpose.** `issue` refuses a device that already
+has a licence in the log: `issue --days 30` counts from today and could end *before* the licence
+the shop holds, producing a code that changes nothing on its PC.
+
+**Renewal (`renew`):**
+
+| | |
+|---|---|
+| `--days N` | N days added to the **end** of the device's latest trial in this log — or to today, if that has already ended |
+| `--perpetual` | a perpetual licence; the trial stops mattering |
+| note, features | carried forward from the licence being renewed unless given |
+| refused when | the log has no licence for the device (that is `issue`), or it already holds a perpetual one |
+| what the merchant does | pastes the code into «رمز التفعيل» → «تفعيل», exactly like the first one. At once, no restart |
+| the old licence | nothing to do. Every activated code is kept and the governing one is the perpetual, else the trial that ends last (`best_license`) — pasting an older code again can never shorten anything |
+| while still licensed | tested 2026-09-17 on the 0.3.1 runtime: TRIAL to 2027-09-16 → pasted → TRIAL to 2027-10-16; the old code pasted afterwards left it at 2027-10-16 |
+| after EXPIRED (read-only) | tested the same day with the service's clock 401 days ahead: EXPIRED, a new customer refused (423) and a sale held → renewal pasted → TRIAL at once, the held sale credited, the next sale recorded with its discount |
+
+The renewal counts from the latest expiry **in this issuer's log**. If a licence was issued from
+another copy of the key folder, pass that copy with `--home`.
 
 **The trial length is yours alone.** The application has no built-in trial: a new
 installation is `UNLICENSED` until given a code, and a trial lasts exactly the `--days`
@@ -179,8 +228,8 @@ shop must trade *now*.
 provider → types the fifteen symbols the provider reads back into «رمز الطوارئ» →
 «تشغيل فوري». Full operation returns with that request.
 
-**What the provider does:** `license-issuer unlock --device WL-XXXX-XXXX [--days N]`
-(1–30, default 7), and reads out `XXXXX-XXXXX-XXXXX`.
+**What the provider does:** command **4** in [§5](#5-issuing-provider) (`--days` 1–30,
+default 7), and reads out `XXXXX-XXXXX-XXXXX`.
 
 **How it is checked without a secret in the program.** A signature is 64 bytes — far
 too long to read aloud. So the codes come from a **hash chain**: at `keygen` the issuer
@@ -264,7 +313,7 @@ old copy again, discarding every sale and customer recorded since.
 - **At the end** the issuer refuses — `that date is outside this key's unlock chain` — and
   nothing changes at any shop: licence codes are signed and do not depend on the chain.
   Only the phone path ends (`the_chain_runs_out_at_the_provider_not_at_the_shop`). From a
-  year before, `license-issuer unlock` prints the date it ends.
+  year before, the issuer's `unlock` prints the date it ends.
 - **Renewing** means a new tip compiled into a new build. The new chain must come from a
   **new secret label** (`walaa-unlock-secret-v2|…`), never the same secret under a later
   epoch: the same links under a later epoch would move every code ever read onto later
@@ -485,11 +534,11 @@ exercise activation and emergency codes end to end — and must never reach a sh
 (required once the production key is embedded — issued for the build machine), otherwise
 the development issuer.
 
-## 16. Upgrading an existing shop to 0.3.0
+## 16. Upgrading an existing shop to 0.3.x
 
-Two database migrations (`20260914090000_offline_licensing`,
-`20260915090000_licensing_resilience`), so an **in-person upgrade**: take a backup and
-copy it off the machine; install 0.3.0; the shop starts **`UNLICENSED` — read-only** until
+0.3.0 added two database migrations (`20260914090000_offline_licensing`,
+`20260915090000_licensing_resilience`); 0.3.1 adds none. Upgrading a 0.2.x shop is therefore
+an **in-person upgrade**: take a backup and copy it off the machine; install 0.3.1; the shop starts **`UNLICENSED` — read-only** until
 given a code. Have it ready: read the device number on the spot, issue, paste — or read
 an emergency code if the message cannot arrive in time.
 
@@ -497,8 +546,8 @@ an emergency code if the message cannot arrive in time.
 
 | Where | Run | Covers |
 |---|---|---|
-| `crates/walaa-license` | `cargo test` | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened; the chain's direction — nothing derivable from a heard code outlives it, tomorrow's is not computable from today's; capacity and the chain's end |
-| `tools/license-issuer` | `cargo test` | key sealing, payload rules, the log of licences and emergency codes |
+| `crates/walaa-license` | `cargo test --manifest-path crates\walaa-license\Cargo.toml` (from the repository root) | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened; the chain's direction — nothing derivable from a heard code outlives it, tomorrow's is not computable from today's; capacity and the chain's end |
+| `tools/license-issuer` | `cargo test --manifest-path tools\license-issuer\Cargo.toml` | key sealing; the password normaliser — every shape a shell delivers (BOM, UTF-16, CRLF, spaces, direction marks), a key sealed behind a BOM; first licence vs renewal — renewing a running and an ended trial, perpetual, each command refusing the other's case; the log; **the built program** driven with the password by file and by pipe |
 | `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @walaa/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore; a used phone code after a reinstall, a restore and a move; the fallback attacked — clock wound back, an older database, a long trial, a missing end; held sales counted and credited in full |
 | `packaging` | `pnpm package:verify` | a clean production-mode install: unlicensed → refused in Arabic → activated → trades; then **the recovery drill**: licence destroyed (rows deleted, mirror overwritten) → read-only → emergency code typed as heard → trades with no restart → licensing module deleted → service starts and still trades |
 

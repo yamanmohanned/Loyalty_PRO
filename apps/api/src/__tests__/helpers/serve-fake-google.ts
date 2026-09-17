@@ -8,4 +8,4 @@ import { startFakeGoogle } from './fake-google';
 
 const port = Number(process.argv[2] ?? 47100);
 const google = await startFakeGoogle({ port });
-console.log(`fake Google listening on ${google.origin}`);
+process.stdout.write(`fake Google listening on ${google.origin}\n`);
