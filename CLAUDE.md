@@ -1009,3 +1009,101 @@ the substitution is equivalent.
 **One audit row per lock, not per attempt.** The question the trail is asked is «why
 could the till not sign in on Thursday evening», and a row per wrong password buries its
 answer under the attempts that produced it.
+
+### 13.18 Stations: two secrets, and a revocation that takes effect on the next request
+*(P1, 2026-09-20. PRD FND-03.)*
+
+FND-03's two acceptance criteria are the whole design — a station on a new device
+«خلال 3 دقائق دون تدخل تقني», and a revoked device stopped «خلال دقيقة».
+
+**Two secrets, never one.** A *pairing code* is twelve characters from §13.10's
+confusable-free alphabet: short-lived, single-use, and what goes on a screen as a QR or
+is read down a telephone when the tablet has no camera. A *device token* is 48 random
+bytes that never appears on a screen after the moment it is issued. Collapsing them —
+handing out the long-lived token as the QR — would make a photograph of a screen, or a
+pairing card left on a desk, permanent access to a till. The split costs one round trip.
+
+Both are stored only as SHA-256, for the reason refresh tokens are (§13.9): full-entropy
+input, so there is no low-entropy secret a slow hash would protect, and a fast digest
+keeps the per-request check cheap.
+
+**`POST /stations/pair` is public, deliberately.** The device presenting a code has no
+account yet; requiring one would mean somebody with a password stands at every tablet,
+which is exactly what the three-minute criterion rules out. The code *is* the
+credential, and the rate limit — six a minute — is what turns "short code" into "short
+code that is not guessable": 8,640 guesses a day against ~5.9 × 10¹⁷ possibilities in a
+fifteen-minute window.
+
+**Revocation is checked against the database on the request, not read from a claim.** A
+`stationId` inside an access token would be the obvious design and it cannot meet the
+criterion: a JWT lives about fifteen minutes and cannot be withdrawn, so a revoked till
+would keep trading for the rest of that window — in front of customers, taking money,
+after the manager pressed the button and watched the row turn red. One indexed read on a
+unique hash is the price of the promise.
+
+**REVOKED is terminal.** Re-pairing a revoked station would leave one row in the
+manager's list whose history contains two devices, and «is this the tablet I revoked last
+month, or the new one?» is a question nobody should have to answer about a device that
+can take money. A new device is a new row. For the same reason, re-issuing a pairing code
+for an *already paired* station is refused: it would be a way to move a shop's register
+onto another device without a revocation in between.
+
+**Enforcement ships off, and that is stated rather than hidden.**
+`security.require_paired_station` defaults to false. The Station app does not pair yet,
+and turning it on before it does would lock every existing till out of its own register —
+which is the failure §13.10 exists to prevent, caused by the control meant to prevent a
+different one. So the provisioning, the revocation and the per-request check are all real
+and tested; what is not yet true is that an *unpaired* device is refused. It becomes true
+on the day the Station app pairs and the merchant turns the setting on, and it is a
+merchant setting precisely so that day belongs to the shop.
+
+**Remaining for this to be a finished feature:** the Station app must read `?pair=` from
+the URL, call `/stations/pair`, keep the token, send it as `x-station-device`, and poll
+`/stations/me` to notice a revocation while idle. Until then FND-03 is complete on the
+server and absent on the client.
+
+### 13.19 The licensing flake was a real write landing on a row that had been recreated
+*(P1, 2026-09-20. Corrects the guess recorded in the settings-engine commit.)*
+
+`license-resilience.test.ts > trusts no time-limited status that carries no end` failed
+intermittently in full runs and never when run alone. The settings-engine commit
+speculated that licensing state outside the database — the `license-codes.json` mirror,
+the clock anchors — was leaking between test files. **That guess was wrong**, and worth
+recording as wrong: `useLicense` already deletes the mirror, and `resetLicensingForTests`
+already removes the anchors.
+
+**What it actually was.** `rememberStatus` writes the last licence status and
+deliberately does *not* await its own write — an awaited write there put every concurrent
+scan behind SQLite's single writer, spread their arrival at the invoice apart, and turned
+«another station claimed it» answers into replays of the winner's result, which
+`concurrency.test.ts` caught. The promise is parked in `rememberWrite` and
+`degradedState` awaits it.
+
+`reloadLicensingForTests` sets `rememberWrite = null`. That drops the **reference**, not
+the **write**.
+
+Between cases `resetDatabase` DELETEs `installation_state` and recreates row 1. An update
+issued by the previous case and still in flight then lands on the *new* row — writing the
+previous case's status into this case's installation. When that status was PERPETUAL,
+`fallbackVerdict` takes its first branch, keeps the shop trading, and the test that
+installed a TRIAL and expected `423` was answered `200`.
+
+Every symptom follows: it passes alone because there is no previous case; it passes most
+full runs because the write usually lands before the DELETE; and it appeared twice after
+a new test file was added, because a new file shifts the timing of everything after it.
+
+**The fix is in the harness, not the service.** `settleLicensingWritesForTests()` awaits
+the pending write, and `resetDatabase` calls it before deleting anything. The un-awaited
+write stays un-awaited in production, where it belongs and where nothing deletes
+`installation_state` under a running service.
+
+**The production analogue, noted and not fixed here.** A restore replaces the database
+while the service is running. If a status write were in flight across that swap it would
+land on the restored row — the same shape, with a merchant's data instead of a fixture's.
+The restore path stops and restarts the service, so it does not arise today; it is
+written down because the next thing that replaces rows underneath a live service will
+meet it again.
+
+**The lesson worth keeping:** a flake that only appears when an unrelated file is added
+is usually not flaky. It is a race that the old timing happened to win, and the honest
+response is to find the write, not to re-run until it is green.

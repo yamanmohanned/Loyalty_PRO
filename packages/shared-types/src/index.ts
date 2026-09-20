@@ -27,6 +27,7 @@ export * from './period';
 export * from './phone';
 export * from './reports';
 export * from './settings';
+export * from './station';
 export * from './storage';
 export * from './sync';
 export * from './transaction';

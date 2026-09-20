@@ -29,7 +29,7 @@ const REPO = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const STAGE = join(REPO, 'packaging', 'dist', 'runtime');
 // Outside the repository on purpose — see (1) above. `E:` because `C:` on this
 // machine has no free space (docs/legacy/CLAUDE_v3.md §12.1).
-const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom');
+const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'loyalty-pro-cleanroom');
 const PROGRAM = join(CLEANROOM, 'program');
 const DATA = join(CLEANROOM, 'data');
 const PORT = 41234;

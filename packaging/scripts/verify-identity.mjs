@@ -132,6 +132,7 @@ for (const file of files) {
       }
     });
   }
+
 }
 
 if (hits.length === 0) {

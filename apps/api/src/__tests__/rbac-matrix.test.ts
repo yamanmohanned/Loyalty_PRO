@@ -254,6 +254,14 @@ const CASES: Case[] = [
   { method: 'GET', path: '/users', allowed: ['OWNER'] },
   { method: 'POST', path: '/users', allowed: ['OWNER'] },
   { method: 'PATCH', path: '/users/:id', allowed: ['OWNER'] },
+  /* Stations (FND-03). `/stations/pair` and `/stations/me` are public by design —
+     a device presenting a pairing code has no account yet — so they are asserted by
+     `stations.test.ts` rather than by a role table that has no row for "nobody". */
+  { method: 'GET', path: '/stations', allowed: DASHBOARD },
+  { method: 'POST', path: '/stations', allowed: DASHBOARD },
+  { method: 'POST', path: '/stations/:id/pairing', allowed: DASHBOARD },
+  { method: 'POST', path: '/stations/:id/revoke', allowed: DASHBOARD },
+
   {
     method: 'POST',
     path: '/users/:id/unlock',
@@ -443,6 +451,12 @@ describe('the route inventory', () => {
         'GET, HEAD, POST /api/v1/users/',
         'PATCH /api/v1/users/:id',
         'POST /api/v1/users/:id/unlock',
+        'GET, HEAD /api/v1/stations/me',
+        'GET, HEAD, POST /api/v1/stations',
+        'GET, HEAD, POST /api/v1/stations/',
+        'POST /api/v1/stations/:id/pairing',
+        'POST /api/v1/stations/:id/revoke',
+        'POST /api/v1/stations/pair',
         'GET, HEAD /api/v1/vouchers/reconciliation',
         'GET, HEAD, POST /api/v1/auth/bootstrap',
         'GET, HEAD, POST /api/v1/cards/batches',

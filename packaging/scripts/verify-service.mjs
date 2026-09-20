@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const STAGE = join(REPO, 'packaging', 'dist', 'runtime');
-const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom-service');
+const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'loyalty-pro-cleanroom-service');
 const PROGRAM = join(CLEANROOM, 'program');
 const DATA = join(CLEANROOM, 'data');
 const PORT = 41235;

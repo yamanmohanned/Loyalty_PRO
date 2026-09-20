@@ -62,6 +62,7 @@ model Merchant {
   cardBatches CardBatch[]
   settingDrafts SettingDraft[]
   settingVersions SettingVersion[]
+  stations Station[]
 
   @@map("merchant")
 }
@@ -79,6 +80,7 @@ model Branch {
   merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   users User[]
   transactions Transaction[]
+  stations Station[]
 
   @@unique([merchantId, code])
   @@index([merchantId])
@@ -125,6 +127,8 @@ model User {
   assignedCards Card[] @relation("CardAssignedBy")
   generatedBatches CardBatch[] @relation("CardBatchGeneratedBy")
   updatedSettingDrafts SettingDraft[] @relation("SettingDraftUpdatedBy")
+  createdStations Station[] @relation("StationCreatedBy")
+  revokedStations Station[] @relation("StationRevokedBy")
   publishedSettingVersions SettingVersion[] @relation("SettingVersionPublishedBy")
 
   @@unique([merchantId, username])
@@ -684,4 +688,57 @@ model SettingVersion {
   @@unique([merchantId, scope, scopeId, version])
   @@index([merchantId, scope, scopeId, version])
   @@map("setting_version")
+}
+
+// ── Stations (PRD §7, FND-03) ─────────────────────────────────────────────────
+
+/// A till or an orders screen, provisioned by the manager and revocable by them.
+///
+/// Two secrets, never one. `pairing_code_hash` is a short-lived, single-use code that
+/// goes on a screen as a QR and grants nothing by itself; `device_token_hash` is the
+/// long-lived credential the device keeps and the manager revokes. Handing out the
+/// long-lived one as the QR would make a photograph of a screen permanent access to a
+/// till.
+///
+/// Both are stored as SHA-256 and never in the clear — same reasoning as refresh
+/// tokens: the input is full-entropy random, so there is no low-entropy secret for a
+/// slow hash to protect, and a fast digest keeps the per-request check cheap.
+model Station {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  /// Which branch it stands in. Null in a single-branch shop.
+  branchId String? @map("branch_id")
+  /// LOYALTY | ORDERS
+  type String
+  name String
+  /// PENDING | ACTIVE | REVOKED. REVOKED is terminal — re-pairing makes a new station,
+  /// so "is this the device I revoked, or a new one?" is never a question.
+  status String @default("PENDING")
+
+  pairingCodeHash String? @map("pairing_code_hash")
+  pairingExpiresAt DateTime? @map("pairing_expires_at")
+
+  /// Unique so a token can be resolved to exactly one station in one indexed read.
+  deviceTokenHash String? @unique @map("device_token_hash")
+  pairedAt DateTime? @map("paired_at")
+  /// What the device called itself when it paired. Reported by the device, so it is
+  /// display text for the manager's list and is never read for any decision.
+  deviceLabel String? @map("device_label")
+  /// Throttled to roughly one write a minute; this is a list column, not an audit trail.
+  lastSeenAt DateTime? @map("last_seen_at")
+
+  revokedAt DateTime? @map("revoked_at")
+  revokedByUserId String? @map("revoked_by_user_id")
+  createdByUserId String? @map("created_by_user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  createdBy User? @relation("StationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedBy User? @relation("StationRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([merchantId, name])
+  @@index([merchantId, status])
+  @@map("station")
 }

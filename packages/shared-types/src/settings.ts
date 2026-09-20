@@ -272,6 +272,18 @@ export const SETTING_DEFINITIONS = [
     editableBy: ['OWNER'],
   },
 
+  {
+    kind: 'boolean',
+    key: 'security.require_paired_station',
+    group: 'security',
+    labelAr: 'إلزام المحطات بالربط بجهاز',
+    helpAr:
+      'عند التفعيل، لا تعمل محطة إلا من جهاز مربوط برمز من لوحة المدير، فيوقف إبطال الجهاز عمله فوراً. فعّله بعد ربط كل محطاتك.',
+    default: false,
+    scopes: ['MERCHANT'],
+    editableBy: ['OWNER'],
+  },
+
   /* ── النسخ الاحتياطي والمزامنة ──────────────────────────────────────────── */
   {
     kind: 'time',

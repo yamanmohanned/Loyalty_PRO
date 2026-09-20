@@ -20,6 +20,7 @@ import { customerRoutes } from './routes/customers.routes';
 import { discountRoutes } from './routes/discount.routes';
 import { flagRoutes } from './routes/flags.routes';
 import { settingsRoutes } from './routes/settings.routes';
+import { stationRoutes } from './routes/stations.routes';
 import { ingestRoutes } from './routes/ingest.routes';
 import { reportRoutes } from './routes/reports.routes';
 import { scanRoutes } from './routes/scan.routes';
@@ -415,6 +416,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       await api.register(discountRoutes, { prefix: '/discount' });
       await api.register(flagRoutes, { prefix: '/flags' });
       await api.register(settingsRoutes, { prefix: '/settings' });
+      await api.register(stationRoutes, { prefix: '/stations' });
       await api.register(backupRoutes, { prefix: '/backup' });
       // Its own file, and its own prefix: everything under `/backup` must keep working
       // with Drive absent or broken, and a separate registration makes that boundary

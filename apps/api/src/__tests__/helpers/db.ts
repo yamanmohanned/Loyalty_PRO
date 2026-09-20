@@ -127,6 +127,17 @@ export function prepareTestDatabase(): void {
  * test that wants another state removes it (`removeLicenses`) and builds its own.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
+  /*
+    Before anything is deleted. `rememberStatus` writes the licence status without
+    awaiting it, by design, and this table is about to be emptied and rebuilt — so an
+    update still in flight from the previous case would land on the NEW row and write
+    that case's status into this one. It made `license-resilience`'s «trusts no
+    time-limited status that carries no end» fail every so often in a full run and never
+    when it was run alone.
+  */
+  const { settleLicensingWritesForTests } = await import('../../services/license.service');
+  await settleLicensingWritesForTests();
+
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
   const tables = [
     // Settings first: they reference merchant and user, and a table added to the schema
@@ -134,6 +145,11 @@ export async function resetDatabase(prisma: PrismaClient): Promise<void> {
     // flake somewhere else entirely, days later.
     'setting_draft',
     'setting_version',
+    // Not optional. `resolveDeviceToken` looks a device token up by its hash across the
+    // whole table, not within a merchant — so an ACTIVE station left behind by an
+    // earlier case would still resolve, and the one control whose job is to stop a
+    // device would be carrying state between tests.
+    'station',
     'license_activation',
     'license_unlock',
     'installation_state',

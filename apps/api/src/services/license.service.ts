@@ -1344,6 +1344,29 @@ export function startLicenseClock(onTick?: () => Promise<unknown>): () => void {
 
 /* ── Test seams ─────────────────────────────────────────────────────────────── */
 
+/**
+ * Waits for the un-awaited status write to land.
+ *
+ * `rememberStatus` deliberately does not await its own write — an awaited write there
+ * put every concurrent scan behind SQLite's single writer (see the note on that
+ * function). Production never needs to wait for it: nothing deletes
+ * `installation_state` under a running service.
+ *
+ * A test suite does. `resetDatabase` DELETEs the table and recreates row 1 between
+ * cases, and an update issued by the previous case that has not landed yet will apply
+ * to the NEW row — writing the previous test's status into this one's installation.
+ * That is not hypothetical: it is why `license-resilience`'s «trusts no time-limited
+ * status that carries no end» failed intermittently in full runs while passing alone.
+ * The previous case's PERPETUAL arrived after the reset, so the fallback saw PERPETUAL
+ * where the test had installed a TRIAL, kept trading, and answered 200 instead of 423.
+ *
+ * Clearing `rememberWrite` without awaiting it, as `reloadLicensingForTests` does, drops
+ * the reference but not the write.
+ */
+export async function settleLicensingWritesForTests(): Promise<void> {
+  await rememberWrite?.catch(() => undefined);
+}
+
 /** Forgets every cache, as a restart would: the next check re-reads the database and anchors. */
 export function reloadLicensingForTests(): void {
   installation = null;

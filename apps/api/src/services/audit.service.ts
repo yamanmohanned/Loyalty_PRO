@@ -224,6 +224,27 @@ export const AUDIT_ACTIONS = {
    */
   STAFF_UNLOCKED: 'staff.unlocked',
 
+  /** A station was provisioned by the manager (FND-03). */
+  STATION_CREATED: 'station.created',
+  /**
+   * A fresh pairing code was issued for a station not yet paired.
+   *
+   * Audited without the code itself, obviously, but audited: a pairing code is an
+   * opportunity to attach a device to a shop's till, and how often one was reissued is
+   * the kind of thing that only looks interesting afterwards.
+   */
+  STATION_PAIRING_ISSUED: 'station.pairing_issued',
+  /**
+   * A device redeemed a pairing code and became the station.
+   *
+   * No actor: the device had no account at that moment, which is the point of pairing.
+   * The device's own label is recorded instead — it is display text reported by the
+   * device and trusted for nothing, but it is what a manager recognises in a list.
+   */
+  STATION_PAIRED: 'station.paired',
+  /** The manager ended a station. Terminal, and the reason the token exists. */
+  STATION_REVOKED: 'station.revoked',
+
   /**
    * A settings layer was published (PRD §4).
    *

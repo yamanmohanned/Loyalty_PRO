@@ -67,6 +67,13 @@ export const FIELD_LABELS: Readonly<Record<string, string>> = Object.freeze({
   password: 'كلمة المرور',
   passwordConfirm: 'تأكيد كلمة المرور',
 
+  /* stations */
+  type: 'نوع المحطة',
+  deviceLabel: 'اسم الجهاز',
+  // `code` is already declared under cards as «الرمز», which reads correctly for a
+  // pairing code too. A second entry here would shadow or be shadowed depending on
+  // order, which is a worse outcome than one label that fits both.
+
   /* customers */
   name: 'الاسم',
   phone: 'رقم الهاتف',
