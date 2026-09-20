@@ -833,6 +833,12 @@ product line and lethal across two. Had a single `SERVICE_NAME` been left readin
 stopped that shop's live service, deregistered it, and registered this binary in its
 place — during trading hours, with no error shown.
 
+**A guard that reads only tracked files clears today's change by not reading it.**
+It ran green before the fork commit and failed immediately after — because the two
+documents added in that commit were untracked when it ran, and `git ls-files` lists only
+what is committed. It now reads `--cached --others --exclude-standard`, so a file that
+exists is a file that is checked, whether or not anybody has committed it yet.
+
 So the rename is not trusted to a careful diff. `packaging/scripts/verify-identity.mjs`
 fails the build if any of those strings survives, it runs first in CI and first in
 `pnpm test`, and `docs/legacy/` is exempt because naming the frozen line is what those
@@ -886,3 +892,63 @@ which is not survivable for a product meant to be sold as separate packages (PRD
 there rather than in CI on purpose: it must block **shipping**, not developing, because
 the key stays inherited until the provider runs `license-issuer keygen` on their own
 machine with their own password — which is theirs to do, not this repository's.
+
+### 13.16 The settings engine: one declaration per setting, and published values that are never edited
+*(P1, 2026-09-20. PRD §4 and FND-04.)*
+
+§4 makes this the acceptance gate for everything after it — «لا يُعتمد المتطلب إلا إذا
+رُفقت به قائمة إعداداته» — so it was built before the rest of P1.
+
+**One declaration, two consumers.** Every setting is declared once in
+`packages/shared-types/src/settings.ts` with its kind, bounds, default, scope and
+Arabic wording, and its Zod schema is *derived* from that declaration rather than
+written beside it. The manager's screens are generated from the same entries. This is
+the whole reason a field's limit and the API's limit cannot drift — and the drift is
+the dangerous half: a screen that caps a discount at 10% while the server accepts 100%
+is not a cosmetic bug. Appendix A lists ~60 groups; hand-writing them would mean 60
+chances to get that wrong.
+
+**Layers, ordered once.** `SETTING_SCOPES` is `SYSTEM ← MERCHANT ← STATION` and
+resolution walks that array, so the array IS the precedence rule; §4's promised BRANCH
+layer is a new member and a new row, not a rewrite. A setting names the layers that may
+set it, and a value stored at a layer it does not name is **ignored, not obeyed** — a
+station that could widen its own rules by writing a row would make every merchant-level
+rule advisory.
+
+**Only the overridden keys are stored.** Writing the fully resolved set would freeze
+today's defaults into every shop: change a default later and no existing merchant would
+see it, each carrying an invisible copy of the old one. Hence `null` means *remove the
+override*, which is deliberately distinct from *set it to today's default*.
+
+**Draft → publish, and published values are append-only.** Saving each field as it is
+typed leaves a shop running half of yesterday's settings and half of tomorrow's, and
+some of those intermediate states are policies nobody chose — a lockout window raised
+before its attempt count is lowered is a third policy. So editing writes to a draft
+nothing reads, and one act promotes the set.
+
+The live values ARE the highest `setting_version`; there is no mutable "current" row to
+disagree with the history. **Rollback publishes the old values forward as a new
+version** rather than deleting what came after — the question asked three weeks later is
+«what was it set to on the day this went wrong», and a history that rewrites itself
+cannot answer it. It also makes rollback ordinary: a publish whose values came from a
+row, so it versions, audits and resolves identically.
+
+**Two findings worth keeping:**
+
+- *SQLite's UNIQUE index does not constrain the MERCHANT layer.* Every NULL is distinct
+  inside a UNIQUE index, and the MERCHANT layer's `scope_id` is always NULL — so
+  `(merchant_id, scope, scope_id)` permitted any number of drafts and two concurrent
+  publishes could both become version 4, after which "the settings in force" depended on
+  row order. Prisma cannot express a partial index, so the migration adds two by hand.
+- *A role gate inside a handler is not a gate.* Schema validation runs first, so the
+  in-handler OWNER check on `/settings/rollback` answered a manager with **400** for a
+  malformed body and 403 only for a well-formed one. The RBAC matrix caught it. The gate
+  moved to `config.roles`, where every other one in this service lives — in front of
+  everything. This is §13.11's lesson about hook order in a second costume.
+
+**What this does not own yet.** `DiscountSettings` and the Station's paper width are
+already typed tables with screens, tests and a place in the core loop. Moving them in
+here on day one would mean touching the sale path to gain tidiness, and §0 rule 1 says
+the core loop is not where tidiness gets spent. They stay authoritative; the registry
+covers what Appendix A asks for that has no home yet, and migrating them is a later,
+deliberate step.

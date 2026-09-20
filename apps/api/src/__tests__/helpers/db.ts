@@ -129,6 +129,11 @@ export function prepareTestDatabase(): void {
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
   await prisma.$queryRawUnsafe('PRAGMA foreign_keys = OFF');
   const tables = [
+    // Settings first: they reference merchant and user, and a table added to the schema
+    // but forgotten here leaks rows from one case into the next — which surfaces as a
+    // flake somewhere else entirely, days later.
+    'setting_draft',
+    'setting_version',
     'license_activation',
     'license_unlock',
     'installation_state',

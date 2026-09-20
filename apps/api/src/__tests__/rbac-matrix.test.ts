@@ -164,6 +164,22 @@ const CASES: Case[] = [
   { method: 'GET', path: '/flags', allowed: STATION, why: 'the Station needs to know whether card printing is on' },
   { method: 'PUT', path: '/flags/cloud_backup', allowed: DASHBOARD },
 
+  /* Settings engine (PRD §4). The Station reads the values it is governed by and
+     nothing else: the registry is the shape of a screen it does not have. */
+  { method: 'GET', path: '/settings/effective', allowed: STATION, why: 'the Station is governed by these values — fade, card display, idle reset' },
+  { method: 'GET', path: '/settings/registry', allowed: DASHBOARD },
+  { method: 'GET', path: '/settings', allowed: DASHBOARD },
+  { method: 'GET', path: '/settings/versions', allowed: DASHBOARD },
+  { method: 'PATCH', path: '/settings/draft', allowed: DASHBOARD },
+  { method: 'DELETE', path: '/settings/draft', allowed: DASHBOARD },
+  { method: 'POST', path: '/settings/publish', allowed: DASHBOARD },
+  {
+    method: 'POST',
+    path: '/settings/rollback',
+    allowed: ['OWNER'],
+    why: 'a rollback silently reverses decisions a manager made since; the undo belongs to the owner',
+  },
+
   /* Backup and the key ceremony (§12.19). */
   { method: 'GET', path: '/backup', allowed: DASHBOARD },
   { method: 'GET', path: '/backup/key', allowed: DASHBOARD },
@@ -464,6 +480,16 @@ describe('the route inventory', () => {
         'PUT /api/v1/discount/rules',
         'PUT /api/v1/discount/settings',
         'PUT /api/v1/flags/:key',
+        // Settings engine. Two `/settings` nodes for the same reason `/discount` and
+        // `/flags` produce two, and one node carrying PATCH and DELETE for `/draft`.
+        'GET, HEAD /api/v1/settings',
+        'GET, HEAD /api/v1/settings/',
+        'GET, HEAD /api/v1/settings/effective',
+        'GET, HEAD /api/v1/settings/registry',
+        'GET, HEAD /api/v1/settings/versions',
+        'PATCH, DELETE /api/v1/settings/draft',
+        'POST /api/v1/settings/publish',
+        'POST /api/v1/settings/rollback',
       ].sort(),
     );
   });

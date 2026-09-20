@@ -205,6 +205,28 @@ export const AUDIT_ACTIONS = {
    * happened is unanswerable. "Twice this month" is what buys a bigger drive.
    */
   STORAGE_LEVEL_CHANGED: 'storage.level_changed',
+
+  /**
+   * A settings layer was published (PRD §4).
+   *
+   * The draft is deliberately NOT audited. It is a working copy nothing reads, and a
+   * trail that recorded every keystroke of a manager changing his mind would bury the
+   * one row that matters — the moment a value started governing the shop — under
+   * twenty that never governed anything.
+   *
+   * before/after carry the whole layer rather than the changed keys, because the
+   * question asked later is «what was it set to», not «what did he touch».
+   */
+  SETTINGS_PUBLISHED: 'settings.published',
+  /**
+   * An earlier settings version was restored.
+   *
+   * A distinct action from a publish although the mechanism is identical, for the same
+   * reason §13.2 gave SUPERSEDED its own status: the trail should say WHY the values
+   * changed. «Rolled back to version 3» and «published version 7» are different events
+   * to whoever is reading the history after an incident.
+   */
+  SETTINGS_ROLLED_BACK: 'settings.rolled_back',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

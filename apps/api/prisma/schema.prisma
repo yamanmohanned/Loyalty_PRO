@@ -60,6 +60,8 @@ model Merchant {
   auditLogs AuditLog[]
   cards Card[]
   cardBatches CardBatch[]
+  settingDrafts SettingDraft[]
+  settingVersions SettingVersion[]
 
   @@map("merchant")
 }
@@ -112,6 +114,8 @@ model User {
   updatedFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
   assignedCards Card[] @relation("CardAssignedBy")
   generatedBatches CardBatch[] @relation("CardBatchGeneratedBy")
+  updatedSettingDrafts SettingDraft[] @relation("SettingDraftUpdatedBy")
+  publishedSettingVersions SettingVersion[] @relation("SettingVersionPublishedBy")
 
   @@unique([merchantId, username])
   @@index([merchantId, role])
@@ -605,4 +609,69 @@ model LicenseUnlock {
   enteredByUserId String? @map("entered_by")
 
   @@map("license_unlock")
+}
+
+// ── Settings engine (PRD §4, FND-04) ──────────────────────────────────────────
+
+/// The working copy of one layer's settings, before anybody has agreed to it.
+///
+/// §4 requires «مسودة ثم معاينة ثم نشر»: a manager edits, sees the effect, and only
+/// then commits it. A draft is therefore mutable and has no history — it is the thing
+/// being typed. Everything durable lives in `setting_version`.
+///
+/// One row per (merchant, scope, scopeId). `scopeId` is null for MERCHANT and the
+/// station id for STATION; SQLite treats each NULL as distinct in a UNIQUE index, so
+/// the merchant row is kept unique by the partial constraint in the migration rather
+/// than by this one alone.
+model SettingDraft {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  /// MERCHANT | STATION. SYSTEM is the registry in code and is never stored.
+  scope String
+  scopeId String? @map("scope_id")
+  /// Only the keys this layer overrides. Absent means "inherit", which is not the
+  /// same as any value — storing the full resolved set would freeze today's defaults
+  /// into every shop and silently ignore a later change to them.
+  values String
+  updatedByUserId String? @map("updated_by_user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  updatedBy User? @relation("SettingDraftUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([merchantId, scope, scopeId])
+  @@index([merchantId, scope])
+  @@map("setting_draft")
+}
+
+/// A published set of settings. Append-only: the live values are the highest version.
+///
+/// §4 requires «إمكانية الرجوع إلى إصدار سابق». Rolling back COPIES an old version
+/// forward as a new one rather than deleting what came after, for the same reason the
+/// loyalty ledger is append-only: the question a shop owner asks three weeks later is
+/// «what was it set to when this went wrong», and a history that rewrites itself
+/// cannot answer it. It also makes rollback ordinary — it is just another publish, so
+/// it audits, versions and resolves exactly like one.
+model SettingVersion {
+  id String @id @default(uuid())
+  merchantId String @map("merchant_id")
+  scope String
+  scopeId String? @map("scope_id")
+  /// Sequential per (merchant, scope, scopeId) from 1.
+  version Int
+  values String
+  /// What the manager called this publish, so two are distinguishable in a list.
+  note String?
+  /// Set when this version was produced by rolling back to an earlier one.
+  rolledBackFrom Int? @map("rolled_back_from")
+  publishedByUserId String? @map("published_by_user_id")
+  publishedAt DateTime @default(now()) @map("published_at")
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  publishedBy User? @relation("SettingVersionPublishedBy", fields: [publishedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([merchantId, scope, scopeId, version])
+  @@index([merchantId, scope, scopeId, version])
+  @@map("setting_version")
 }

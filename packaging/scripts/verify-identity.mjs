@@ -64,10 +64,39 @@ const FORBIDDEN = [
   ['(?<![\\w.])["\']Walaa["\'](?![\\w.])', 'the frozen line\'s data directory, composed a segment at a time'],
 ];
 
-/** Paths whose job is to describe the frozen line, or to check for it. */
-const EXEMPT = [/^docs\/legacy\//, new RegExp(`^${SELF}$`), /^pnpm-lock\.yaml$/];
+/**
+ * Paths whose job is to describe the frozen line, or to check for it.
+ *
+ * `docs/PRD.md` is the operator's specification and carries §5's own rename table —
+ * the old identifier in one column and the new one in the next. `docs/fork-study.md`
+ * measured that table against the code. Both exist to name those strings, and editing
+ * them to satisfy this check would falsify the documents that justify it.
+ *
+ * Kept to an explicit list rather than exempting `docs/` or `*.md` wholesale: the guard
+ * has already caught real identifiers in `packaging/README.md` and
+ * `docs/hand-maintained.md`, and a new document that needs an exemption should cost
+ * somebody a deliberate line here. CLAUDE.md is NOT listed — only some of its lines
+ * document the old names, and those carry `identity-guard:allow` individually.
+ */
+const EXEMPT = [
+  /^docs\/legacy\//,
+  /^docs\/PRD\.md$/,
+  /^docs\/fork-study\.md$/,
+  new RegExp(`^${SELF}$`),
+  /^pnpm-lock\.yaml$/,
+];
 
-const files = execFileSync('git', ['-c', 'core.quotepath=false', 'ls-files'], { cwd: REPO, encoding: 'utf8' })
+// `--others --exclude-standard` adds files that exist but are not committed yet, while
+// still honouring .gitignore. Tracked-only was a real hole: the two documents added
+// during the fork were untracked when this last ran green, so it never looked at them,
+// and they failed the moment they were committed — after the check that was supposed to
+// catch them had already passed. A guard that only sees yesterday's files is a guard
+// that clears today's change by not reading it.
+const files = execFileSync(
+  'git',
+  ['-c', 'core.quotepath=false', 'ls-files', '--cached', '--others', '--exclude-standard'],
+  { cwd: REPO, encoding: 'utf8' },
+)
   .split('\n')
   .filter(Boolean)
   .filter((f) => !EXEMPT.some((rx) => rx.test(f)))

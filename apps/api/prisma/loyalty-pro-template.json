@@ -1,11 +1,11 @@
 {
   "file": "loyalty-pro-template.db",
-  "bytes": 364544,
-  "sha256": "7fb77fd195634fbcf58ea22b491fdd926d6adda1d05b4c3be994025bdf2309f9",
+  "bytes": 405504,
+  "sha256": "268479002eef52c9cb48004eba072db4879c798b2d3bb7124f1ecfc7888a63b3",
   "productVersion": "0.1.0",
-  "installationId": "5024991b-99d3-49c0-b577-8311f2aef01d",
-  "schemaHash": "2d3a854bb6a10b738b32567cb01aa9151fa4422cb1597460bfbe1325e05f714f",
-  "migrationsFingerprint": "3d93269f4b3225cf18bc3eb2dbc6e2575494ec7f81a9afde0ee7808b6feef713",
+  "installationId": "7e4e7c9c-5195-4470-a122-7756f71735dd",
+  "schemaHash": "e7f15d2251f81d0d089c0310582e12d3b7d9e5214074d66285c47f9eed7a5015",
+  "migrationsFingerprint": "11c1100b9143272d3fb398a0d1e81d302ec446c7d3f7a497c9062ea6cc627b9d",
   "migrations": [
     "20260828021006_v3_instant_discount_sqlite",
     "20260830221926_audit_action_index",
@@ -15,7 +15,8 @@
     "20260904090000_v4_invoice_bracket_discounts",
     "20260904140000_station_paper_width",
     "20260914090000_offline_licensing",
-    "20260915090000_licensing_resilience"
+    "20260915090000_licensing_resilience",
+    "20260920190553_settings_engine"
   ],
-  "builtAt": "2026-09-20T18:31:39.143Z"
+  "builtAt": "2026-09-20T19:06:27.371Z"
 }
