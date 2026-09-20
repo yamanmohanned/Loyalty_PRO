@@ -90,3 +90,9 @@ apps/manager-desktop/uilab.*
 .walaa-signing/
 walaa-updater.key*
 TAURI_SIGNING*
+
+# Card batches carry real printed card numbers, and dist-demo holds a built installer:
+# neither belongs in source control.
+walaa-batch-*.csv
+walaa_batch_*/
+dist-demo/
