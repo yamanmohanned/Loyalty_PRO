@@ -952,3 +952,60 @@ here on day one would mean touching the sale path to gain tidiness, and §0 rule
 the core loop is not where tidiness gets spent. They stay authoritative; the registry
 covers what Appendix A asks for that has no home yet, and migrating them is a later,
 deliberate step.
+
+### 13.17 Account lockout is a defence that can close a shop, so it is built to expire
+*(P1, 2026-09-20. PRD FND-01.)*
+
+Five consecutive failed logins lock an account for five minutes, both numbers being
+merchant settings read from §13.16's engine rather than constants.
+
+**The threat model cuts both ways, and the second direction is the bigger one.** Every
+username in this product is guessable — they are `owner`, `manager` and `station` — so
+anybody on the shop's network can lock the till out of its own register by failing five
+times. On a Thursday evening with a queue that is a worse day for the merchant than the
+attack the lock prevents. Three things bound it, each deliberate:
+
+1. **It expires by itself**, and the setting's ceiling is four hours rather than
+   "never". §13.10 spends a whole subsystem ensuring a paying shop is never locked out
+   by its own software; a permanent lock walks straight back into that.
+2. **A manager can lift it immediately** — `POST /users/:id/unlock`, and MANAGER as well
+   as OWNER, unlike every other route in that file. Creating staff reshapes who can do
+   what and is the owner's; clearing a lock restores an account to the state it was in a
+   minute ago and grants nothing, and the person standing beside a stuck till is usually
+   the manager.
+3. **Hammering a locked account does not extend the lock.** Otherwise the attacker holds
+   the till closed for as long as they keep typing, and the lock becomes the denial of
+   service instead of the protection from one.
+
+A lapsed lock also resets the counter. Leaving it at the ceiling would mean waiting out
+five minutes buys exactly one attempt, and the next typo re-locks.
+
+**The check runs BEFORE the password is verified, and that breaks this file's own
+rule.** `login` hides whether an account exists: an unknown username still pays for an
+Argon2 verification so the timing matches, and `isActive` is checked *after* the password
+precisely so a deactivated account cannot be told from a wrong one.
+
+The lock does not follow that pattern, knowingly. Checked afterwards it stops no
+guessing at all — the attacker carries on, and the only thing that changes is what
+happens on the guess that was already going to succeed. A lock that does not stop
+guessing is decoration. What the choice costs is narrow: a guessed username can be known
+to exist and be locked. Against three usernames every employee already knows, on a LAN
+inside one shop, that is worth very little — and the alternative is a cashier reading
+«اسم المستخدم أو كلمة المرور غير صحيحة» while typing the password they know is right,
+concluding the till is broken, and telephoning somebody.
+
+The attempt that trips the lock says so, rather than leaving it to be discovered on the
+next try. It is the same information either way, one attempt earlier.
+
+**The migration was written by hand.** Prisma's generator produces its usual SQLite
+table rebuild for a column add — create `new_user`, copy every row, `DROP TABLE "user"`,
+rename, recreate the indexes. Correct, and necessary when a type or nullability changes;
+wrong here, where both columns are additive and `ALTER TABLE ADD COLUMN` covers them. The
+rebuild drops and recreates the one table eight others hold foreign keys into, on a
+merchant's live database, to add two columns that need no rebuild. `prisma migrate diff`
+reports no difference between the hand-written version and the schema, which is the proof
+the substitution is equivalent.
+
+**One audit row per lock, not per attempt.** The question the trail is asked is «why
+could the till not sign in on Thursday evening», and a row per wrong password buries its
+answer under the attempts that produced it.

@@ -1,11 +1,11 @@
 {
   "file": "loyalty-pro-template.db",
   "bytes": 405504,
-  "sha256": "268479002eef52c9cb48004eba072db4879c798b2d3bb7124f1ecfc7888a63b3",
+  "sha256": "11732d3f51fab2dc3560679cd4e3f6efb1c871e81a86783cf091e3bb2c0a4e25",
   "productVersion": "0.1.0",
-  "installationId": "7e4e7c9c-5195-4470-a122-7756f71735dd",
-  "schemaHash": "e7f15d2251f81d0d089c0310582e12d3b7d9e5214074d66285c47f9eed7a5015",
-  "migrationsFingerprint": "11c1100b9143272d3fb398a0d1e81d302ec446c7d3f7a497c9062ea6cc627b9d",
+  "installationId": "0929bf9f-ef99-44b2-9120-5233213ff8b6",
+  "schemaHash": "4389ca5987b1e634bd2545cb822a33829ddacf0addd8bb1151e8726f7ddbab8c",
+  "migrationsFingerprint": "2ace8d482ce956d0dc5089e362377e7e6250278298db2bf8a1cb90c969236946",
   "migrations": [
     "20260828021006_v3_instant_discount_sqlite",
     "20260830221926_audit_action_index",
@@ -16,7 +16,8 @@
     "20260904140000_station_paper_width",
     "20260914090000_offline_licensing",
     "20260915090000_licensing_resilience",
-    "20260920190553_settings_engine"
+    "20260920190553_settings_engine",
+    "20260920200828_account_lockout"
   ],
-  "builtAt": "2026-09-20T19:06:27.371Z"
+  "builtAt": "2026-09-20T20:14:22.498Z"
 }

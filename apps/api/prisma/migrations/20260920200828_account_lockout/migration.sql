@@ -1,0 +1,21 @@
+-- Temporary account lockout after consecutive failed logins (PRD FND-01).
+--
+-- ── Written by hand, replacing Prisma's table rebuild ────────────────────────
+--
+-- Prisma's generator produces its usual SQLite "RedefineTables" for a column add:
+-- create `new_user`, copy every row across, DROP TABLE "user", rename, recreate the
+-- indexes. That is correct, and it is the right shape when a column's type or
+-- nullability changes, because SQLite cannot express those any other way.
+--
+-- It is the wrong shape here. Both columns are additive — one NOT NULL with a
+-- default, one nullable — which `ALTER TABLE ADD COLUMN` supports directly. The
+-- rebuild drops and recreates the one table that eight others hold foreign keys
+-- into, on a merchant's live database, to add two columns that need no rebuild. It
+-- guards that with `defer_foreign_keys` and very probably works; but the failure
+-- mode if it does not is a shop's staff accounts, and the cheapest way not to have
+-- that failure mode is not to rebuild the table.
+--
+-- Two ALTERs also leave every index, trigger and foreign key exactly where they
+-- were, so there is nothing to recreate and nothing to recreate wrongly.
+ALTER TABLE "user" ADD COLUMN "failed_attempts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "user" ADD COLUMN "locked_until" DATETIME;

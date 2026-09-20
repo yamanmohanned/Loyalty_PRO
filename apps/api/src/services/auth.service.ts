@@ -16,6 +16,13 @@ import {
 } from '../lib/jwt';
 import { verifyPassword } from '../lib/password';
 import { demoSeedHasPublishedAccount } from '../lib/demo-guard';
+import {
+  clearFailedAttempts,
+  isLocked,
+  lockLimitsFor,
+  lockedMessage,
+  recordFailedAttempt,
+} from './lockout.service';
 import { prisma } from '../lib/prisma';
 
 /**
@@ -167,12 +174,34 @@ export async function login(username: string, password: string): Promise<LoginRe
     throw unauthenticated(LOGIN_FAILED);
   }
 
+  /*
+    The lock is checked BEFORE the password, which breaks this function's own rule that
+    nothing is revealed until the password is right. Deliberately — see the note in
+    `lockout.service.ts`. Checked afterwards, a lock stops no guessing at all: the
+    attacker carries on, and the only thing that changes is what happens on the guess
+    that was already going to work. What it costs is that a guessed username can be
+    known to exist and be locked, which against `owner`, `manager` and `station` on a
+    shop's own network buys an attacker almost nothing — and buys a cashier who is
+    typing the right password an explanation instead of a lie.
+  */
+  const now = new Date();
+  if (isLocked(user, now)) throw unauthenticated(lockedMessage(user, now));
+
   const valid = await verifyPassword(user.passwordHash, password);
-  if (!valid) throw unauthenticated(LOGIN_FAILED);
+  if (!valid) {
+    const limits = await lockLimitsFor(user.merchantId);
+    const next = await recordFailedAttempt(user, limits, prisma, now);
+    // The attempt that trips the lock says so, rather than making the person discover it
+    // on the next try. It is the same information either way, one attempt earlier.
+    if (next.justLocked) throw unauthenticated(lockedMessage(next, now));
+    throw unauthenticated(LOGIN_FAILED);
+  }
 
   // Checked after the password so a deactivated account cannot be distinguished
   // from a wrong password by anyone who does not already know the password.
   if (!user.isActive) throw unauthenticated('هذا الحساب غير مفعّل');
+
+  await clearFailedAttempts(user);
 
   const tokens = await issueTokens(user);
 

@@ -207,6 +207,24 @@ export const AUDIT_ACTIONS = {
   STORAGE_LEVEL_CHANGED: 'storage.level_changed',
 
   /**
+   * An account locked itself after consecutive failed logins (FND-01).
+   *
+   * A system action with no actor, written on the TRANSITION only — one row per lock,
+   * not one per wrong password. The question the trail is asked is «why could the till
+   * not sign in on Thursday evening», and one row answers it; a row per attempt would
+   * bury it under the attempts that led to it.
+   */
+  STAFF_LOCKED: 'staff.locked',
+  /**
+   * A manager lifted a lock before it expired.
+   *
+   * Audited with its actor because clearing a lock is an act on somebody else's
+   * credentials — and because the remedy for «the till is locked and there is a queue»
+   * should leave a trace naming who applied it.
+   */
+  STAFF_UNLOCKED: 'staff.unlocked',
+
+  /**
    * A settings layer was published (PRD §4).
    *
    * The draft is deliberately NOT audited. It is a working copy nothing reads, and a

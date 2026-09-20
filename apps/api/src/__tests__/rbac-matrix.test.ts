@@ -254,6 +254,12 @@ const CASES: Case[] = [
   { method: 'GET', path: '/users', allowed: ['OWNER'] },
   { method: 'POST', path: '/users', allowed: ['OWNER'] },
   { method: 'PATCH', path: '/users/:id', allowed: ['OWNER'] },
+  {
+    method: 'POST',
+    path: '/users/:id/unlock',
+    allowed: DASHBOARD,
+    why: 'the remedy for a locked till has to be whoever is standing beside it, not only the owner',
+  },
 ];
 
 async function tokenFor(role: Role): Promise<string> {
@@ -436,6 +442,7 @@ describe('the route inventory', () => {
         'GET, HEAD, POST /api/v1/users',
         'GET, HEAD, POST /api/v1/users/',
         'PATCH /api/v1/users/:id',
+        'POST /api/v1/users/:id/unlock',
         'GET, HEAD /api/v1/vouchers/reconciliation',
         'GET, HEAD, POST /api/v1/auth/bootstrap',
         'GET, HEAD, POST /api/v1/cards/batches',

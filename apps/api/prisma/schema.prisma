@@ -102,6 +102,16 @@ model User {
   /// v1's ASSISTANT role is gone with the Expo app it belonged to.
   role String
   isActive Boolean @default(true) @map("is_active")
+  /// Consecutive failed logins. Any successful one returns it to zero, so this counts a
+  /// burst rather than a lifetime — an account that has been mistyped twice a month for a
+  /// year is not an account under attack (PRD FND-01).
+  failedAttempts Int @default(0) @map("failed_attempts")
+  /// When a temporary lock lifts. Null when not locked.
+  ///
+  /// Always temporary and always self-clearing. A permanent lock on a till account is a
+  /// shop that cannot sell until somebody with a password arrives, which is the failure
+  /// §13.10 spends a whole subsystem refusing to cause.
+  lockedUntil DateTime? @map("locked_until")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
