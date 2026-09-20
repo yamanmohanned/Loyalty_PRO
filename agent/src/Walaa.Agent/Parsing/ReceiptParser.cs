@@ -6,7 +6,7 @@ namespace Walaa.Agent.Parsing;
 
 /// <summary>
 /// Turns captured print bytes into an invoice number and a total, using a template
-/// (CLAUDE_v3.md §4.5).
+/// (docs/legacy/CLAUDE_v3.md §4.5).
 /// </summary>
 /// <remarks>
 /// The governing rule, inherited from the barcode parsers in §13.6 and just as true

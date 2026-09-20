@@ -24,7 +24,7 @@ export const locale = {
        here, not in JSX). */
     askManager: 'اسأل مدير المتجر عن عنوان جهاز الإدارة على الشبكة.',
     urlLabel: 'عنوان الخادم',
-    urlHint: 'مثال: http://192.168.0.106:4000',
+    urlHint: 'مثال: http://192.168.0.106:4100',
     submit: 'اتصال',
     testing: 'جاري الاتصال…',
     change: 'تغيير عنوان الخادم',
@@ -382,7 +382,7 @@ export const locale = {
   },
 
   /**
-   * A write that reached the server and was NOT stored (CLAUDE_v3.md §12.16).
+   * A write that reached the server and was NOT stored (docs/legacy/CLAUDE_v3.md §12.16).
    *
    * Deliberately not folded into `errors`. This is not a message about a request —
    * it is a message about a sale that did not get recorded, and it has to say three

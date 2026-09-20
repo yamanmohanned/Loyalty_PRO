@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 namespace Walaa.Agent.Delivery;
 
 /// <summary>
-/// Delivers captures to the Manager machine's API (CLAUDE_v3.md §4, §4.8).
+/// Delivers captures to the Manager machine's API (docs/legacy/CLAUDE_v3.md §4, §4.8).
 /// </summary>
 /// <remarks>
 /// <para>

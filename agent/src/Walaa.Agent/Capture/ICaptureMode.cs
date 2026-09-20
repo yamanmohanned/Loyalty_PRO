@@ -1,7 +1,7 @@
 namespace Walaa.Agent.Capture;
 
 /// <summary>
-/// How the agent gets between the POS and the printer (CLAUDE_v3.md §4.2).
+/// How the agent gets between the POS and the printer (docs/legacy/CLAUDE_v3.md §4.2).
 /// </summary>
 /// <remarks>
 /// Four implementations, because the agent must work regardless of how Al-Bayan

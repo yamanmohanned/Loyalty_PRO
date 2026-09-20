@@ -1,5 +1,5 @@
 /**
- * The customer card number (CLAUDE_v3.md §6.2 #4).
+ * The customer card number (docs/legacy/CLAUDE_v3.md §6.2 #4).
  *
  * Sixteen digits, printed on the card as a Code 128C barcode and grouped
  * `4821 0093 7746 1152` in every place a human reads it. The grouping is not

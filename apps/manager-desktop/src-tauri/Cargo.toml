@@ -1,13 +1,13 @@
 [package]
-name = "walaa-manager"
-version = "0.3.1"
+name = "loyalty-pro-manager"
+version = "0.1.0"
 description = "Walaa — إدارة المتجر"
-authors = ["Walaa"]
+authors = ["Loyalty Pro"]
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "walaa_manager_lib"
+name = "loyalty_pro_manager_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -26,7 +26,7 @@ serde_json = "1"
 
 [profile.release]
 # A smaller installer matters when it is sent over WhatsApp or a slow connection
-# (CLAUDE_v2.md §1).
+# (docs/legacy/CLAUDE_v2.md §1).
 codegen-units = 1
 lto = true
 opt-level = "s"

@@ -7,11 +7,11 @@ import {
   looksLikeCardNumber,
   MAX_CARD_SERIAL,
   normalizeCardNumber,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { verifyBarcodeToken } from './barcode-token';
 
 /**
- * `card.v2` — the number on a pre-printed card (CLAUDE_v3.md §12.25).
+ * `card.v2` — the number on a pre-printed card (docs/legacy/CLAUDE_v3.md §12.25).
  *
  * Sixteen digits, Code 128C, 143 modules — the geometry §12.12 froze, untouched.
  * Only the meaning of the digits changes: a six-digit serial that is also printed

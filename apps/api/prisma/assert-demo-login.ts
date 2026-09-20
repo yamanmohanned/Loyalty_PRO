@@ -28,7 +28,7 @@
  * build did not just execute — the two cannot drift, because only one of them is
  * written by hand.
  *
- *   pnpm --filter @walaa/api db:assert:login
+ *   pnpm --filter @loyalty-pro/api db:assert:login
  */
 
 import { createHash } from 'node:crypto';

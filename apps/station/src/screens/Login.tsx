@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { BookOpen, Lock, LogIn, User } from 'lucide-react';
-import { LoginRequestSchema, isStationRole, type LoginResponse } from '@walaa/shared-types';
+import { LoginRequestSchema, isStationRole, type LoginResponse } from '@loyalty-pro/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { clearApiUrl } from '../lib/config';
 import { useFormErrors } from '../lib/form';

@@ -3,7 +3,7 @@ import {
   summarizeFieldErrors,
   type ApiError,
   type ApiErrorCode,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 
 /**
  * One error type for the whole service (CLAUDE.md §9).
@@ -136,7 +136,7 @@ export function rateLimitedMessage(retryAfterSeconds: number | null | undefined)
 
 /**
  * The datastore refused a write — a full disk, in the case this exists for
- * (CLAUDE_v3.md §12.15).
+ * (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * The message names the consequence rather than the cause, because the person who
  * reads it is a cashier with a customer waiting and the only useful thing they can
@@ -146,7 +146,7 @@ export const storageUnavailable = (cause?: unknown) =>
   new AppError('STORAGE_UNAVAILABLE', 'تعذّر حفظ العملية — أبلغ الإدارة فوراً', { cause });
 
 /**
- * Backups are off until the key ceremony is completed (CLAUDE_v3.md §12.19).
+ * Backups are off until the key ceremony is completed (docs/legacy/CLAUDE_v3.md §12.19).
  *
  * Its own code so the dashboard reopens the ceremony rather than showing a failure the
  * manager cannot act on.

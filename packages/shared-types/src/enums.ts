@@ -16,7 +16,7 @@ import { z } from 'zod';
 
 /**
  * v1's `ASSISTANT` is gone with the Expo app it belonged to. `STATION` replaces it:
- * the Loyalty Station operator (CLAUDE_v3.md §6.2), who may scan, register a
+ * the Loyalty Station operator (docs/legacy/CLAUDE_v3.md §6.2), who may scan, register a
  * customer and print — and who must never see a settings screen (§6.4).
  *
  * `AGENT` is the Print Capture Agent, and it exists for one reason: its credentials
@@ -120,7 +120,7 @@ export type RuleDiscountType = z.infer<typeof RuleDiscountTypeSchema>;
 
 /* ── Periods — REMOVED in v4 ───────────────────────────────────────────────── */
 
-// `PeriodTypeSchema` / `PeriodType` are deliberately gone (CLAUDE_UPDATE_4.md §1.3,
+// `PeriodTypeSchema` / `PeriodType` are deliberately gone (docs/legacy/CLAUDE_UPDATE_4.md §1.3,
 // §10.6). The discount is decided by the invoice amount alone, so there is no window
 // for spend to accumulate over and nothing left for a period type to configure.
 //
@@ -133,7 +133,7 @@ export type RuleDiscountType = z.infer<typeof RuleDiscountTypeSchema>;
 // buckets end-of-day voucher reconciliation in local time, which is what fixed
 // §12.23's UTC-day bug.
 
-/* ── Thermal paper (CLAUDE_UPDATE_4.md §5) ─────────────────────────────────── */
+/* ── Thermal paper (docs/legacy/CLAUDE_UPDATE_4.md §5) ─────────────────────────────────── */
 
 /**
  * The Loyalty Station's thermal roll width in millimetres.
@@ -152,7 +152,7 @@ export type PaperWidth = z.infer<typeof PaperWidthSchema>;
 
 export const PAPER_WIDTHS: readonly PaperWidth[] = [58, 80];
 
-/* ── Print capture (CLAUDE_v3.md §4.2) ─────────────────────────────────────── */
+/* ── Print capture (docs/legacy/CLAUDE_v3.md §4.2) ─────────────────────────────────────── */
 
 /**
  * How an invoice reached the system.
@@ -206,7 +206,7 @@ export const VoucherStatusSchema = z.enum(['ISSUED', 'REDEEMED', 'VOID']);
 export type VoucherStatus = z.infer<typeof VoucherStatusSchema>;
 
 /**
- * What the slip tells the cashier to do about a granted discount (CLAUDE_v3.md §9).
+ * What the slip tells the cashier to do about a granted discount (docs/legacy/CLAUDE_v3.md §9).
  *
  * §9 is **closed** by operator ruling: the merchant records discounts by his own
  * accounting method, and the system does not prescribe one. All three strategies stay
@@ -246,7 +246,7 @@ export const SETTLEMENT_STRATEGY_LABELS: Readonly<Record<SettlementStrategy, str
   DAILY_PROMOTIONAL_EXPENSE: 'مصروف ترويجي يومي',
 };
 
-/* ── Feature flags (CLAUDE_v3.md §8) ───────────────────────────────────────── */
+/* ── Feature flags (docs/legacy/CLAUDE_v3.md §8) ───────────────────────────────────────── */
 
 export const FeatureFlagKeySchema = z.enum([
   'whatsapp_integration',
@@ -255,7 +255,7 @@ export const FeatureFlagKeySchema = z.enum([
   'advanced_reports',
   'voucher_reconciliation',
   'sms_fallback',
-  /** Out of scope for v3 and disabled by default — see CLAUDE_v3.md §12.4. */
+  /** Out of scope for v3 and disabled by default — see docs/legacy/CLAUDE_v3.md §12.4. */
   'auto_update',
 ]);
 export type FeatureFlagKey = z.infer<typeof FeatureFlagKeySchema>;

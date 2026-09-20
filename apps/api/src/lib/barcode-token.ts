@@ -6,10 +6,10 @@ import {
   cardNumberSignature,
   looksLikeCardNumber,
   normalizeCardNumber,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 
 /**
- * Customer card numbers (CLAUDE_v3.md §6.2, §12.12).
+ * Customer card numbers (docs/legacy/CLAUDE_v3.md §6.2, §12.12).
  *
  * Sixteen digits: a ten-digit random payload followed by a six-digit truncated
  * HMAC. `packages/shared-types/src/card.ts` documents the shape and the reasoning;

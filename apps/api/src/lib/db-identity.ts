@@ -15,7 +15,7 @@ import { readMigrationDirectory, migrationChecksum } from './migrate';
  *
  * ── The failure this closes ──────────────────────────────────────────────────
  *
- * A `walaa.db` was found at `C:\ProgramData\Walaa` that no build on that machine had
+ * A `loyalty-pro.db` was found at `C:\ProgramData\LoyaltyPro` that no build on that machine had
  * placed, and a demo build adopted it without a word. That file happened to be empty,
  * so the visible symptom was six unexpected migrations. Had it been a shop's live
  * database, a demo build would have migrated, snapshotted and reseeded over a
@@ -342,14 +342,14 @@ export async function censusBusinessData(
 /**
  * Whether an identity failure stops the process.
  *
- * Production enforces. `WALAA_DB_OVERRIDE=1` downgrades enforcement to a loud warning
+ * Production enforces. `LOYALTY_DB_OVERRIDE=1` downgrades enforcement to a loud warning
  * and exists for exactly one situation: a support engineer standing at a machine,
  * with a backup in hand, who has decided that this file is the right one. It is not a
- * configuration setting, it is not written into `walaa.env` by anything, and every
+ * configuration setting, it is not written into `loyalty-pro.env` by anything, and every
  * use of it is recorded in the log with the reason it was needed.
  */
 export function identityEnforced(): boolean {
-  if (process.env.WALAA_DB_OVERRIDE === '1') return false;
+  if (process.env.LOYALTY_DB_OVERRIDE === '1') return false;
   return loadEnv().NODE_ENV === 'production';
 }
 
@@ -455,6 +455,40 @@ export async function verifyDatabaseIdentity(
   const log = options.log;
 
   const file = await openDatabaseFile(client);
+
+  /*
+    ── The frozen «ولاء» line's database, refused by name ────────────────────
+
+    PRD §5 step 6. Everything else in this file asks "is this file mine?" and answers
+    from a `db_identity` row and a schema hash. This asks a cruder question first —
+    "is this file the OTHER PRODUCT'S?" — because the answer is knowable before any
+    row is read, and because the cost of being wrong is not symmetric.
+
+    The two products are built to sit on one machine (§13.13). Their data directories
+    differ, so reaching the other one takes a deliberate act: a hand-edited
+    `DATABASE_URL`, a `LOYALTY_DATA_DIR` copied from the wrong documentation, a data
+    folder moved by someone tidying up. Every one of those is a person trying to be
+    helpful, and what waits on the other side is a shop's live customer list — which
+    this build would migrate to its own schema and then own.
+
+    Unconditional, not production-only. A developer's machine is exactly where a real
+    database of the frozen line is most likely to be lying around, and adopting one
+    there is how the identity check came to exist in the first place.
+
+    Migration between the products, if it is ever built, reads a COPY (PRD §5
+    principle 4) — never this path, and never the live file.
+  */
+  const FROZEN_LINE_DATABASES = ['walaa.db', 'walaa-demo.db']; // identity-guard:allow
+  if (FROZEN_LINE_DATABASES.includes(basename(file).toLowerCase())) {
+    log('refusing a database belonging to the frozen ولاء line', { file });
+    throw new Error(
+      'تعذّر تشغيل الخدمة: الملف المطلوب فتحه هو قاعدة بيانات برنامج «ولاء» السابق، لا قاعدة هذا البرنامج. ' +
+        'لم يُفتح الملف ولم يتغيّر، وبيانات المتجر سليمة. ' +
+        'البرنامجان منفصلان ولكلٍّ منهما مجلد بياناته؛ افتح هذا البرنامج على قاعدته هو، ' +
+        'أو تواصل مع الدعم الفني. التفاصيل التقنية مسجّلة في ملف السجل.',
+    );
+  }
+
   const schemaHash = await computeSchemaHash(client);
   const identity = await readIdentity(client);
   const enforced = identityEnforced();
@@ -532,7 +566,7 @@ export async function verifyDatabaseIdentity(
 
         Two things in the old sentence were wrong for that reader.
 
-        **It printed the Windows path.** `«C:\ProgramData\Walaa\walaa.db»`, inside an
+        **It printed the Windows path.** `«C:\ProgramData\LoyaltyPro\loyalty-pro.db»`, inside an
         RTL sentence, at a shop owner — the same leak `config/env.ts` removed from its
         own messages and documented at length. The path is in the log line above,
         which is where the person who can use it is looking.
@@ -589,7 +623,7 @@ export async function verifyDatabaseIdentity(
 
     One is a database this installation made before identity existed, or one a
     developer's `prisma migrate deploy` just created: nothing in it, nothing to lose.
-    The other is a stranger's — the `C:\ProgramData\Walaa` file, or a shop's live
+    The other is a stranger's — the `C:\ProgramData\LoyaltyPro` file, or a shop's live
     database dropped in by a well-meaning restore.
 
     The census tells them apart by the only measure that matters. An empty file is

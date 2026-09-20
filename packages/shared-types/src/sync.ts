@@ -6,7 +6,7 @@ import { CapturedInvoiceSchema } from './invoice';
 import { ScanCardRequestSchema } from './transaction';
 
 /**
- * Offline sync (CLAUDE_v3.md §7.2).
+ * Offline sync (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * The Station and the Agent each keep a local queue and flush it on reconnect.
  * That queue lives **on the client** — browser storage for the Station, a local

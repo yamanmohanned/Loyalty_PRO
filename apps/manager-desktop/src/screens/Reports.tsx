@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { SETTLEMENT_STRATEGY_LABELS, type ProgrammeReportResponse } from '@walaa/shared-types';
+import { SETTLEMENT_STRATEGY_LABELS, type ProgrammeReportResponse } from '@loyalty-pro/shared-types';
 import { locale } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {

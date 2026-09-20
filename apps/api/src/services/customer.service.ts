@@ -17,7 +17,7 @@ import {
   type CustomerSearchResponse,
   type PhoneE164,
   type UpdateCustomerRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { customerAlreadyExists, notFound, validationFailed } from '../lib/errors';
 import { looksLikeBarcodeToken } from '../lib/barcode-token';
 import { isUniqueViolation, prisma } from '../lib/prisma';
@@ -169,7 +169,7 @@ export async function createCustomer(
 
 /**
  * Resolves a customer at the Loyalty Station from a scanned card or a phone number
- * (CLAUDE_v3.md §6.2).
+ * (docs/legacy/CLAUDE_v3.md §6.2).
  *
  * A USB barcode scanner is a keyboard wedge: it types the number and presses Enter,
  * so this receives exactly what is printed on the card.

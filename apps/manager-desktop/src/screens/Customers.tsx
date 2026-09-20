@@ -7,7 +7,7 @@ import {
   type CustomerDetailResponse,
   type CustomerListResponse,
   type DiscountConfigResponse,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { failureSentence } from '../lib/failure';
 import { locale, formatDate } from '../lib/locale';
@@ -102,7 +102,7 @@ export function CustomersScreen() {
       );
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = 'walaa-customers.csv';
+      anchor.download = 'loyalty-customers.csv';
       anchor.click();
       URL.revokeObjectURL(url);
       setExported({ ok: true, text: locale.customers.exportWarning });

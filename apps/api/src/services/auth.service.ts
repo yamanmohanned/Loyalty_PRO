@@ -5,7 +5,7 @@ import {
   type LoginResponse,
   type PaperWidth,
   type Role,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { unauthenticated } from '../lib/errors';
 import {
   ACCESS_TTL_SECONDS,
@@ -53,7 +53,7 @@ const LOGIN_FAILED = 'اسم المستخدم أو كلمة المرور غير 
 const DEMO_WRONG_DATABASE =
   'قاعدة البيانات التجريبية على هذا الجهاز ليست النسخة التي وصلت مع البرنامج، ' +
   'ولا تحتوي على الحساب المذكور في تعليمات التشغيل. ' +
-  'أغلق البرنامج، احذف مجلد Walaa من %LOCALAPPDATA%، ثم افتح البرنامج من جديد.';
+  'أغلق البرنامج، احذف مجلد LoyaltyPro من %LOCALAPPDATA%، ثم افتح البرنامج من جديد.';
 
 /**
  * SQLite stores `role` as a plain string — the database will accept anything.

@@ -10,9 +10,9 @@ Produced 2026-08-27. No code was modified.
 | Source lines (TS/TSX/Prisma, excl. node_modules) | 8,993 |
 | Passing tests | **108** (80 `apps/api`, 28 `packages/shared-types`) |
 | Packages typechecking clean | 4 of 5 |
-| Packages failing | **`@walaa/dashboard`** — `Cannot find module 'zod'` |
+| Packages failing | **`@loyalty-pro/dashboard`** — `Cannot find module 'zod'` |
 | Lint | 5 of 5 clean |
-| Git commits | 9, all pushed to `github.com/yamanmo/walaa` |
+| Git commits | 9, all pushed to `github.com/yamanmohanned/Loyalty_PRO` |
 | Uncommitted files | 14 (reports endpoints + v2/v3 spec files) |
 
 ## Phase completion, honestly
@@ -42,7 +42,7 @@ Integrations, Login. `page.tsx` is still the Phase 0 foundation smoke page.
 No UI primitives, no nav rail, no charts, no TanStack Query provider, no forms.
 
 Broken: dashboard dependencies were never installed — `pnpm install` failed because
-the C: drive is full. `@walaa/dashboard#typecheck` fails today.
+the C: drive is full. `@loyalty-pro/dashboard#typecheck` fails today.
 
 ## Structural finding that changes the plan
 

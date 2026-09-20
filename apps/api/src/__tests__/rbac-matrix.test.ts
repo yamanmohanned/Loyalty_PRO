@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import type { Role } from '@walaa/shared-types';
+import type { Role } from '@loyalty-pro/shared-types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { API_PREFIX, buildApp } from '../app';

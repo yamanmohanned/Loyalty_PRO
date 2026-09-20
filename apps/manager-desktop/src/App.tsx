@@ -379,7 +379,7 @@ function Shell({ user, onLogout }: { user: SessionUser; onLogout: () => void }) 
   useEffect(() => startRealtime(), []);
 
   /**
-   * The backup key ceremony gate (CLAUDE_v3.md §12.19).
+   * The backup key ceremony gate (docs/legacy/CLAUDE_v3.md §12.19).
    *
    * On a **first run** — no key has ever been confirmed for this merchant — the ceremony
    * replaces the dashboard entirely for the OWNER. There is no close control and no

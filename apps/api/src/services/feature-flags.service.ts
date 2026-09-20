@@ -2,13 +2,13 @@ import {
   DEFAULT_FEATURE_FLAGS,
   FeatureFlagKeySchema,
   type FeatureFlagKey,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
 import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 
 /**
- * Feature flags (CLAUDE_v3.md §8).
+ * Feature flags (docs/legacy/CLAUDE_v3.md §8).
  *
  * Every optional module checks a flag before rendering or executing, so one binary
  * serves every merchant and enabling a module is a settings toggle rather than a

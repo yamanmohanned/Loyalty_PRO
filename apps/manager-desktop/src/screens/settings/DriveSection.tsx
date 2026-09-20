@@ -21,7 +21,7 @@ import {
   type DriveFailure,
   type DriveStatus,
   type DriveTestResult,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api } from '../../lib/api';
 import { openInBrowser } from '../../lib/external';
 import { useFormErrors } from '../../lib/form';

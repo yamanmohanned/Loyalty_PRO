@@ -28,10 +28,10 @@ import { readFreeSpace } from '../services/storage.service';
  * `finally`. There was no route, no command and no script. Meanwhile the failure
  * messages the merchant actually sees — `lib/db-integrity.ts` on a corrupt file — say
  * «استعد أحدث نسخة احتياطية», *restore the most recent backup*, and the packaging
- * runbook's replacement procedure opens with "put the replacement `walaa.db` in place".
+ * runbook's replacement procedure opens with "put the replacement `loyalty-pro.db` in place".
  *
  * A `.walaabk` is AES-256-GCM over gzip. Nothing outside this codebase turns one into a
- * `walaa.db`. So the shop with a dead disk had: archives in Drive, archives on a USB
+ * `loyalty-pro.db`. So the shop with a dead disk had: archives in Drive, archives on a USB
  * stick, a key on a piece of paper — and no way to use any of it. That is §12.19's
  * "intact, encrypted, permanently unrecoverable" reached from the opposite direction,
  * and it is worse than the case §12.19 guards against, because here every instruction
@@ -58,8 +58,8 @@ import { readFreeSpace } from '../services/storage.service';
  *
  * ## Usage
  *
- *   walaa-restore --list
- *   walaa-restore <archive.walaabk> --to <output.db> [--key <base64>] [--force]
+ *   loyalty-pro-restore --list
+ *   loyalty-pro-restore <archive.walaabk> --to <output.db> [--key <base64>] [--force]
  *
  * `--list` needs no key: the archive header is plaintext by design (`archive.ts`), so a
  * folder of files can be dated and identified before anyone finds the paper.
@@ -67,10 +67,10 @@ import { readFreeSpace } from '../services/storage.service';
 
 const USAGE = [
   'الاستخدام:',
-  '  walaa-restore --list',
+  '  loyalty-pro-restore --list',
   '        يعرض النسخ الاحتياطية الموجودة في المجلد المحلي مع تاريخ كل واحدة وبصمة مفتاحها.',
   '',
-  '  walaa-restore <ملف.walaabk> --to <مسار الملف الناتج.db> [--key <المفتاح>] [--force]',
+  '  loyalty-pro-restore <ملف.walaabk> --to <مسار الملف الناتج.db> [--key <المفتاح>] [--force]',
   '        يفكّ تشفير النسخة إلى ملف قاعدة بيانات جديد ويفحصه.',
   '',
   '  --key    المفتاح المكتوب في ورقة الحفظ (base64). بدونه يُستخدم مفتاح هذا الجهاز.',
@@ -211,7 +211,7 @@ async function guard(args: Args & { archive: string; to: string }): Promise<{
     throw new Error(
       `لا يمكن الكتابة فوق قاعدة البيانات العاملة: ${live}\n` +
         'اكتب الملف الناتج في مسار آخر، ثم أوقف الخدمة وانقله إلى مكانه ' +
-        '(مع حذف الملفين المرافقين walaa.db-wal و walaa.db-shm العائدين للملف القديم) ' +
+        '(مع حذف الملفين المرافقين loyalty-pro.db-wal و loyalty-pro.db-shm العائدين للملف القديم) ' +
         'حسب إجراء «استبدال ملف قاعدة البيانات» في دليل التشغيل.',
     );
   }
@@ -306,7 +306,7 @@ function report(result: RestoreResult): number {
     lines.push(
       '',
       'الخطوة التالية: أوقف الخدمة، خذ نسخة من مجلد البيانات كاملاً، ثم ضع هذا الملف',
-      `مكان walaa.db واحذف walaa.db-wal و walaa.db-shm العائدين للملف القديم،`,
+      `مكان loyalty-pro.db واحذف loyalty-pro.db-wal و loyalty-pro.db-shm العائدين للملف القديم،`,
       'ثم شغّل الخدمة وتأكد من العدادات أعلاه على لوحة التحكم.',
     );
   }

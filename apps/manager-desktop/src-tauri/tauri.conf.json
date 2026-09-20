@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ولاء",
-  "version": "0.3.1",
-  "identifier": "com.walaa.manager",
+  "productName": "Loyalty",
+  "version": "0.1.0",
+  "identifier": "com.loyaltypro.manager",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:5183",
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build"
   },
@@ -42,8 +42,8 @@
     "publisher": "Customer loyalty",
     "copyright": "© 2026",
     "category": "Business",
-    "shortDescription": "Customer loyalty — إدارة برنامج الولاء",
-    "longDescription": "Customer loyalty — لوحة تحكم برنامج الولاء لإدارة القواعد والزبائن والتقارير.",
+    "shortDescription": "Loyalty Pro — منصة الولاء والمتجر وإدارة الطلبات",
+    "longDescription": "Loyalty Pro — لوحة تحكم لإدارة الرحلة والمنتجات والمتجر الإلكتروني والطلبات والزبائن والتقارير.",
     "windows": {
       "digestAlgorithm": "sha256",
       "certificateThumbprint": null,
@@ -62,15 +62,15 @@
     "resources": {
       "../../../packaging/dist/runtime": "runtime"
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "updater": {
-      "active": true,
+      "active": false,
       "dialog": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJFMkU0QzdCNDJDOEQxMDAKUldRQTBjaENlMHd1dmd1T256NWVXWmRqaFlsRnFLZCt6aEJnY3BvWWhtSFlxTUFxWDNIS0lJMzYK",
+      "pubkey": "",
       "endpoints": [
-        "https://github.com/yamanmo/walaa/releases/latest/download/latest.json"
+        "https://github.com/yamanmohanned/Loyalty_PRO/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

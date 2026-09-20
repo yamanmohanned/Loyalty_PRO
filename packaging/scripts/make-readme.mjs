@@ -36,7 +36,7 @@ if (!existsSync(CREDENTIALS)) {
   console.error('');
   console.error('  ERROR: demo-credentials.json does not exist.');
   console.error('         The readme is generated from credentials a build has verified.');
-  console.error('         Run `pnpm --filter @walaa/api db:assert:login` first.');
+  console.error('         Run `pnpm --filter @loyalty-pro/api db:assert:login` first.');
   console.error('');
   process.exit(1);
 }

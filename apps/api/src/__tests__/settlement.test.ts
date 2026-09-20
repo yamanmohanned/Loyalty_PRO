@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { isSyncItemSettled, type SyncOperation } from '@walaa/shared-types';
+import { isSyncItemSettled, type SyncOperation } from '@loyalty-pro/shared-types';
 import { getAllFlags, isEnabled, setFlag } from '../services/feature-flags.service';
 import { ingestInvoice, type IngestionContext } from '../services/ingestion.service';
 import { resetSubscribers } from '../services/realtime.service';

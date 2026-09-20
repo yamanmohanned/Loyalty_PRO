@@ -1,9 +1,9 @@
-import type { RealtimeEvent } from '@walaa/shared-types';
+import type { RealtimeEvent } from '@loyalty-pro/shared-types';
 import { getAccessToken } from './api';
 import { getApiUrl } from './config';
 
 /**
- * The dashboard's persistent connection to the API service (CLAUDE_v3.md §7.2).
+ * The dashboard's persistent connection to the API service (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * §7.2 asks for a manager dashboard that updates in under a second with no manual
  * refresh. The Station's socket exists mostly to answer "is the manager machine

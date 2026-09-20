@@ -31,7 +31,7 @@ import {
   writeRegistryAnchor,
   type LicenseInfo,
   type LicenseStatus as NativeStatus,
-} from '@walaa/license-native';
+} from '@loyalty-pro/license-native';
 import {
   LICENSE_EVENT_TYPES,
   LICENSE_FEATURES,
@@ -48,7 +48,7 @@ import {
   type LicenseState,
   type LicenseStatusName,
   type UnlockRefusalReason,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { loadEnv } from '../config/env';
 import { resolveDataDir } from '../config/paths';
 import { AppError } from '../lib/errors';
@@ -75,7 +75,7 @@ import { AUDIT_ACTIONS, recordAudit, type AuditAction } from './audit.service';
  *
  * ## Where the decisions are made
  *
- * In Rust (`@walaa/license-native`, built from `crates/walaa-license`): the device ID,
+ * In Rust (`@loyalty-pro/license-native`, built from `crates/loyalty-pro-license`): the device ID,
  * every signature and phone-code check, the governing licence, the status. This file
  * stores codes and times, asks, and applies the answer — on every sale, new customer
  * and voucher redemption, here in the service, because a lock in a screen is gone the
@@ -91,18 +91,18 @@ import { AUDIT_ACTIONS, recordAudit, type AuditAction } from './audit.service';
  * ## The clock, and the record of it
  *
  * The latest time this installation has seen is kept in three places — the
- * `installation_state` table, `HKCU\Software\Walaa`, and a hidden file in the data
+ * `installation_state` table, `HKCU\Software\LoyaltyPro`, and a hidden file in the data
  * folder — the latest winning. A clock more than two hours behind it is TAMPERED until
  * corrected. Every such event is written to the audit trail AND to an append-only file
  * beside the clock file, which is merged back after a restore: the record of a clock
  * wound back does not disappear with the database it was written to.
  */
 
-const PRODUCTION_REGISTRY_KEY = 'Software\\Walaa';
+const PRODUCTION_REGISTRY_KEY = 'Software\\LoyaltyPro';
 const ANCHOR_FILE = '.license-clock';
 const MIRROR_FILE = 'license-codes.json';
 const EVENTS_FILE = 'license-events.log';
-const MIRROR_FORMAT = 'walaa-license-codes-v2';
+const MIRROR_FORMAT = 'loyalty-pro-license-codes-v2';
 const TOLERANCE_SECONDS = 2 * 3600;
 const TOUCH_INTERVAL_MS = 10 * 60 * 1000;
 const DAY_MS = 86_400_000;
@@ -118,7 +118,7 @@ const DAY_SECONDS = 86_400;
 const FALLBACK_DAYS = 7;
 /** Working statuses that end. The fallback bounds each by its recorded end and `FALLBACK_DAYS`. */
 const TIME_LIMITED: ReadonlySet<LicenseStatusName> = new Set(['TRIAL', 'EMERGENCY', 'GRACE']);
-/** The data-folder clock file's first word (crates/walaa-license/src/anchors.rs). */
+/** The data-folder clock file's first word (crates/loyalty-pro-license/src/anchors.rs). */
 const ANCHOR_HEADER = 'walaa-clock-v1';
 
 type Log = (message: string, extra?: Record<string, unknown>) => void;
@@ -163,12 +163,12 @@ const iso = (seconds: number | null | undefined): string | null =>
 
 function registryKey(): string {
   const env = loadEnv();
-  return (env.NODE_ENV !== 'production' && env.WALAA_LICENSE_REGISTRY_KEY) || PRODUCTION_REGISTRY_KEY;
+  return (env.NODE_ENV !== 'production' && env.LOYALTY_LICENSE_REGISTRY_KEY) || PRODUCTION_REGISTRY_KEY;
 }
 
 function licenseDirectory(): string {
   const env = loadEnv();
-  return (env.NODE_ENV !== 'production' && env.WALAA_LICENSE_DIR) || resolveDataDir();
+  return (env.NODE_ENV !== 'production' && env.LOYALTY_LICENSE_DIR) || resolveDataDir();
 }
 
 const anchorFile = (): string => join(licenseDirectory(), ANCHOR_FILE);
@@ -385,7 +385,7 @@ function readMirror(): Mirror {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { format?: string; codes?: unknown; unlocks?: unknown };
     const strings = (value: unknown): string[] =>
       Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
-    if (parsed.format !== MIRROR_FORMAT && parsed.format !== 'walaa-license-codes-v1') return { codes: [], unlocks: [] };
+    if (parsed.format !== MIRROR_FORMAT && parsed.format !== 'loyalty-pro-license-codes-v1') return { codes: [], unlocks: [] };
     return { codes: strings(parsed.codes), unlocks: strings(parsed.unlocks) };
   } catch {
     return { codes: [], unlocks: [] };

@@ -1,0 +1,83 @@
+#
+# The fork had no CI at all — P0's exit criterion asks for one.
+#
+# It runs on Windows because the product does: the licensing crate reads the machine
+# GUID, the volume serial and an HKCU anchor through the Win32 API, and the Windows
+# service host is the thing that actually ships. A green Linux build would prove
+# something about code nobody runs.
+#
+# `verify-identity` runs FIRST and on its own, before anything is installed. It is the
+# cheapest job in the file and it guards the most expensive mistake — an identifier of
+# the frozen «ولاء» line surviving into a build that would then collide with a live
+# installation. There is no reason to spend six minutes on a toolchain to discover it.
+#
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  identity:
+    name: fork identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node packaging/scripts/verify-identity.mjs
+
+  build:
+    name: typecheck, lint, test
+    needs: identity
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/loyalty-pro-license
+            packages/license-native
+            packaging/service-host
+
+      - run: pnpm install --frozen-lockfile
+
+      # The suite talks to Prisma, and a checkout has no generated client.
+      - run: pnpm db:generate
+
+      # Secrets the schema demands. Never real ones: the suite builds its own database
+      # per run and its own licence anchors, and `.env.example` documents every key.
+      - name: write a CI .env
+        shell: bash
+        run: |
+          cp .env.example .env
+          node -e "
+            const fs=require('fs');
+            const rand=n=>require('crypto').randomBytes(n).toString('base64');
+            let t=fs.readFileSync('.env','utf8');
+            const set=(k,v)=>{t=t.replace(new RegExp('^'+k+'=.*\$','m'), k+'=\"'+v+'\"');};
+            set('JWT_ACCESS_SECRET',rand(48));
+            set('JWT_REFRESH_SECRET',rand(48));
+            set('QR_TOKEN_SECRET',rand(48));
+            set('BACKUP_KEY',require('crypto').randomBytes(32).toString('base64'));
+            fs.writeFileSync('.env',t);
+          "
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test

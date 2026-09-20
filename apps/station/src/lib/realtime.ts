@@ -3,7 +3,7 @@ import { getStoredApiUrl } from './config';
 import { flush, setLinkUp } from './queue';
 
 /**
- * The station's persistent connection to the manager machine (CLAUDE_v3.md §7.2).
+ * The station's persistent connection to the manager machine (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * The station is mostly a *producer* of events rather than a consumer — the dashboard
  * is what needs live updates. So the socket earns its place here for a different

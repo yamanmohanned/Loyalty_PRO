@@ -6,7 +6,7 @@ import { isBackupRunning, runBackup } from './backup.service';
 import { keyStatus } from './key-ceremony.service';
 
 /**
- * Scheduled backups (CLAUDE_v3.md §7.3, §12.21).
+ * Scheduled backups (docs/legacy/CLAUDE_v3.md §7.3, §12.21).
  *
  * §7.3: "daily after close + every 500 transactions". Four properties shape everything
  * below, and each one is a failure this project has already met in another guise.

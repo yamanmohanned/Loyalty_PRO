@@ -1,13 +1,13 @@
 import { Boxes } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { FeatureFlagKey } from '@walaa/shared-types';
+import type { FeatureFlagKey } from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { failureSentence } from '../lib/failure';
 import { locale } from '../lib/locale';
 import { Card, CardHeader, Chip, cn, ErrorState, Notice, PageHeader, SkeletonTable } from '../components/ui';
 
 /**
- * Feature flags (CLAUDE_v3.md §8).
+ * Feature flags (docs/legacy/CLAUDE_v3.md §8).
  *
  * One binary serves every merchant; enabling a module is a toggle here rather than
  * a separate build. Each row carries the honest cost or caveat of the module —

@@ -1,7 +1,7 @@
 /**
  * The schema this build was compiled against — GENERATED, DO NOT EDIT BY HAND.
  *
- * Written by `apps/api/prisma/build-db-template.ts` (`pnpm --filter @walaa/api db:template`)
+ * Written by `apps/api/prisma/build-db-template.ts` (`pnpm --filter @loyalty-pro/api db:template`)
  * and checked by `src/__tests__/db-template.test.ts`, which recomputes both values from
  * the migrations on disk and from the shipped template and fails if either has drifted.
  *

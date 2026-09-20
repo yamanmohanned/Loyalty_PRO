@@ -1,20 +1,20 @@
 //! Walaa manager desktop shell.
 //!
 //! Deliberately thin. The API service is a **separate Windows Service**, not a
-//! Tauri sidecar (CLAUDE_v3.md §12.3): the Loyalty Station and the Print Capture
+//! Tauri sidecar (docs/legacy/CLAUDE_v3.md §12.3): the Loyalty Station and the Print Capture
 //! Agent need the API alive for the whole working day, and a sidecar dies with the
 //! dashboard window. So this process is only the manager's UI shell — it talks to
 //! the local API over HTTP like any other client.
 //!
 //! Everything the frontend may touch is declared in `capabilities/default.json`
-//! (CLAUDE_v2.md §11). There is no filesystem or shell access.
+//! (docs/legacy/CLAUDE_v2.md §11). There is no filesystem or shell access.
 
 /// Removes the WebView2 profile's credential and form-history stores.
 ///
 /// ── Why a desktop app deletes browser databases on every launch ──────────────
 ///
 /// The window is a WebView2, which is Chromium, which keeps a full browser profile
-/// under `%LOCALAPPDATA%\com.walaa.manager\EBWebView`. That profile has a password
+/// under `%LOCALAPPDATA%\com.loyaltypro.manager\EBWebView`. That profile has a password
 /// manager (`Login Data`) and a form-history autofill store (`Web Data`), and both
 /// were quietly active in the shipped build: a `Web Data` on the operator's machine
 /// held the username `manager`, typed during testing, and it survived a full
@@ -37,7 +37,7 @@ fn purge_webview_credential_stores() {
         return;
     };
     let profiles = std::path::Path::new(&local)
-        .join("com.walaa.manager")
+        .join("com.loyaltypro.manager")
         .join("EBWebView");
 
     let Ok(entries) = std::fs::read_dir(&profiles) else {
@@ -85,7 +85,7 @@ fn backend_status(app: tauri::AppHandle) -> status::BackendStatus {
 
 /// The port the backend is listening on.
 ///
-/// A demo picks a free one at every launch, so the frontend cannot assume 4000 —
+/// A demo picks a free one at every launch, so the frontend cannot assume 4100 —
 /// which it used to, hardcoded, and which is exactly how an app dies permanently on a
 /// machine where something else already owns that port.
 ///
@@ -97,7 +97,7 @@ fn backend_status(app: tauri::AppHandle) -> status::BackendStatus {
 /// text box on the login screen asking for an address, which is the control he uses to
 /// convince himself the software is broken.
 ///
-/// The port is in `walaa.env`, locked to SYSTEM and Administrators because that file
+/// The port is in `loyalty-pro.env`, locked to SYSTEM and Administrators because that file
 /// also holds the JWT signing keys. So the service — which can read it — publishes the
 /// port alone into `status.json` in the log directory, and this reads it back. Zero
 /// configuration on the machine that hosts its own backend; configuration only on a

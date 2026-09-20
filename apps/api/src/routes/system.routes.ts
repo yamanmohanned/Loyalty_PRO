@@ -5,7 +5,7 @@ import {
   PaperWidthSchema,
   type CaptureStatus,
   type PaperWidth,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import { AUDIT_ACTIONS, recordAudit } from '../services/audit.service';
 import { prisma } from '../lib/prisma';
@@ -23,7 +23,7 @@ const ClientErrorReportSchema = z
   .strict();
 
 /**
- * Host telemetry the manager needs to act on (CLAUDE_v3.md §12.15).
+ * Host telemetry the manager needs to act on (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * ## Why this is not on `/health`
  *
@@ -164,7 +164,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
   /*
     ── The demo reset ────────────────────────────────────────────────────────
 
-    **Registered only in a demo build.** `isDemoBuild()` reads `WALAA_DEMO`, which the
+    **Registered only in a demo build.** `isDemoBuild()` reads `LOYALTY_DEMO`, which the
     demo launcher sets and a production install never does, so in a real deployment
     this route does not exist — a request to it 404s the same as any unknown path,
     rather than existing and refusing. An endpoint that can erase a shop's history is
@@ -172,7 +172,7 @@ export async function systemRoutes(app: FastifyInstance): Promise<void> {
 
     `buildDemoShop` gates itself again on the open database file (§`assertDemoDatabase`),
     so even a production install started with the flag set by mistake cannot wipe
-    `walaa.db`.
+    `loyalty-pro.db`.
 
     OWNER only, and slow: roughly half a minute to replay six months through the real
     services. The client says so before it starts, because a button that appears to

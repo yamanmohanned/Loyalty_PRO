@@ -4,7 +4,7 @@ import {
   type SyncBatchResponse,
   type SyncItemResult,
   type SyncOperation,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { AppError, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
 import { createCustomer } from './customer.service';
 import { ingestInvoice, type IngestionContext } from './ingestion.service';
@@ -12,7 +12,7 @@ import { scanCard, type ScanContext } from './scan.service';
 import { redeemVoucher } from './voucher.service';
 
 /**
- * Offline sync reconciliation (CLAUDE_v3.md §7.2).
+ * Offline sync reconciliation (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * The Station and the Agent are the source of truth for their own queues until a
  * batch is confirmed. Two properties keep that safe:

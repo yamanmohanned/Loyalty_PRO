@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { BootstrapRequest } from '@walaa/shared-types';
-import { BootstrapRequestSchema, OWNER_PASSWORD_RULES } from '@walaa/shared-types';
+import type { BootstrapRequest } from '@loyalty-pro/shared-types';
+import { BootstrapRequestSchema, OWNER_PASSWORD_RULES } from '@loyalty-pro/shared-types';
 import { Building2, Check, KeyRound, MapPin, ShieldCheck, User, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useFormErrors } from '../lib/form';

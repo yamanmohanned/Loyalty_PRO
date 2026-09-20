@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use chrono::{TimeZone, Utc};
 use clap::{Parser, Subcommand};
 use ed25519_dalek::Signer;
-use walaa_license::{code, device, key_fingerprint, unlock, KeyKind};
+use loyalty_pro_license::{code, device, key_fingerprint, unlock, KeyKind};
 
 const KEY_FILE: &str = "issuer-key.json";
 const LOG_FILE: &str = "issued.db";
@@ -23,8 +23,8 @@ const LOG_FILE: &str = "issued.db";
 #[derive(Parser)]
 #[command(name = "license-issuer", version, about = "Issues ولاء licence codes. Keep the key safe — see README.md.")]
 struct Cli {
-    /// The folder holding issuer-key.json and issued.db. Default: $WALAA_ISSUER_HOME, else
-    /// whichever of %USERPROFILE%\.walaa-issuer and %APPDATA%\walaa-license-issuer holds a key.
+    /// The folder holding issuer-key.json and issued.db. Default: $LOYALTY_ISSUER_HOME, else
+    /// whichever of %USERPROFILE%\.loyalty-pro-issuer and %APPDATA%\loyalty-pro-license-issuer holds a key.
     #[arg(long, global = true)]
     home: Option<PathBuf>,
 
@@ -47,7 +47,7 @@ enum Command {
     /// Generate the key pair. Once. Refuses if a key already exists in --home.
     Keygen {
         /// Where to write the Rust source file carrying the public key. Default: the
-        /// repository's crates/walaa-license/src/public_key.rs.
+        /// repository's crates/loyalty-pro-license/src/public_key.rs.
         #[arg(long)]
         public_key_out: Option<PathBuf>,
         /// Generate a development key: builds embedding it cannot be packaged.
@@ -162,23 +162,23 @@ struct Home {
     searched: Option<Vec<PathBuf>>,
 }
 
-/// `$WALAA_ISSUER_HOME`, else the first of the usual folders that holds a key.
+/// `$LOYALTY_ISSUER_HOME`, else the first of the usual folders that holds a key.
 ///
-/// The default used to be `%APPDATA%\walaa-license-issuer` alone, while the provider's key
-/// lives in `%USERPROFILE%\.walaa-issuer`, so every command without `--home` failed to find it.
+/// The default used to be `%APPDATA%\loyalty-pro-license-issuer` alone, while the provider's key
+/// lives in `%USERPROFILE%\.loyalty-pro-issuer`, so every command without `--home` failed to find it.
 fn default_home() -> Home {
-    if let Ok(home) = std::env::var("WALAA_ISSUER_HOME") {
+    if let Ok(home) = std::env::var("LOYALTY_ISSUER_HOME") {
         return Home { path: PathBuf::from(home), searched: None };
     }
     let mut candidates = Vec::new();
     if let Ok(profile) = std::env::var("USERPROFILE") {
-        candidates.push(Path::new(&profile).join(".walaa-issuer"));
+        candidates.push(Path::new(&profile).join(".loyalty-pro-issuer"));
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
-        candidates.push(Path::new(&appdata).join("walaa-license-issuer"));
+        candidates.push(Path::new(&appdata).join("loyalty-pro-license-issuer"));
     }
     if candidates.is_empty() {
-        candidates.push(PathBuf::from(".walaa-issuer"));
+        candidates.push(PathBuf::from(".loyalty-pro-issuer"));
     }
     let path = candidates.iter().find(|c| c.join(KEY_FILE).exists()).unwrap_or(&candidates[0]).clone();
     Home { path, searched: Some(candidates) }
@@ -294,7 +294,7 @@ fn keygen(home: &Path, source: &PasswordSource, public_key_out: Option<PathBuf>,
     let written = match std::fs::write(&target, public_key_source(&public, kind, &chain)) {
         Ok(()) => format!("wrote the public key into {}", target.display()),
         Err(error) => format!(
-            "could not write {} ({error}) — copy this into crates/walaa-license/src/public_key.rs by hand:\n\n{}",
+            "could not write {} ({error}) — copy this into crates/loyalty-pro-license/src/public_key.rs by hand:\n\n{}",
             target.display(),
             public_key_source(&public, kind, &chain)
         ),
@@ -314,7 +314,7 @@ fn keygen(home: &Path, source: &PasswordSource, public_key_out: Option<PathBuf>,
 }
 
 fn default_public_key_file() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/walaa-license/src/public_key.rs")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/loyalty-pro-license/src/public_key.rs")
 }
 
 fn rust_bytes(bytes: &[u8]) -> String {
@@ -342,7 +342,7 @@ fn public_key_source(public: &[u8; 32], kind: KeyKind, chain: &unlock::Chain) ->
          \n\
          pub const PUBLIC_KEY: [u8; 32] = [\n    {},\n];\n\
          \n\
-         // The emergency-code chain (crates/walaa-license/src/unlock.rs). Public values:\n\
+         // The emergency-code chain (crates/loyalty-pro-license/src/unlock.rs). Public values:\n\
          // phone codes are checked by hashing forward to this tip.\n\
          pub const UNLOCK_EPOCH_DAY: i64 = {};\n\
          pub const UNLOCK_CHAIN_LENGTH: u32 = {};\n\
@@ -385,7 +385,7 @@ fn issue_command(
     let file = load_key(home)?;
     let connection = log::open(&home.path.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
 
-    let device = walaa_license::device::normalize_device_id(device);
+    let device = loyalty_pro_license::device::normalize_device_id(device);
     let history = log::list(&connection, Some(&device)).map_err(|e| e.to_string())?;
     let current = issue::Current::from_entries(&history);
     let request = match kind {
@@ -407,7 +407,7 @@ fn issue_command(
 
     // Proves the code before it is handed out: the same check the application makes.
     let public = signing.verifying_key().to_bytes();
-    walaa_license::verify_with_key(&license_code, &payload.did, &public)
+    loyalty_pro_license::verify_with_key(&license_code, &payload.did, &public)
         .map_err(|e| format!("internal error: the new code does not verify ({})", e.code()))?;
 
     log::record(&connection, &payload, request.extend, &file.fingerprint, &license_code)
@@ -532,7 +532,7 @@ fn check_command(home: &Home, source: &PasswordSource) -> Result<(), String> {
 
 fn list_command(home: &Path, device: Option<String>) -> Result<(), String> {
     let connection = log::open(&home.join(LOG_FILE)).map_err(|e| format!("opening the log: {e}"))?;
-    let device = device.map(|d| walaa_license::device::normalize_device_id(&d));
+    let device = device.map(|d| loyalty_pro_license::device::normalize_device_id(&d));
     let entries = log::list(&connection, device.as_deref()).map_err(|e| e.to_string())?;
     let unlocks = log::list_unlocks(&connection, device.as_deref()).map_err(|e| e.to_string())?;
     if entries.is_empty() && unlocks.is_empty() {

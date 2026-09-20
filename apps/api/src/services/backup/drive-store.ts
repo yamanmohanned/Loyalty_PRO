@@ -9,13 +9,13 @@ import {
 } from 'node:fs';
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import type { DriveAccount, DriveFailure } from '@walaa/shared-types';
+import type { DriveAccount, DriveFailure } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../../config/env';
 import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
 
 /**
  * Where the Google Drive grant lives, and why it is not in `.env`
- * (CLAUDE.md §7.6, CLAUDE_v3.md §7.3).
+ * (CLAUDE.md §7.6, docs/legacy/CLAUDE_v3.md §7.3).
  *
  * ## The problem with the previous arrangement
  *
@@ -54,7 +54,7 @@ import { findRepoEnvFile, resolveDataDir } from '../../config/paths';
  *
  * ## What this does and does not protect against — stated plainly
  *
- * It protects against the realistic case: the `.env`/`walaa.env` file being read,
+ * It protects against the realistic case: the `.env`/`loyalty-pro.env` file being read,
  * copied, mailed or committed. Those are the paths a credential actually escapes by.
  *
  * It does **not** protect against an attacker who can read the whole data directory as
@@ -132,7 +132,7 @@ export function driveStateDirectory(): string {
   if (configured) return configured;
 
   const repoEnvFile = findRepoEnvFile();
-  if (repoEnvFile) return join(dirname(repoEnvFile), '.walaa-dev', 'drive');
+  if (repoEnvFile) return join(dirname(repoEnvFile), '.loyalty-pro-dev', 'drive');
 
   return join(resolveDataDir(), 'drive');
 }
@@ -322,7 +322,7 @@ export function clearConnection(): void {
 /* ── The OAuth client: the id, and the secret encrypted ───────────────────────── */
 
 /*
-  The client id and secret used to come from `walaa.env` — a secret in a plain
+  The client id and secret used to come from `loyalty-pro.env` — a secret in a plain
   configuration file, which is exactly what §7.6 forbids and what the merchant was
   promised would not happen. They are now typed into Settings by the owner and kept
   here: the id in the clear (Google treats it as public; it appears in every consent

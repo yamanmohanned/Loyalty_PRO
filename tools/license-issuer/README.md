@@ -54,8 +54,8 @@ One folder, called the **home**:
 | `issuer-key.json` | The private key, encrypted with your password. **The irreplaceable file.** |
 | `issued.db` | A log (SQLite) of every code issued: licence ID, device, type, dates, features, note, the code itself. |
 
-Home: `--home <folder>`, else `WALAA_ISSUER_HOME`, else whichever of
-`%USERPROFILE%\.walaa-issuer` and `%APPDATA%\walaa-license-issuer` holds `issuer-key.json`
+Home: `--home <folder>`, else `LOYALTY_ISSUER_HOME`, else whichever of
+`%USERPROFILE%\.loyalty-pro-issuer` and `%APPDATA%\loyalty-pro-license-issuer` holds `issuer-key.json`
 (`keygen` with neither creates the first). When no key is found the error names both folders.
 
 ## The password
@@ -82,7 +82,7 @@ license-issuer keygen
 It asks for a password (at least 12 characters) and asks again to confirm it. Then it:
 
 1. writes `issuer-key.json` and `issued.db` into the home;
-2. writes the **public** key into `crates/walaa-license/src/public_key.rs`, marked
+2. writes the **public** key into `crates/loyalty-pro-license/src/public_key.rs`, marked
    `KeyKind::Production` — the file the application compiles in — together with the
    public *tip* of the emergency-code chain (see [Emergency codes](#emergency-codes-read-over-the-phone));
 3. prints the fingerprint, and a reminder to back up.
@@ -91,7 +91,7 @@ It asks for a password (at least 12 characters) and asks again to confirm it. Th
 production public key already in `public_key.rs` with a different one: either would
 make every code already issued unverifiable by the next build.
 
-After `keygen`, commit `crates/walaa-license/src/public_key.rs` and build the application
+After `keygen`, commit `crates/loyalty-pro-license/src/public_key.rs` and build the application
 (`pnpm package:build`, then `pnpm package:installer`). Until you do, builds embed the
 development key and the installer step refuses to package them.
 
@@ -271,7 +271,7 @@ again — it is in the log.
 Do this right after `keygen`, and again whenever you want the log (`issued.db`) backed up
 too.
 
-1. **Copy the whole home folder** (`%USERPROFILE%\.walaa-issuer`, or your `--home`) to
+1. **Copy the whole home folder** (`%USERPROFILE%\.loyalty-pro-issuer`, or your `--home`) to
    **two** places that are not this computer — for example two USB sticks kept in
    different buildings, or one USB stick and an encrypted cloud folder. The key file is
    encrypted, so a copy on its own gives nobody the power to sign.
@@ -282,7 +282,7 @@ too.
    the backup and the password are both good.
 
    ```bash
-   license-issuer --home E:\backup\walaa-license-issuer issue --device WL-2222-2222 --days 1 --note "backup test"
+   license-issuer --home E:\backup\loyalty-pro-license-issuer issue --device WL-2222-2222 --days 1 --note "backup test"
    ```
 
 If only `issued.db` is lost, nothing is lost that matters for signing: you can still

@@ -75,7 +75,7 @@ const targets = [
   // names the release it came from.
   ...[
     'apps/manager-desktop/src-tauri/Cargo.toml',
-    'crates/walaa-license/Cargo.toml',
+    'crates/loyalty-pro-license/Cargo.toml',
     'packages/license-native/Cargo.toml',
     'tools/license-issuer/Cargo.toml',
   ].map((file) => ({

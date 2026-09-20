@@ -7,7 +7,7 @@ using Xunit;
 namespace Walaa.Agent.Tests;
 
 /// <summary>
-/// A full disk must not breach Fail-Open (CLAUDE_v3.md §4.6 rule 3, §12.15).
+/// A full disk must not breach Fail-Open (docs/legacy/CLAUDE_v3.md §4.6 rule 3, §12.15).
 /// </summary>
 /// <remarks>
 /// <para>

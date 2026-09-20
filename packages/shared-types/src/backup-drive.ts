@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Google Drive backup contracts (CLAUDE.md §7 / CLAUDE_v3.md §7.3).
+ * Google Drive backup contracts (CLAUDE.md §7 / docs/legacy/CLAUDE_v3.md §7.3).
  *
  * Drive is a **destination**, not a second backup path. The bytes it receives are the
  * same AES-256-GCM archive the local copy already holds, produced by the same

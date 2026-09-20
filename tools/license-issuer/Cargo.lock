@@ -566,7 +566,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
- "walaa-license",
+ "loyalty-pro-license",
  "zeroize",
 ]
 
@@ -981,7 +981,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "walaa-license"
+name = "loyalty-pro-license"
 version = "0.3.1"
 dependencies = [
  "base64",

@@ -5,7 +5,7 @@ import {
   CreateUserRequestSchema,
   type CreateUserRequest,
   type StaffListResponse,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api } from '../../lib/api';
 import { useFormErrors } from '../../lib/form';
 import { locale } from '../../lib/locale';

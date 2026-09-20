@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn the_registry_anchor_round_trips() {
-        let subkey = format!(r"Software\Walaa-Test-{}", std::process::id());
+        let subkey = format!(r"Software\LoyaltyPro-Test-{}", std::process::id());
         assert_eq!(read_registry_anchor(&subkey).unwrap(), None);
         write_registry_anchor(&subkey, 1_800_000_000).unwrap();
         assert_eq!(read_registry_anchor(&subkey).unwrap(), Some(1_800_000_000));

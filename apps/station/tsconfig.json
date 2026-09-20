@@ -1,5 +1,5 @@
 {
-  "extends": "@walaa/config/tsconfig/base.json",
+  "extends": "@loyalty-pro/config/tsconfig/base.json",
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",

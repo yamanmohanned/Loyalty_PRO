@@ -28,7 +28,7 @@ import { ServerAddressForm } from './ServerAddressForm';
  *  What went wrong on the first real installation
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * A manager PC lost its `walaa.env`. The service could not start without it, so
+ * A manager PC lost its `loyalty-pro.env`. The service could not start without it, so
  * `backend_port` had nothing to report, so `getApiUrl()` returned `null`, so this
  * component took the `!located` branch and rendered:
  *
@@ -53,7 +53,7 @@ import { ServerAddressForm } from './ServerAddressForm';
  *   | state                        | how it is known                  | address field |
  *   |------------------------------|----------------------------------|---------------|
  *   | starting                     | inside the patience window       | no            |
- *   | installed, settings missing   | hosts a service, no `walaa.env`  | **no**        |
+ *   | installed, settings missing   | hosts a service, no `loyalty-pro.env`  | **no**        |
  *   | installed, not running        | hosts a service, config present  | **no**        |
  *   | configured, remote failing    | a remote address is saved        | yes           |
  *   | hosts nothing, none configured| a second machine                 | yes           |
@@ -83,7 +83,7 @@ const PATIENCE_MS = 4000;
 /** What the gate has established, once the patience window has passed. */
 type Diagnosis =
   | { kind: 'starting' }
-  /** Installed here; `walaa.env` is gone. No address can help. */
+  /** Installed here; `loyalty-pro.env` is gone. No address can help. */
   | { kind: 'config-missing' }
   /** Installed and configured here; nothing is listening. */
   | { kind: 'not-running' }
@@ -147,7 +147,7 @@ export function BackendGate({ children }: Props): React.ReactElement {
 
         This machine HAS the service installed. The port could not be resolved, which
         means the service has not published one — and the commonest reason for that, by
-        a distance, is that `walaa.env` is not there for it to read.
+        a distance, is that `loyalty-pro.env` is not there for it to read.
       */
       setDiagnosis(next.configPresent ? { kind: 'not-running' } : { kind: 'config-missing' });
     } else {

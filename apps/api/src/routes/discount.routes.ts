@@ -7,7 +7,7 @@ import {
   UpdateDiscountSettingsRequestSchema,
   type UpdateDiscountRulesRequest,
   type UpdateDiscountSettingsRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import {
   getDiscountConfiguration,

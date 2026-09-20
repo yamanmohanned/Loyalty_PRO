@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace Walaa.Agent.Capture;
 
 /// <summary>
-/// Works out how this store prints (CLAUDE_v3.md §4.3).
+/// Works out how this store prints (docs/legacy/CLAUDE_v3.md §4.3).
 /// </summary>
 /// <remarks>
 /// <para>

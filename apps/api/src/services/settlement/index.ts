@@ -1,4 +1,4 @@
-import type { SettlementStrategy as SettlementStrategyName } from '@walaa/shared-types';
+import type { SettlementStrategy as SettlementStrategyName } from '@loyalty-pro/shared-types';
 import { dailyPromotionalExpenseStrategy } from './daily-promotional-expense.strategy';
 import { merchantDefinedStrategy } from './merchant-defined.strategy';
 import type { DiscountSettlementStrategy } from './strategy';

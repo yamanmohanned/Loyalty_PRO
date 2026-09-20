@@ -21,7 +21,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, type World } from './helpers/fixtures';
 
 /**
- * The backup key ceremony (CLAUDE_v3.md §7.3, §12.19).
+ * The backup key ceremony (docs/legacy/CLAUDE_v3.md §7.3, §12.19).
  *
  * The failure under test is not a crash. It is a merchant who completes setup, sees
  * green ticks, and holds a folder of intact, encrypted, permanently unopenable archives
@@ -49,9 +49,9 @@ function tempDir(prefix: string): string {
  * repository `.env`, which `resolveEnvFile()` returns during development.
  */
 function useScratchEnvFile(contents = ''): string {
-  const path = join(tempDir('walaa-env-'), 'walaa.env');
+  const path = join(tempDir('walaa-env-'), 'loyalty-pro.env');
   writeFileSync(path, contents);
-  process.env.WALAA_ENV_FILE = path;
+  process.env.LOYALTY_ENV_FILE = path;
   return path;
 }
 
@@ -62,7 +62,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   // Restore the suite-wide configuration for whatever runs next.
-  delete process.env.WALAA_ENV_FILE;
+  delete process.env.LOYALTY_ENV_FILE;
   process.env.BACKUP_KEY = CONFIGURED_KEY;
   resetEnvCache();
 });
@@ -214,7 +214,7 @@ describe('a key that is replaced', () => {
     await confirmKey(world.merchantId, world.ownerId, CONFIGURED_KEY);
     expect((await keyStatus(world.merchantId)).backupsEnabled).toBe(true);
 
-    // Someone edits walaa.env and puts a different key in it — a migration, a restore
+    // Someone edits loyalty-pro.env and puts a different key in it — a migration, a restore
     // onto new hardware, a well-meaning fix.
     process.env.BACKUP_KEY = generateBackupKey();
     resetEnvCache();

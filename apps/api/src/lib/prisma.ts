@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import type { StorageFailureCause } from '@walaa/shared-types';
+import type { StorageFailureCause } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../config/env';
 
 /**
@@ -121,7 +121,7 @@ export async function readSqliteSettings(
  * them is paid for by a bigger one at this write volume:
  *
  *   - a crash replays the whole WAL on the next open;
- *   - anything that copies `walaa.db` without its sidecar is behind by up to the
+ *   - anything that copies `loyalty-pro.db` without its sidecar is behind by up to the
  *     WAL's size (the §12.17 loss — `backup/snapshot.ts` avoids it with
  *     `VACUUM INTO`, but the ceiling is the size of the hole for anything that does
  *     not);
@@ -173,7 +173,7 @@ export async function checkpointWal(
 export const PRISMA_UNIQUE_VIOLATION = 'P2002';
 /**
  * SQLite reports contention as SQLITE_BUSY rather than a serialization failure.
- * With WAL enabled and the API as the sole writer (CLAUDE_v3.md §12.5) this should
+ * With WAL enabled and the API as the sole writer (docs/legacy/CLAUDE_v3.md §12.5) this should
  * be rare, but a busy timeout plus a retry is the correct handling when it happens.
  */
 export const SQLITE_BUSY = 'SQLITE_BUSY';

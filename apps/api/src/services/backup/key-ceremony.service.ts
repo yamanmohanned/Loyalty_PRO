@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import type { KeyStatus } from '@walaa/shared-types';
+import type { KeyStatus } from '@loyalty-pro/shared-types';
 import { loadEnv, resetEnvCache } from '../../config/env';
 import { setEnvValue } from '../../config/env-file';
 import { backupBlocked, validationFailed } from '../../lib/errors';
@@ -9,7 +9,7 @@ import { KEY_BYTES } from './archive';
 import { generateBackupKey, keyFingerprint, parseBackupKey } from './key';
 
 /**
- * The backup key ceremony (CLAUDE_v3.md §7.3, §12.19).
+ * The backup key ceremony (docs/legacy/CLAUDE_v3.md §7.3, §12.19).
  *
  * ## The failure this exists to prevent
  *
@@ -42,7 +42,7 @@ import { generateBackupKey, keyFingerprint, parseBackupKey } from './key';
  * every diagnostic here uses instead.
  */
 
-// `KeyStatus` is the shared contract (`@walaa/shared-types`). It decides whether a
+// `KeyStatus` is the shared contract (`@loyalty-pro/shared-types`). It decides whether a
 // shop's backups are openable at all, and a client that disagreed with this shape
 // would tell a manager the ceremony is done when it is not (§12.27).
 export type { KeyStatus };

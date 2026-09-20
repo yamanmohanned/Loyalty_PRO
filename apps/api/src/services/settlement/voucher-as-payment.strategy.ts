@@ -1,4 +1,4 @@
-import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@walaa/shared-types';
+import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@loyalty-pro/shared-types';
 import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
@@ -8,7 +8,7 @@ import {
 } from './strategy';
 
 /**
- * **Voucher as payment** — an explicit-procedure settlement (CLAUDE_v3.md §9).
+ * **Voucher as payment** — an explicit-procedure settlement (docs/legacy/CLAUDE_v3.md §9).
  *
  * The invoice stays at its full recorded value in the POS. The customer settles it
  * with cash **plus** the voucher, and the voucher is tendered like any other

@@ -3,11 +3,11 @@ import {
   type SyncBatchResponse,
   type SyncOperation,
   type SyncState,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api, ApiRequestError } from './api';
 
 /**
- * The station's offline queue (CLAUDE_v3.md §7.2).
+ * The station's offline queue (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * "No work stoppage, no data loss": a scan taken while the manager machine is
  * unreachable is written here and flushed when it comes back. The queue lives on the
@@ -44,8 +44,8 @@ import { api, ApiRequestError } from './api';
  * comment exists to refuse.
  */
 
-const QUEUE_KEY = 'walaa.station.queue';
-const DEVICE_KEY = 'walaa.station.device';
+const QUEUE_KEY = 'loyalty.station.queue';
+const DEVICE_KEY = 'loyalty.station.device';
 /** Matches the server's per-batch cap. */
 const MAX_BATCH = 100;
 /**
@@ -61,7 +61,7 @@ const MAX_BATCH = 100;
 export const HELD_CAP = 2000;
 
 /** Raised when the manager PC refuses a sale for the licence, so the read-only strip re-checks at once. */
-export const LICENSE_REFUSED_EVENT = 'walaa:license-refused';
+export const LICENSE_REFUSED_EVENT = 'loyalty:license-refused';
 
 type Listener = (snapshot: QueueSnapshot) => void;
 

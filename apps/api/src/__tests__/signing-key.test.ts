@@ -96,26 +96,64 @@ describe('the updater signing key', () => {
   });
 
   /**
-   * The public half must be present and must not be a placeholder.
+   * The updater is either wholly wired or wholly off. The half-states are the failures.
    *
-   * An empty or stale `pubkey` is the quieter failure: the build succeeds, the
-   * installer works, and updates can never be verified because no private key on earth
-   * corresponds to what was compiled in. That is exactly the state this project shipped
-   * in before 0.2.0 — a public key whose private half had never existed.
+   * This test used to assert only that a public key was present, because the failure it
+   * was written for is the quiet one: the build succeeds, the installer works, and
+   * updates can never be verified because no private key on earth corresponds to what
+   * was compiled in — the state this project shipped in before 0.2.0.
+   *
+   * The fork added a second, worse half-state, and it was live when the code was copied
+   * (CLAUDE.md §13.15): an updater that is ACTIVE, carrying the FROZEN «ولاء» line's
+   * public key and pointed at that line's release feed. Signatures would have verified —
+   * same key — and a merchant's Loyalty Pro would have updated itself into the other
+   * product. So the endpoint is asserted too, and it is asserted even while the updater
+   * is off, because "off" is not a reason to leave a loaded gun in the configuration.
+   *
+   * Off is the correct setting until the provider generates this product's own minisign
+   * keypair. When they do, `active` goes true, the key goes in, and every branch below
+   * starts applying.
    */
-  it('has a public half wired into the shipped configuration', () => {
+  it('is either fully wired or fully off, and never points at the frozen line', () => {
     const config = JSON.parse(
       readFileSync(
         join(REPO, 'apps', 'manager-desktop', 'src-tauri', 'tauri.conf.json'),
         'utf8',
       ),
-    ) as { plugins?: { updater?: { active?: boolean; pubkey?: string; endpoints?: string[] } } };
+    ) as {
+      bundle?: { createUpdaterArtifacts?: boolean };
+      plugins?: { updater?: { active?: boolean; pubkey?: string; endpoints?: string[] } };
+    };
 
     const updater = config.plugins?.updater;
-    expect(updater?.active).toBe(true);
-    expect(updater?.endpoints?.length ?? 0).toBeGreaterThan(0);
-
     const pubkey = updater?.pubkey ?? '';
+    const endpoints = updater?.endpoints ?? [];
+
+    // Whichever state it is in, it must never be able to fetch the other product's
+    // releases. An endpoint is a URL sitting in a shipped file; leaving the wrong one
+    // there costs nothing today and everything the day somebody flips `active`.
+    for (const endpoint of endpoints) {
+      expect(
+        endpoint,
+        'The updater endpoint points at the frozen «ولاء» line. Turning the updater on ' +
+          'would make this product update itself into that one.',
+      ).not.toMatch(/github\.com\/yamanmo\/walaa/); // identity-guard:allow
+    }
+
+    if (updater?.active !== true) {
+      // Off. Then it must be off in every respect: no key that a future edit could
+      // mistake for a working one, and no signed artifacts produced for a feed that
+      // nothing checks.
+      expect(
+        pubkey,
+        'The updater is off but still carries a public key. Whose private half is it?',
+      ).toBe('');
+      expect(config.bundle?.createUpdaterArtifacts ?? false).toBe(false);
+      return;
+    }
+
+    // On. Then the whole chain has to be real.
+    expect(endpoints.length).toBeGreaterThan(0);
     expect(pubkey.length).toBeGreaterThan(40);
 
     // It is base64 of a minisign PUBLIC key — which is safe to ship, and is what the
@@ -132,6 +170,6 @@ describe('the updater signing key', () => {
   it('is excluded by .gitignore as well', () => {
     const ignore = readFileSync(join(REPO, '.gitignore'), 'utf8');
     expect(ignore).toContain('*.key');
-    expect(ignore).toContain('.walaa-signing/');
+    expect(ignore).toContain('.loyalty-pro-signing/');
   });
 });

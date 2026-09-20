@@ -34,12 +34,12 @@ import { rateLimitingDisabled } from '../app';
  */
 
 const original = process.env.NODE_ENV;
-const originalSwitch = process.env.WALAA_DISABLE_RATE_LIMIT;
+const originalSwitch = process.env.LOYALTY_DISABLE_RATE_LIMIT;
 
 afterEach(() => {
   process.env.NODE_ENV = original;
-  if (originalSwitch === undefined) delete process.env.WALAA_DISABLE_RATE_LIMIT;
-  else process.env.WALAA_DISABLE_RATE_LIMIT = originalSwitch;
+  if (originalSwitch === undefined) delete process.env.LOYALTY_DISABLE_RATE_LIMIT;
+  else process.env.LOYALTY_DISABLE_RATE_LIMIT = originalSwitch;
 });
 
 describe('rate limiting in a production build', () => {
@@ -58,7 +58,7 @@ describe('rate limiting in a production build', () => {
     // The test environment is not production, so the switch is honoured.
     expect(rateLimitingDisabled({ rateLimit: false }).disabled).toBe(true);
 
-    process.env.WALAA_DISABLE_RATE_LIMIT = '1';
+    process.env.LOYALTY_DISABLE_RATE_LIMIT = '1';
     expect(rateLimitingDisabled({}).disabled).toBe(true);
   });
 
@@ -73,7 +73,7 @@ describe('rate limiting in a production build', () => {
     const { loadEnv, resetEnvCache } = await import('../config/env');
 
     process.env.NODE_ENV = 'production';
-    process.env.WALAA_DISABLE_RATE_LIMIT = '1';
+    process.env.LOYALTY_DISABLE_RATE_LIMIT = '1';
     resetEnvCache();
     expect(loadEnv().NODE_ENV).toBe('production');
 
@@ -87,7 +87,7 @@ describe('rate limiting in a production build', () => {
     });
 
     // Both together, which is the thing somebody would actually try.
-    process.env.WALAA_DISABLE_RATE_LIMIT = '1';
+    process.env.LOYALTY_DISABLE_RATE_LIMIT = '1';
     expect(rateLimitingDisabled({ rateLimit: false }).disabled).toBe(false);
 
     process.env.NODE_ENV = original;
@@ -113,7 +113,7 @@ describe('rate limiting in a production build', () => {
     // And no other environment variable reaches that decision.
     const disablingReads = [...source.matchAll(/process\.env\.([A-Z_]+)/g)].map((m) => m[1]);
     expect(
-      disablingReads.filter((name) => name !== 'WALAA_DISABLE_RATE_LIMIT'),
+      disablingReads.filter((name) => name !== 'LOYALTY_DISABLE_RATE_LIMIT'),
       'a new environment variable is being read in app.ts — confirm it cannot disable throttling',
     ).toEqual([]);
   });

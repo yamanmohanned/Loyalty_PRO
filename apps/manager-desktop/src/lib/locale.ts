@@ -407,7 +407,7 @@ export const locale = {
        these screens carries a field, and every one of them names the remedy that
        actually resolves the state it describes. */
 
-    /** `walaa.env` is gone. The service cannot start and no address can help. */
+    /** `loyalty-pro.env` is gone. The service cannot start and no address can help. */
     configMissingTitle: 'إعدادات البرنامج مفقودة',
     configMissingBody:
       'البرنامج مثبّت على هذا الجهاز لكن ملف إعداداته غير موجود، ولذلك لا تعمل الخدمة. بيانات المتجر لم تتغيّر. لا يمكن حل هذا بإعادة التثبيت ولا بإدخال عنوان — تواصل مع الدعم الفني لاستعادة الملف.',
@@ -441,7 +441,7 @@ export const locale = {
     title: 'الإعداد الأولي',
     subtitle: 'وجّه التطبيق إلى خادم ولاء الخاص بمتجرك',
     urlLabel: 'رابط خادم ولاء',
-    urlPlaceholder: 'http://192.168.1.10:4000',
+    urlPlaceholder: 'http://192.168.1.10:4100',
     urlHint: 'عنوان جهاز المدير على شبكة المتجر',
     connect: 'اتصال والمتابعة',
     testing: 'جارٍ الاختبار…',
@@ -726,7 +726,7 @@ export const locale = {
       remoteBody:
         'استخدم هذا القسم فقط إذا كان هذا الجهاز ليس جهاز المدير، وتريد ربطه بجهاز المدير الموجود في المتجر.',
       remoteLabel: 'عنوان جهاز المدير',
-      remotePlaceholder: 'http://192.168.1.10:4000',
+      remotePlaceholder: 'http://192.168.1.10:4100',
       remoteHint: 'اسأل من ثبّت البرنامج عن هذا العنوان إن لم تكن تعرفه',
       remoteActive: 'هذا الجهاز متّصل حالياً بجهاز مدير آخر',
       test: 'اختبار وحفظ',
@@ -1342,7 +1342,7 @@ export const locale = {
   },
 
   /**
-   * The key ceremony (CLAUDE_v3.md §12.19).
+   * The key ceremony (docs/legacy/CLAUDE_v3.md §12.19).
    *
    * The copy carries the whole weight of this feature. A manager who reads "احفظ
    * المفتاح" and clicks past it has done nothing; a manager who reads that losing this
@@ -1555,7 +1555,7 @@ export const locale = {
   },
 
   /**
-   * The free-space banner (CLAUDE_v3.md §12.15).
+   * The free-space banner (docs/legacy/CLAUDE_v3.md §12.15).
    *
    * The copy names the consequence rather than the condition. "Low disk space" is a
    * message every Windows user has learned to close; "sales will stop being recorded"

@@ -3,13 +3,13 @@ import {
   INGEST_ROLES,
   IngestInvoiceRequestSchema,
   type IngestInvoiceRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { ingestInvoice } from '../services/ingestion.service';
 import { observeLicense } from '../services/license.service';
 
 /**
- * The Print Capture Agent's endpoint (CLAUDE_v3.md §4).
+ * The Print Capture Agent's endpoint (docs/legacy/CLAUDE_v3.md §4).
  *
  * Rate limit is generous: a store that was offline may flush a backlog the moment
  * the network returns, and throttling that would delay exactly the recovery the

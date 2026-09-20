@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertOctagon, AlertTriangle, Bell, PanelRight, ShieldAlert } from 'lucide-react';
-import type { KeyStatus, LicenseState, StorageStatus } from '@walaa/shared-types';
+import type { KeyStatus, LicenseState, StorageStatus } from '@loyalty-pro/shared-types';
 import { locale } from '../lib/locale';
 import { IS_DEMO } from '../lib/demo';
 import { licenseAlert } from './LicenseBanner';

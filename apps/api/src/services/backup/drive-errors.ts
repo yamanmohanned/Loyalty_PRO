@@ -1,8 +1,8 @@
-import type { DriveFailure, DriveFailureCode } from '@walaa/shared-types';
+import type { DriveFailure, DriveFailureCode } from '@loyalty-pro/shared-types';
 
 /**
  * Why Google Drive is not working, said once and said precisely
- * (CLAUDE.md §7.6, CLAUDE_v3.md §7.3).
+ * (CLAUDE.md §7.6, docs/legacy/CLAUDE_v3.md §7.3).
  *
  * ## The defect this file exists to prevent
  *

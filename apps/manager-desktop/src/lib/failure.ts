@@ -1,4 +1,4 @@
-import type { StorageFailureCause } from '@walaa/shared-types';
+import type { StorageFailureCause } from '@loyalty-pro/shared-types';
 import { ApiRequestError } from './api';
 import { locale } from './locale';
 

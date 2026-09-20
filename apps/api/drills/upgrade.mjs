@@ -37,7 +37,7 @@ const { PrismaClient } = require('@prisma/client');
 
 const SCRATCH = 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad';
 const ROOT = `${SCRATCH}/upgrade`;
-const DB = `${ROOT}/walaa.db`;
+const DB = `${ROOT}/loyalty-pro.db`;
 const ENV = `${ROOT}/env`;
 const PORT = 4991;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -55,9 +55,9 @@ const hardKill = (pid) => {
 let log = '';
 function start(which) {
   log = '';
-  const child = spawn(`${ROOT}/${which}/node.exe`, ['walaa-api.cjs'], {
+  const child = spawn(`${ROOT}/${which}/node.exe`, ['loyalty-pro-api.cjs'], {
     cwd: `${ROOT}/${which}`,
-    env: { ...process.env, WALAA_ENV_FILE: ENV, WALAA_DATA_DIR: ROOT, WALAA_SUPERVISED: '1' },
+    env: { ...process.env, LOYALTY_ENV_FILE: ENV, LOYALTY_DATA_DIR: ROOT, LOYALTY_SUPERVISED: '1' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (c) => { log += c.toString(); });

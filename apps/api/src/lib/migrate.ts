@@ -17,7 +17,7 @@ import { InsufficientSpaceError, takeSnapshot } from '../services/backup/snapsho
  * Runtime migrator — applies committed Prisma migrations without the Prisma CLI.
  *
  * **Why this exists.** The installed product is a Windows Service on a shop's back
- * office PC (CLAUDE_v3.md §12.3). `prisma migrate deploy` would drag the Prisma CLI,
+ * office PC (docs/legacy/CLAUDE_v3.md §12.3). `prisma migrate deploy` would drag the Prisma CLI,
  * its schema engine binary and a Node toolchain onto that machine — tens of megabytes
  * of developer tooling, shipped so it can run once. Worse, it would make the
  * merchant's first boot depend on a subprocess that can fail in ways the installer
@@ -436,7 +436,7 @@ export async function assertMigrationLedgerIsSound(
  * ═══════════════════════════════════════════════════════════════════════════
  *  A SNAPSHOT BEFORE ANY MIGRATION, AND FAIL CLOSED IF IT CANNOT BE TAKEN
  * ═══════════════════════════════════════════════════════════════════════════
- * (CLAUDE_UPDATE_4.md §10.2)
+ * (docs/legacy/CLAUDE_UPDATE_4.md §10.2)
  *
  * **The gap this closes.** Migrations run at boot with nothing behind them: the backup
  * scheduler starts *after* this, so the recovery position for a bad migration was the
@@ -545,7 +545,7 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
   const directory = options.directory ?? resolveMigrationsDir();
   if (!directory) {
     throw new Error(
-      'تعذّر العثور على مجلد الترحيلات (migrations). حدّد WALAA_MIGRATIONS_DIR أو شغّل الخدمة من مجلد التثبيت.',
+      'تعذّر العثور على مجلد الترحيلات (migrations). حدّد LOYALTY_MIGRATIONS_DIR أو شغّل الخدمة من مجلد التثبيت.',
     );
   }
 
@@ -577,7 +577,7 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
       pending,
       count: pending.length,
       nodeEnv: loadEnv().NODE_ENV,
-      hint: 'set WALAA_ALLOW_MIGRATIONS=1 to permit this deliberately',
+      hint: 'set LOYALTY_ALLOW_MIGRATIONS=1 to permit this deliberately',
     });
 
     throw new Error(
@@ -586,7 +586,7 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
         // «أعد تثبيت البرنامج» was the advice, and reinstalling the same build changes
         // nothing: production never migrates, so the database is exactly as old
         // afterwards. Support performs the update deliberately, with a backup in hand;
-        // `WALAA_ALLOW_MIGRATIONS=1` is named in the log line above for them.
+        // `LOYALTY_ALLOW_MIGRATIONS=1` is named in the log line above for them.
         'لم يُكتب أي شيء في قاعدة البيانات. إعادة التثبيت لن تغيّر شيئاً. ' +
         'تواصل مع الدعم الفني لإجراء التحديث مع نسخة احتياطية. التفاصيل التقنية مسجّلة في ملف السجل.',
     );
@@ -622,14 +622,14 @@ export async function ensureDatabaseReady(options: MigrateOptions = {}): Promise
  * Development still migrates. That is where migrations are written, where branches move
  * the schema several times a day, and where the whole test suite provisions itself.
  *
- * `WALAA_ALLOW_MIGRATIONS=1` restores the old behaviour in production for one situation:
+ * `LOYALTY_ALLOW_MIGRATIONS=1` restores the old behaviour in production for one situation:
  * an operator upgrading a shop, deliberately, with the pre-migration snapshot below
- * doing its job and someone watching the log. It is not written into `walaa.env` by
+ * doing its job and someone watching the log. It is not written into `loyalty-pro.env` by
  * anything, and the refusal above names it only in the technical log — a shop owner
  * following a sentence on his screen must never be able to talk himself into it.
  */
 export function migrationPolicy(): 'apply' | 'verify' {
-  if (process.env.WALAA_ALLOW_MIGRATIONS === '1') return 'apply';
+  if (process.env.LOYALTY_ALLOW_MIGRATIONS === '1') return 'apply';
   return loadEnv().NODE_ENV === 'production' ? 'verify' : 'apply';
 }
 
@@ -661,7 +661,7 @@ export interface TemplateInstall {
  * ── A zero-byte file counts as absent, and that is the point ─────────────────
  *
  * SQLite treats a zero-length file as a valid empty database, which is precisely how
- * the `C:\ProgramData\Walaa\walaa.db` incident happened: a file left behind by an
+ * the `C:\ProgramData\LoyaltyPro\loyalty-pro.db` incident happened: a file left behind by an
  * earlier install, containing nothing, adopted without a word by a build that had
  * never placed it. Treating it as absent means that exact file gets replaced by the
  * shipped template instead of migrated into existence — and the replacement is

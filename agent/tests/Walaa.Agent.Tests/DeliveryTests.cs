@@ -5,7 +5,7 @@ using Xunit;
 namespace Walaa.Agent.Tests;
 
 /// <summary>
-/// The local queue and idempotent delivery (CLAUDE_v3.md §4.8, §7.2).
+/// The local queue and idempotent delivery (docs/legacy/CLAUDE_v3.md §4.8, §7.2).
 /// </summary>
 public class DeliveryTests : IDisposable
 {

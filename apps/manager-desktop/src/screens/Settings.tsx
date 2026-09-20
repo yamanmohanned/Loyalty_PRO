@@ -105,7 +105,7 @@ export function SettingsScreen() {
   /*
     From the shell's report of what is INSTALLED, not from whether a port resolved.
     `local !== null` was a proxy: a manager PC whose service had not published its port
-    — the missing-`walaa.env` case — read as "this machine hosts nothing", which is the
+    — the missing-`loyalty-pro.env` case — read as "this machine hosts nothing", which is the
     same wrong inference `BackendGate` used to make. The port is the fallback only where
     there is no shell to ask.
   */

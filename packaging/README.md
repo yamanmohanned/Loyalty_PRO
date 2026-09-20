@@ -2,7 +2,7 @@
 
 The merchant receives **one setup file**. It installs the manager dashboard, the API
 service and the SQLite database, registers the service to start with the machine, and
-opens the LAN port the Loyalty Station needs (CLAUDE_v3.md §12.3).
+opens the LAN port the Loyalty Station needs (docs/legacy/CLAUDE_v3.md §12.3).
 
 This directory is the machinery for producing that file, and the evidence that it
 works.
@@ -44,8 +44,8 @@ of the Tauri app, and a stale one ships silently.
 | Path                           | Contents                                                                                                                          |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `%PROGRAMFILES%\ولاء\`         | the Tauri dashboard executable                                                                                                    |
-| `%PROGRAMFILES%\ولاء\runtime\` | `node.exe`, `walaa-api.cjs`, `walaa-service.exe`, `verify-install.ps1`, the Prisma query engine, the Argon2 addon, the migrations |
-| `%PROGRAMDATA%\Walaa\`         | `walaa.db`, `walaa.env`, `logs\` — locked to SYSTEM and Administrators                                                            |
+| `%PROGRAMFILES%\ولاء\runtime\` | `node.exe`, `loyalty-pro-api.cjs`, `loyalty-pro-service.exe`, `verify-install.ps1`, the Prisma query engine, the Argon2 addon, the migrations |
+| `%PROGRAMDATA%\Walaa\`         | `loyalty-pro.db`, `loyalty-pro.env`, `logs\` — locked to SYSTEM and Administrators                                                            |
 
 The split is the point. `Program Files` is read-only to the service account;
 everything that changes lives in the data directory, which is also the only thing a
@@ -59,16 +59,16 @@ getting that ordering right.
 
 ## The service
 
-`walaa-service.exe` exists because Windows will not start an arbitrary executable as a
+`loyalty-pro-service.exe` exists because Windows will not start an arbitrary executable as a
 service — a service must talk to the Service Control Manager, and a Node process
 cannot. It also supervises: restarts the API if it dies, captures its output, and
 stops it cleanly.
 
 ```
-walaa-service.exe install [--data-dir <path>] [--port <n>] [--delayed]
-walaa-service.exe uninstall
-walaa-service.exe start | stop | status
-walaa-service.exe console        # foreground, for diagnostics
+loyalty-pro-service.exe install [--data-dir <path>] [--port <n>] [--delayed]
+loyalty-pro-service.exe uninstall
+loyalty-pro-service.exe start | stop | status
+loyalty-pro-service.exe console        # foreground, for diagnostics
 ```
 
 `--delayed` registers it as Automatic (Delayed Start). It is not the default: the
@@ -76,14 +76,14 @@ service depends on nothing that arrives late in boot, and delaying it means a sh
 that has just had a power cut waits two minutes for a working till. Use it only on a
 machine that demonstrably needs it.
 
-`install` is what the NSIS post-install hook runs. It generates `walaa.env` with
+`install` is what the NSIS post-install hook runs. It generates `loyalty-pro.env` with
 **secrets unique to that installation** and strips the file's inherited permissions
 down to SYSTEM and Administrators — `%PROGRAMDATA%` is world-readable by default, and
 that file holds the JWT signing keys.
 
 A consequence worth knowing before it surprises you: after installation, `console`
 mode must be run **from an elevated prompt**. An ordinary user account cannot read
-`walaa.env`, which is exactly the intent.
+`loyalty-pro.env`, which is exactly the intent.
 
 The NSIS hook calls `install` with no `--port`, so the service listens on 4000 —
 which is also what the dashboard's first-run Setup screen offers by default. If you
@@ -96,7 +96,7 @@ address the Station tablet browses to.
 
 `verify` and `verify:service` cover everything that runs unelevated. What is left needs
 the Service Control Manager, a real reboot, and a second device — and it is not
-ceremony. **Check (b) is what validates CLAUDE_v3.md §3's choice of a Windows Service
+ceremony. **Check (b) is what validates docs/legacy/CLAUDE_v3.md §3's choice of a Windows Service
 over a Tauri sidecar.** If the API is not up after a reboot with nobody logged in, that
 decision is wrong and the Loyalty Station must not be built on it.
 
@@ -106,7 +106,7 @@ Stop anything already using the API port — a `pnpm dev` API on 4000 will make 
 service fail to bind, and the failure will look like the installer's fault:
 
 ```bash
-netstat -ano | findstr :4000
+netstat -ano | findstr :4100
 ```
 
 ### Install
@@ -115,19 +115,19 @@ Run the setup file (it elevates itself), or from an **elevated** prompt:
 
 ```bat
 cd "%PROGRAMFILES%\ولاء\runtime"
-walaa-service.exe install
-walaa-service.exe status
+loyalty-pro-service.exe install
+loyalty-pro-service.exe status
 ```
 
 Expected:
 
 ```
-  configuration: C:\ProgramData\Walaa\walaa.env (created)
-  permissions:   C:\ProgramData\Walaa locked to SYSTEM and Administrators
-  service:       WalaaApi registered (automatic start)
+  configuration: C:\ProgramData\LoyaltyPro\loyalty-pro.env (created)
+  permissions:   C:\ProgramData\LoyaltyPro locked to SYSTEM and Administrators
+  service:       LoyaltyProApi registered (automatic start)
   firewall:      inbound TCP 4000 allowed on private networks
-  data:          C:\ProgramData\Walaa
-  logs:          C:\ProgramData\Walaa\logs
+  data:          C:\ProgramData\LoyaltyPro
+  logs:          C:\ProgramData\LoyaltyPro\logs
 ```
 
 ### Then reboot, and run the checks
@@ -166,7 +166,7 @@ will — it binds a socket and opens a file — and the supervisor retries a chi
 fails early. If a particular merchant PC disagrees, move it after the boot rush:
 
 ```bat
-sc config WalaaApi start= delayed-auto
+sc config LoyaltyProApi start= delayed-auto
 ```
 
 That costs the shop roughly two minutes of downtime after a power cut, which is why it
@@ -175,7 +175,7 @@ is not the default.
 ### Removing it
 
 ```bat
-walaa-service.exe uninstall
+loyalty-pro-service.exe uninstall
 ```
 
 Stops and deregisters the service and drops the firewall rule. **The data directory
@@ -193,7 +193,7 @@ as itself.
 
 **Check this first.** It is the only item on this list that can stop the shop rather
 than merely keep the Station from connecting. The database lives at
-`C:\ProgramData\Walaa\walaa.db`, on the system drive, and there is no second copy of it
+`C:\ProgramData\LoyaltyPro\loyalty-pro.db`, on the system drive, and there is no second copy of it
 running anywhere. A full `C:` does not degrade this product — it halts it: writes fail,
 so scans fail, discounts fail and sales are not recorded, at a till with a customer
 standing at it. Reads keep working, so the dashboard still looks alive while every
@@ -218,7 +218,7 @@ not broken today; it is scheduled to break on a Tuesday in eighteen months, with
 warning and no obvious cause.
 
 **The same check applies to the cashier PC** before the Print Capture Agent is
-installed there. Its queue is at `C:\ProgramData\Walaa\agent\queue`, and a full disk on
+installed there. Its queue is at `C:\ProgramData\LoyaltyPro\agent\queue`, and a full disk on
 that machine is the worse of the two: captures stop, and for the three in-path capture
 modes an agent that fails in the print path costs print jobs, not just loyalty records
 (`agent/README.md`, §4.6 rule 3).
@@ -241,7 +241,7 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
    check on the manager machine still passes. Confirm from the tablet itself:
 
    ```
-   http://<manager-lan-ip>:4000/health   ->   {"status":"ok","service":"walaa-api"}
+   http://<manager-lan-ip>:4100/health   ->   {"status":"ok","service":"loyalty-pro-api"}
    ```
 
    If that fails while the same URL works on the manager PC, look at the router's
@@ -253,7 +253,7 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
    counter. Launch the station like this:
 
    ```
-   chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4000
+   chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4100
    ```
 
    Then set the station's thermal printer as the default and print one test slip to
@@ -266,7 +266,7 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
    takes 4000 and the service cannot bind.
 
    ```
-   netstat -ano | findstr :4000
+   netstat -ano | findstr :4100
    ```
 
 6. **Write down where the data lives and leave it with whoever maintains the machine.**
@@ -275,18 +275,18 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
 
    | Machine    | Path                                        | Contents                                                 |
    | ---------- | ------------------------------------------- | -------------------------------------------------------- |
-   | Manager PC | `C:\ProgramData\Walaa\walaa.db`             | every customer, transaction and voucher                  |
-   | Manager PC | `C:\ProgramData\Walaa\walaa.env`            | this installation's secrets — never paste into a ticket  |
-   | Manager PC | `C:\ProgramData\Walaa\logs\`                | `api.log`, `service.log`                                 |
-   | Cashier PC | `C:\ProgramData\Walaa\agent\queue\`         | captures not yet delivered                               |
-   | Cashier PC | `C:\ProgramData\Walaa\agent\queue\rejected\` | captures the server refused — **a human must look here** |
+   | Manager PC | `C:\ProgramData\LoyaltyPro\loyalty-pro.db`             | every customer, transaction and voucher                  |
+   | Manager PC | `C:\ProgramData\LoyaltyPro\loyalty-pro.env`            | this installation's secrets — never paste into a ticket  |
+   | Manager PC | `C:\ProgramData\LoyaltyPro\logs\`                | `api.log`, `service.log`                                 |
+   | Cashier PC | `C:\ProgramData\LoyaltyPro\agent\queue\`         | captures not yet delivered                               |
+   | Cashier PC | `C:\ProgramData\LoyaltyPro\agent\queue\rejected\` | captures the server refused — **a human must look here** |
 
    The data directory is locked to SYSTEM and Administrators, so listing it needs an
    elevated prompt. That is deliberate, and it is why the merchant's IT needs the path
    written down rather than expecting to stumble on it.
 
    ```powershell
-   Get-ChildItem C:\ProgramData\Walaa -Force | Select-Object Name, Length, LastWriteTime
+   Get-ChildItem C:\ProgramData\LoyaltyPro -Force | Select-Object Name, Length, LastWriteTime
    ```
 
    **Read `api.log` as UTF-8, or its Arabic comes out as mojibake.** The file itself is
@@ -295,7 +295,7 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
    messages are exactly the ones worth reading:
 
    ```powershell
-   Get-Content C:\ProgramData\Walaa\logs\api.log -Encoding UTF8 -Tail 200
+   Get-Content C:\ProgramData\LoyaltyPro\logs\api.log -Encoding UTF8 -Tail 200
    ```
 
    What the two readings look like on the same line:
@@ -311,9 +311,9 @@ modes an agent that fails in the print path costs print jobs, not just loyalty r
 
    Two things to say out loud while handing this over:
 
-   - **The whole data directory is the backup target**, and `walaa.db` alone is not a
+   - **The whole data directory is the backup target**, and `loyalty-pro.db` alone is not a
      backup. SQLite runs in WAL mode, so the most recent transactions live in
-     `walaa.db-wal` until a checkpoint folds them in. Copy the database without its
+     `loyalty-pro.db-wal` until a checkpoint folds them in. Copy the database without its
      `-wal` sidecar and you have silently restored to an older day.
    - **Growth is slow and free space is not.** The database is not what fills this
      drive; Windows updates, restore points and whatever else the machine is used for
@@ -372,24 +372,24 @@ Any procedure that puts a database file into `%PROGRAMDATA%\Walaa\` — restorin
 backup, recovering from a failed disk, or moving a shop to new hardware — is this
 procedure. It is short, and every step is there because skipping it loses sales.
 
-**`walaa.db` is not one file. It is up to three.** SQLite runs in WAL mode, so the
-database is `walaa.db` plus `walaa.db-wal` and `walaa.db-shm` when they exist. The
+**`loyalty-pro.db` is not one file. It is up to three.** SQLite runs in WAL mode, so the
+database is `loyalty-pro.db` plus `loyalty-pro.db-wal` and `loyalty-pro.db-shm` when they exist. The
 `-wal` holds committed transactions that have not yet been folded into the main file —
 **the most recent sales in the shop**. All three move together or none of them do.
 
-### Turning a backup archive into a `walaa.db`
+### Turning a backup archive into a `loyalty-pro.db`
 
 The files the product writes to the backups folder, to the USB stick and to Drive are
 `*.walaabk` — AES-256-GCM over gzip. **They are not database files and nothing else can
-open one.** `walaa-restore.cjs`, beside `walaa-api.cjs` in the program directory, is what
+open one.** `loyalty-pro-restore.cjs`, beside `loyalty-pro-api.cjs` in the program directory, is what
 turns one back into a database. It never writes over the live database; it produces a
 new file and reports on it, and the procedure below puts that file in place.
 
 ```
 cd "C:\Program Files\Walaa"
-node.exe walaa-restore.cjs --list
-node.exe walaa-restore.cjs "C:\ProgramData\Walaa\backups\walaa-2026-09-08T02-35-11-148Z.walaabk" ^
-         --to "C:\ProgramData\Walaa\restored.db"
+node.exe loyalty-pro-restore.cjs --list
+node.exe loyalty-pro-restore.cjs "C:\ProgramData\LoyaltyPro\backups\walaa-2026-09-08T02-35-11-148Z.walaabk" ^
+         --to "C:\ProgramData\LoyaltyPro\restored.db"
 ```
 
 It prints the archive's date, the integrity verdict, and the customer, invoice, voucher
@@ -408,16 +408,16 @@ version. Anything else is printed in Arabic with what to try instead.
 
 ### The procedure
 
-1. **Stop the service.** `sc stop WalaaApi`, and confirm it is stopped. A file copied
+1. **Stop the service.** `sc stop LoyaltyProApi`, and confirm it is stopped. A file copied
    out from under a running service is a copy of a moving target.
 
 2. **Take a copy of the whole data directory before changing anything.** The whole
-   directory, not `walaa.db` — see above, and see the point below about what a "good"
+   directory, not `loyalty-pro.db` — see above, and see the point below about what a "good"
    copy can silently be missing. This is the copy you will want if the restore is
    wrong.
 
-3. **Put the replacement `walaa.db` in place, and remove `walaa.db-wal` and
-   `walaa.db-shm` if they are still there from the old database.** They describe the
+3. **Put the replacement `loyalty-pro.db` in place, and remove `loyalty-pro.db-wal` and
+   `loyalty-pro.db-shm` if they are still there from the old database.** They describe the
    file you are replacing, not the one you are installing.
 
    **Do not delete them without step 2 done first.** If they turn out to belong to the
@@ -436,7 +436,7 @@ version. Anything else is printed in Arabic with what to try instead.
 
 Use the product's own backup, which takes the snapshot with SQLite's `VACUUM INTO` — a
 single statement under a read transaction that produces a complete, self-contained file
-with no sidecar of its own. A plain file copy of `walaa.db` takes the main file and
+with no sidecar of its own. A plain file copy of `loyalty-pro.db` takes the main file and
 leaves whatever is in the WAL behind.
 
 **This is not theoretical, and it is not loud when it happens.** During the v4 upgrade
@@ -453,7 +453,7 @@ already gone.
 
 Take the whole-directory copy first (step 2), then work through it in this order:
 
-1. **Look for `walaa.db-wal` and `walaa.db-shm` beside the database.** If the database
+1. **Look for `loyalty-pro.db-wal` and `loyalty-pro.db-shm` beside the database.** If the database
    file was replaced while its sidecars were left behind, they describe a file that no
    longer exists. The service names them in its error when it finds them.
 
@@ -481,7 +481,7 @@ NSIS bundle. Staging `node.exe` alongside a plain CJS bundle is simpler and debu
 
 **Size: 109 MB staged, 30 MB installed from.** `node.exe` is 86 MB of the staged
 tree and the query engine 21 MB; NSIS compresses the lot to **30.1 MB** — small
-enough to send over WhatsApp, which is how CLAUDE_v2.md §1 expects it to travel. The
+enough to send over WhatsApp, which is how docs/legacy/CLAUDE_v2.md §1 expects it to travel. The
 Prisma client package is 74 MB in `node_modules`, nearly all of it WASM engines for
 databases this product does not use; the staging allowlist takes 20 MB of it.
 
@@ -498,7 +498,7 @@ with Prisma's own checksum algorithm — verified against a CLI-provisioned data
 **Stopping the child needed a mechanism, not a signal.** Windows has no SIGTERM, and
 `GenerateConsoleCtrlEvent` needs a console that a service does not have. The host
 closes the child's stdin and the API treats that as a stop request when
-`WALAA_SUPERVISED=1`. Terminating is the fallback after a 15-second grace period;
+`LOYALTY_SUPERVISED=1`. Terminating is the fallback after a 15-second grace period;
 WAL makes even that safe.
 
 **The firewall rule is part of installation.** Windows blocks inbound 4000 by
@@ -540,13 +540,13 @@ specific failure attached to it.
 | Identifier | Value | What renaming it does |
 |---|---|---|
 | `tauri.conf.json` → `productName` | `ولاء` | **The install path.** See below — this is the one with real consequences |
-| `tauri.conf.json` → `identifier` | `com.walaa.manager` | The uninstall registry key. A new identifier makes the installer add a *second* entry in Add/Remove Programs instead of upgrading the first |
-| `SERVICE_NAME` | `WalaaApi` | The SCM key an upgrade uses to find the service it is replacing. Rename it and the old service keeps running from the old binaries, holding the API port and `walaa.db` open, so the new one cannot bind |
-| `FIREWALL_RULE` | `Walaa Loyalty API` | Rules are created and deleted by name. A rename **orphans the old rule** — left open on the shop network with nothing to close it — and adds a duplicate |
-| `%PROGRAMDATA%\Walaa\` | — | Holds `walaa.db`, `walaa.env` and `logs\`. Renaming it strands the live database **and the backup encryption key**. Never |
-| `walaa.db`, `walaa.env` | — | Same |
-| `/health` → `"service":"walaa-api"` | — | `testApiUrl()` in the Station refuses any address whose `/health` does not answer with exactly this. Changing it makes **every already-paired station** report "this address is not a Walaa server" until someone re-runs setup on each one |
-| `@walaa/*` package names, `WALAA_DATA_DIR` | — | Internal. Churn with no user-visible benefit |
+| `tauri.conf.json` → `identifier` | `com.loyaltypro.manager` | The uninstall registry key. A new identifier makes the installer add a *second* entry in Add/Remove Programs instead of upgrading the first |
+| `SERVICE_NAME` | `LoyaltyProApi` | The SCM key an upgrade uses to find the service it is replacing. Rename it and the old service keeps running from the old binaries, holding the API port and `loyalty-pro.db` open, so the new one cannot bind |
+| `FIREWALL_RULE` | `Loyalty Pro API` | Rules are created and deleted by name. A rename **orphans the old rule** — left open on the shop network with nothing to close it — and adds a duplicate |
+| `%PROGRAMDATA%\Walaa\` | — | Holds `loyalty-pro.db`, `loyalty-pro.env` and `logs\`. Renaming it strands the live database **and the backup encryption key**. Never |
+| `loyalty-pro.db`, `loyalty-pro.env` | — | Same |
+| `/health` → `"service":"loyalty-pro-api"` | — | `testApiUrl()` in the Station refuses any address whose `/health` does not answer with exactly this. Changing it makes **every already-paired station** report "this address is not a Walaa server" until someone re-runs setup on each one |
+| `@loyalty-pro/*` package names, `LOYALTY_DATA_DIR` | — | Internal. Churn with no user-visible benefit |
 
 ### What an existing installation would do if `productName` changed
 
@@ -557,11 +557,11 @@ executable name. Change it to `Customer loyalty` and install over an existing sh
 
 1. The new installer targets `%PROGRAMFILES%\Customer loyalty\`. **The existing
    install at `%PROGRAMFILES%\ولاء\` is not touched** — it stays on disk.
-2. `NSIS_HOOK_PREINSTALL` checks `$INSTDIR\runtime\walaa-service.exe` to stop the
+2. `NSIS_HOOK_PREINSTALL` checks `$INSTDIR\runtime\loyalty-pro-service.exe` to stop the
    service before copying files. `$INSTDIR` is now the *new*, empty directory, so
    that file does not exist and **the check silently passes over**. The old service
    is never stopped.
-3. `NSIS_HOOK_POSTINSTALL` runs `install` from the new path. `WalaaApi` is already
+3. `NSIS_HOOK_POSTINSTALL` runs `install` from the new path. `LoyaltyProApi` is already
    registered, so the SCM refuses, and the installer shows its "could not be
    registered" message box.
 4. Net result: **two installations on disk, one service still running the old
@@ -573,10 +573,10 @@ Note that the data survives all of this: `%PROGRAMDATA%\Walaa` is untouched by
 either install, which is exactly why it is on that list above.
 
 **The fix is in place, and it is unverified.** `NSIS_HOOK_POSTINSTALL` now runs
-`walaa-service.exe uninstall` unconditionally before `install`. The service is
-deregistered **by name**, and `SERVICE_NAME` is frozen (CLAUDE_v3.md §12.36), so the
+`loyalty-pro-service.exe uninstall` unconditionally before `install`. The service is
+deregistered **by name**, and `SERVICE_NAME` is frozen (docs/legacy/CLAUDE_v3.md §12.36), so the
 new build can retire a previous installation it cannot see on disk — different
-directory, different product name, different registry key, same `WalaaApi`. It stops
+directory, different product name, different registry key, same `LoyaltyProApi`. It stops
 the old service first, which releases the database before the new one starts.
 
 Note that reading `InstallLocation` from the uninstall registry key — the obvious

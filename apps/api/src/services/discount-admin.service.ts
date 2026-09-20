@@ -5,7 +5,7 @@ import {
   type DiscountSettings,
   type UpdateDiscountRulesRequest,
   type UpdateDiscountSettingsRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { notFound, validationFailed } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
@@ -14,7 +14,7 @@ import { ensureDiscountSettings } from './discount-settings.service';
 
 /**
  * Discount configuration, and the guardrails that stop a misconfiguration from
- * costing the merchant more than the sales it drives (CLAUDE_v3.md §2.3).
+ * costing the merchant more than the sales it drives (docs/legacy/CLAUDE_v3.md §2.3).
  *
  * **The guardrails are enforced here, in code, not left to the manager's
  * judgement.** That is a deliberate design position: the person setting a rate is
@@ -172,7 +172,7 @@ export async function updateDiscountRules(
   });
   if (!settings) throw notFound('لا توجد إعدادات خصم لهذا التاجر');
 
-  // The rule itself lives in `@walaa/shared-types` so every writer uses one
+  // The rule itself lives in `@loyalty-pro/shared-types` so every writer uses one
   // implementation — this service, the dev seed, anything added later. It used to be
   // inline here, which protected the API path and nothing else (§12.38).
   const fields = validateRulesAgainstSettings(request.rules, settings);

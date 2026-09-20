@@ -1,7 +1,7 @@
 import { main } from './restore';
 
 /**
- * Entry point for `walaa-restore`.
+ * Entry point for `loyalty-pro-restore`.
  *
  * One line of behaviour, in its own file, for the same reason `src/server.ts` is almost
  * empty: the module holding the logic can then be imported by a test without the import

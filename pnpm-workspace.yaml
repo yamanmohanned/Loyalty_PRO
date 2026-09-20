@@ -6,7 +6,7 @@ packages:
 # Third-party type definitions need @types/react resolvable from their OWN directory.
 #
 # `.npmrc` excludes `@types/*` from pnpm's hoist so that each app sees the React types
-# it declares (CLAUDE_v3.md §12.24). It was written when the workspace held React 18
+# it declares (docs/legacy/CLAUDE_v3.md §12.24). It was written when the workspace held React 18
 # (Station, manager desktop) and React 19 (the Next dashboard, removed in v4). Only
 # React 18 remains — and both settings stay, for the reason spelled out in `.npmrc`:
 # the failure they prevent is silent and lands in a package nobody edited. That is

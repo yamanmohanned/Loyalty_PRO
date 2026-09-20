@@ -36,7 +36,7 @@ import { prisma as defaultClient } from './prisma';
  *     from. Detected by a marker file left saying `running` (see below).
  *   - **seven days since the last full check.** Bit-rot and a failing disk do not
  *     announce themselves, and a weekly full pass costs one slow start a week.
- *   - **`WALAA_FULL_INTEGRITY_CHECK=1`**, for a support engineer who has a reason.
+ *   - **`LOYALTY_FULL_INTEGRITY_CHECK=1`**, for a support engineer who has a reason.
  *
  * **Caveat on the foreign-key numbers, stated rather than buried.** The 111 MB and
  * 533 MB fixtures were grown with a bulk table carrying no foreign keys, so those two
@@ -179,7 +179,7 @@ export function decideIntegrityDepth(
   previous: RuntimeState | null,
   now: number = Date.now(),
 ): IntegrityDecision {
-  if (process.env.WALAA_FULL_INTEGRITY_CHECK === '1') return { full: true, reason: 'forced' };
+  if (process.env.LOYALTY_FULL_INTEGRITY_CHECK === '1') return { full: true, reason: 'forced' };
   if (!previous) return { full: true, reason: 'no-previous-run' };
   if (previous.state === 'running') return { full: true, reason: 'unclean-shutdown' };
 
@@ -257,7 +257,7 @@ export async function verifyDatabaseIntegrity(options: {
       The remedy said «استعد أحدث نسخة احتياطية من شاشة النسخ الاحتياطي». That screen is
       inside the dashboard, behind a login, behind the service this very refusal has
       just stopped. The one person who can restore while the service is down is support,
-      with `walaa-restore.cjs` and the archive in hand — so that is where it sends him,
+      with `loyalty-pro-restore.cjs` and the archive in hand — so that is where it sends him,
       with the archive.
     */
     throw new Error(

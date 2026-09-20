@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Walaa.Agent.Parsing;
 
 /// <summary>
-/// The external parsing rules (CLAUDE_v3.md §4.5 step 3).
+/// The external parsing rules (docs/legacy/CLAUDE_v3.md §4.5 step 3).
 /// </summary>
 /// <remarks>
 /// <para>

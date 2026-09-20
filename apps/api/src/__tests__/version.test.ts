@@ -122,7 +122,7 @@ describe('names that cross a language boundary', () => {
       template's default, and the firewall rule, the status file and the dashboard all
       expect a different number. Nothing errors; the machine is simply unreachable.
     */
-    const template = readFileSync(join(REPO, 'packaging', 'walaa.env.template'), 'utf8');
+    const template = readFileSync(join(REPO, 'packaging', 'loyalty-pro.env.template'), 'utf8');
     expect(template).toMatch(/^API_PORT=/m);
 
     const host = readFileSync(

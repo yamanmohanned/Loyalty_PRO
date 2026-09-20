@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES, RedeemVoucherRequestSchema, STATION_ROLES } from '@walaa/shared-types';
+import { DASHBOARD_ROLES, RedeemVoucherRequestSchema, STATION_ROLES } from '@loyalty-pro/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import { isEnabled } from '../services/feature-flags.service';
 import { reconcileDay, redeemVoucher, voidVoucher } from '../services/voucher.service';

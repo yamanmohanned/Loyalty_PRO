@@ -33,7 +33,7 @@ import { createWorld, type World } from './helpers/fixtures';
 import { startFakeGoogle, type FakeGoogle } from './helpers/fake-google';
 
 /**
- * The Google Drive destination (CLAUDE_v3.md §7.3).
+ * The Google Drive destination (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * **None of this has run against Google's own servers**, and it cannot until a
  * merchant's Google Cloud project and OAuth client exist — §7.3 names that as a

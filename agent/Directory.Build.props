@@ -3,7 +3,7 @@
     Shared build settings for the Print Capture Agent.
 
     Warnings are errors on purpose. This component sits in a shop's print path
-    (CLAUDE_v3.md §4.6): a nullable-reference warning here is a NullReferenceException
+    (docs/legacy/CLAUDE_v3.md §4.6): a nullable-reference warning here is a NullReferenceException
     in the forwarding loop, and the consequence of that is a store that cannot print
     receipts.
   -->

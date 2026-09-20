@@ -209,6 +209,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "loyalty-pro-license"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "ed25519-dalek",
+ "serde",
+ "serde_json",
+ "sha2",
+ "windows-sys",
+]
+
+[[package]]
+name = "loyalty-pro-license-node"
+version = "0.1.0"
+dependencies = [
+ "loyalty-pro-license",
+ "napi",
+ "napi-build",
+ "napi-derive",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -482,28 +504,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "walaa-license"
-version = "0.3.1"
-dependencies = [
- "base64",
- "ed25519-dalek",
- "serde",
- "serde_json",
- "sha2",
- "windows-sys",
-]
-
-[[package]]
-name = "walaa-license-node"
-version = "0.3.1"
-dependencies = [
- "napi",
- "napi-build",
- "napi-derive",
- "walaa-license",
-]
 
 [[package]]
 name = "wasi"

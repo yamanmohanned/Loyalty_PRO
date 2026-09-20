@@ -6,7 +6,7 @@
 
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use walaa_license::{
+use loyalty_pro_license::{
     anchors, best_license, clock_rolled_back, code, device, embedded_key_kind, embedded_public_key,
     embedded_unlock_chain, evaluate_all, key_fingerprint, recording_allowed_at, unlock, verify, Payload,
     VerifyError, KNOWN_FEATURES,
@@ -24,8 +24,8 @@ pub struct DeviceIdentity {
 pub fn compute_device_id() -> Result<DeviceIdentity> {
     #[cfg(windows)]
     {
-        let guid = walaa_license::windows::machine_guid().map_err(Error::from_reason)?;
-        let serial = walaa_license::windows::system_volume_serial().map_err(Error::from_reason)?;
+        let guid = loyalty_pro_license::windows::machine_guid().map_err(Error::from_reason)?;
+        let serial = loyalty_pro_license::windows::system_volume_serial().map_err(Error::from_reason)?;
         Ok(DeviceIdentity {
             device_id: device::device_id(&guid, serial),
             machine_guid_digest: device::source_digest("machine_guid", &guid.trim().to_ascii_lowercase()),
@@ -236,7 +236,7 @@ pub fn recording_allowed(codes: Vec<String>, unlock_codes: Vec<String>, device_i
 pub fn uptime_seconds() -> Option<i64> {
     #[cfg(windows)]
     {
-        Some(walaa_license::windows::uptime_seconds() as i64)
+        Some(loyalty_pro_license::windows::uptime_seconds() as i64)
     }
     #[cfg(not(windows))]
     {
@@ -271,7 +271,7 @@ pub fn write_file_anchor(path: String, value: i64) -> Result<()> {
 pub fn read_registry_anchor(subkey: String) -> Result<Option<i64>> {
     #[cfg(windows)]
     {
-        walaa_license::windows::read_registry_anchor(&subkey).map_err(Error::from_reason)
+        loyalty_pro_license::windows::read_registry_anchor(&subkey).map_err(Error::from_reason)
     }
     #[cfg(not(windows))]
     {
@@ -284,7 +284,7 @@ pub fn read_registry_anchor(subkey: String) -> Result<Option<i64>> {
 pub fn write_registry_anchor(subkey: String, value: i64) -> Result<()> {
     #[cfg(windows)]
     {
-        walaa_license::windows::write_registry_anchor(&subkey, value).map_err(Error::from_reason)
+        loyalty_pro_license::windows::write_registry_anchor(&subkey, value).map_err(Error::from_reason)
     }
     #[cfg(not(windows))]
     {
@@ -328,19 +328,19 @@ pub fn known_features() -> Vec<String> {
 #[cfg(feature = "test-key")]
 #[napi]
 pub fn sign_for_tests(payload_json: String) -> String {
-    walaa_license::test_support::sign_raw(payload_json.as_bytes())
+    loyalty_pro_license::test_support::sign_raw(payload_json.as_bytes())
 }
 
 /// Test build only: an emergency code from the published test chain.
 #[cfg(feature = "test-key")]
 #[napi]
 pub fn unlock_code_for_tests(device_id: String, now: i64, days: u32) -> String {
-    walaa_license::test_support::unlock_code(&device_id, now, days)
+    loyalty_pro_license::test_support::unlock_code(&device_id, now, days)
 }
 
 /// Test build only: removes a test registry key.
 #[cfg(all(feature = "test-key", windows))]
 #[napi]
 pub fn delete_registry_key_for_tests(subkey: String) -> Result<()> {
-    walaa_license::windows::delete_registry_key(&subkey).map_err(Error::from_reason)
+    loyalty_pro_license::windows::delete_registry_key(&subkey).map_err(Error::from_reason)
 }

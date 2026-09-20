@@ -12,7 +12,7 @@
  * pointed somewhere unusual.
  */
 
-const API_URL_KEY = 'walaa.station.api_url';
+const API_URL_KEY = 'loyalty.station.api_url';
 
 const trimTrailingSlash = (url: string): string => url.trim().replace(/\/+$/, '');
 
@@ -67,7 +67,7 @@ export async function testApiUrl(url: string): Promise<UrlCheck> {
     }
 
     const body = (await response.json()) as { service?: string };
-    if (body.service !== 'walaa-api') {
+    if (body.service !== 'loyalty-pro-api') {
       return { ok: false, message: 'هذا العنوان لا يشير إلى خادم ولاء' };
     }
     return { ok: true, message: 'تم الاتصال بنجاح' };

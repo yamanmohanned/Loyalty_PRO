@@ -53,7 +53,7 @@ const sig = `${setup}.sig`;
 
 for (const path of [setup, sig]) {
   if (!existsSync(path)) {
-    console.error(`missing ${path}\n  build it first: pnpm --filter @walaa/manager-desktop tauri build`);
+    console.error(`missing ${path}\n  build it first: pnpm --filter @loyalty-pro/manager-desktop tauri build`);
     process.exit(1);
   }
 }

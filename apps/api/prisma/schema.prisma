@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Walaa — v3 instant-discount data model
-//  Authority: CLAUDE_v3.md §5. Supersedes the v1 model in CLAUDE.md §4.
+//  Loyalty Pro — v3 instant-discount data model
+//  Authority: docs/legacy/CLAUDE_v3.md §5. Supersedes the v1 model in CLAUDE.md §4.
 //
 //  Three rules govern this file:
 //
@@ -215,7 +215,7 @@ model DiscountSettings {
   /// A percentage discount must never ship without it.
   absoluteMaxDiscountValue Int @default(5000) @map("absolute_max_discount_value")
   /// v4 removed `period_type` / `period_start` / `period_end`: nothing accumulates,
-  /// so there is no window to configure (CLAUDE_UPDATE_4.md §1.3, §10.6).
+  /// so there is no window to configure (docs/legacy/CLAUDE_UPDATE_4.md §1.3, §10.6).
   /// MERCHANT_DEFINED | VOUCHER_AS_PAYMENT | DAILY_PROMOTIONAL_EXPENSE (§9, closed).
   /// Chooses the wording of the cashier instruction printed on the slip, nothing else.
   /// Defaults to the strategy that states the figures and presumes no procedure; a
@@ -593,7 +593,7 @@ model InstallationState {
 }
 
 /// Every emergency code entered here — the fifteen symbols the provider reads over the
-/// phone (crates/walaa-license/src/unlock.rs). Like licence codes, re-verified on every
+/// phone (crates/loyalty-pro-license/src/unlock.rs). Like licence codes, re-verified on every
 /// check; `valid_until` is for the history list.
 model LicenseUnlock {
   id String @id @default(uuid())

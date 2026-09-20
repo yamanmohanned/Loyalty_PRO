@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Walaa.Agent</RootNamespace>
     <AssemblyName>walaa-agent</AssemblyName>
-    <UserSecretsId>walaa-print-capture-agent</UserSecretsId>
+    <UserSecretsId>loyalty-pro-print-capture-agent</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

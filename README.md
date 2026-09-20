@@ -1,30 +1,36 @@
-# ولاء — Walaa
+# Loyalty Pro — ولاء
 
-A post-purchase loyalty platform for a supermarket. Customers earn a discount on their
-next visit once cumulative spend within a period crosses a merchant-defined threshold.
-The system attributes anonymous printed invoices to known customer accounts.
+A retail loyalty platform for a supermarket: a staged loyalty **journey** that rewards
+a customer for coming back, a product **catalogue**, a QR-opened **storefront**, a live
+**orders station** for staff, and a manager who can change almost all of it without a
+developer.
 
-**The core loop:** scan customer QR → scan invoice barcode → link → notify.
+**The core loop, unchanged:** scan the customer's card → read the invoice → link →
+print the receipt.
 
-> `CLAUDE.md` is the single source of truth for architecture, design and standards.
-> `PROMPT.md` defines the build phases. Read both before changing anything.
+> **This repository is a fork, not an upgrade.** It was copied from the frozen «ولاء»
+> line at tag `walaa-frozen-0.3.1`, and every identifier Windows keys on — service
+> name, install directory, data directory, database filename, registry anchor, port,
+> update feed — was changed in one commit so both products can be installed on the same
+> machine without touching each other. The frozen line is never modified from here.
+> `packaging/scripts/verify-identity.mjs` fails the build if any of its identifiers
+> comes back.
 
-## Status
+## What governs what
 
-| Phase | Scope | State |
-|---|---|---|
-| 0 | Monorepo, shared contracts, Prisma schema + migration, dev seed | ✅ Done |
-| 1 | Fastify API — auth, customers, core loop, coupons, rules, sync | Not started |
-| 2 | Manager dashboard (Next.js) | Not started |
-| 3 | Cashier assistant (Expo) | Not started |
-| 4 | Notifications & coupon lifecycle | Not started |
-| 5 | Hardening | Not started |
+| File | Governs |
+|---|---|
+| `docs/PRD.md` | The product being built: the journey, catalogue, storefront, orders, the Hub, the roadmap P0–P6 |
+| `CLAUDE.md` | Architecture, design system, security and coding standards — and the decision log |
+| `docs/fork-study.md` | What the PRD asked for measured against the code that existed, and the two hazards its rename list missed |
+| `docs/legacy/` | The frozen line's own documents. Read-only history; naming «ولاء» is what they are for |
 
 ## Requirements
 
-- **Node** ≥ 20.11 (developed on 24.13)
+- **Node** ≥ 20.11
 - **pnpm** 10.x
-- **Docker** — for the local Postgres
+- **Rust** stable — the licensing crate and the Windows service host
+- **Windows** for the full product; the API and its tests run anywhere
 
 ## Setup
 
@@ -36,26 +42,32 @@ pnpm install
 cp .env.example .env
 ```
 
-Then fill in the three secrets in `.env`. Generate each with:
+Fill in the four secrets. Generate each with:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` and `QR_TOKEN_SECRET` must each be a distinct
-value. The config module refuses to boot if any is missing, under 32 characters, or still
-the `replace-me` placeholder.
+`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` and `QR_TOKEN_SECRET` must each be distinct,
+and `BACKUP_KEY` is 32 random bytes in base64. The config module refuses to boot on a
+missing, short or placeholder value.
 
-> **`QR_TOKEN_SECRET` is effectively permanent.** Rotating it invalidates every QR code
-> already sent to a customer.
+> **`QR_TOKEN_SECRET` is effectively permanent.** Rotating it invalidates every card
+> already printed.
 
-Start the database and apply the schema:
+Then generate the Prisma client and the artifacts the suite needs:
 
 ```bash
-pnpm db:up && pnpm db:migrate && pnpm db:seed
+pnpm db:generate
 ```
 
-Postgres binds to **host port 5433**, not 5432 — see `CLAUDE.md` §13.7.
+```bash
+pnpm --filter @loyalty-pro/api db:template && pnpm --filter @loyalty-pro/station build
+```
+
+The second line is not optional for a green test run: `supersede-database.test.ts`
+needs the shipped database template, and `rbac-matrix.test.ts` needs the Station bundle
+because the API only registers its static routes when one exists.
 
 ## Everyday commands
 
@@ -63,20 +75,26 @@ Run from the repo root.
 
 | Command | Does |
 |---|---|
-| `pnpm dev` | Runs every app's dev server |
+| `pnpm dev` | Every app's dev server (API 4100, manager 5183, station 5184) |
 | `pnpm build` | Production build, all packages |
 | `pnpm typecheck` | Strict TypeScript across the workspace |
-| `pnpm test` | All tests |
-| `pnpm db:up` / `pnpm db:down` | Start / stop Postgres |
+| `pnpm lint` | ESLint across the workspace |
+| `pnpm test` | The identity guard, then all tests |
+| `pnpm verify:identity` | Just the identity guard — proves no frozen-line identifier survives |
+| `pnpm db:generate` | Regenerate the Prisma client |
 | `pnpm db:migrate` | Create and apply a migration |
 | `pnpm db:seed` | Load the Iraqi dev fixtures (re-runnable) |
-| `pnpm db:reset` | Drop, re-migrate and re-seed |
 | `pnpm db:studio` | Prisma Studio |
-| `pnpm --filter @walaa/api db:verify` | Assert the Phase 0 data invariants |
+
+Install the schema-fingerprint hook once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
 
 ## Dev credentials
 
-Created by the seed. **Development only** — production users are created through the API.
+Created by the seed. **Development only.**
 
 | Username | Role | Name |
 |---|---|---|
@@ -90,31 +108,46 @@ Password for all three: `Walaa!Dev2026`
 
 ```
 apps/
-  api/          Fastify service + Prisma schema, migrations, seed
-  dashboard/    Next.js manager dashboard (RTL)
-  assistant/    Expo cashier app (RTL, offline-first)
+  api/              Fastify service, Prisma schema + migrations, seeds, the test suite
+  manager-desktop/  Tauri 2 + Vite + React — the manager's desktop app (RTL)
+  station/          The Loyalty Station — a browser app the API serves on its own port
 packages/
-  shared-types/ Normalized Invoice Schema, DTOs, enums — imported everywhere
-  config/       tsconfig / eslint / tailwind presets + design tokens
-  ui/           Shared UI primitives (grown in Phase 2)
-design/
-  stitch/       Vendored Stitch design exports — the layout source of truth
+  shared-types/     The invoice contract, DTOs, period and phone rules — imported everywhere
+  config/           tsconfig / eslint / tailwind presets
+  license-native/   The API's native licensing module (Rust → Node)
+crates/
+  loyalty-pro-license/  Offline licensing: device identity, signed codes, clock anchors
+packaging/
+  service-host/     The Windows Service host, in Rust
+  scripts/          Staging, verification and the identity guard
+agent/              The .NET print-capture agent, inherited unchanged
+tools/
+  license-issuer/   Holds the private key. Never shipped.
+docs/
+  PRD.md            The product specification
+  legacy/           The frozen line's documents, read-only
 ```
 
-## The two rules that are not negotiable
+## Before this ships
 
-1. **Customer identity is captured before the invoice.** There is no code path that links
-   an invoice without a resolved customer — `LinkTransactionRequest.customerId` is
-   non-nullable by design, so the loop order is enforced by the type system rather than by
-   a UI guard alone.
-2. **The same invoice can never be linked twice.** Guarded at the API *and* by a database
-   `UNIQUE (merchant_id, branch_id, invoice_id)` constraint. `pnpm --filter @walaa/api
-   db:verify` proves the database itself refuses a replay.
+Two things are deliberately unfinished, and both block a merchant install rather than
+development:
 
-## Security notes
+1. **The auto-updater is off.** It arrived from the frozen line pointing at that line's
+   release feed with that line's signing key — which would have updated this product
+   into the other one. Turning it on needs a new minisign keypair. See `CLAUDE.md`
+   §13.15.
+2. **The licence key is still the frozen line's.** `pnpm package:installer` now refuses
+   to build an installer with it. The provider generates this product's own keypair
+   with `license-issuer keygen`. See `packaging/LICENSING.md`.
 
-- `.env` is gitignored. Never commit real secrets; `.env.example` is the template.
-- Customer QR codes carry a **signed opaque token**, never a phone number or any PII.
-- Money is stored as whole-dinar integers, never floats. See `CLAUDE.md` §13.5 for the
-  Int32 bound and the one place aggregates must cast to `BIGINT`.
-- Phone numbers normalise to E.164 on write so the per-merchant unique constraint holds.
+## The rules that are not negotiable
+
+1. **Customer identity is captured before the invoice.** No code path links an invoice
+   without a resolved customer.
+2. **The same invoice can never be counted twice** — guarded at the API and by a
+   database constraint.
+3. **A coupon is redeemed once**, by one atomic conditional update, even from two
+   stations at the same instant.
+4. **The loyalty event log is append-only.** Customer state is derived from it and can
+   be rebuilt.

@@ -33,7 +33,7 @@ import { APP_VERSION } from './version';
  *
  * ── How the port is known without asking ─────────────────────────────────────
  *
- * It is in `walaa.env`, which is locked to SYSTEM and Administrators because it also
+ * It is in `loyalty-pro.env`, which is locked to SYSTEM and Administrators because it also
  * holds the JWT signing keys — the logged-on user cannot read it and should not be able
  * to. The service, which runs as SYSTEM, publishes the port alone into `status.json` in
  * the log directory, which the logged-on user *can* read. `backend_port` in the shell
@@ -75,7 +75,7 @@ export const isTauri = (): boolean =>
  * re-reading it on every request would only create opportunities for two callers to
  * disagree about it.
  *
- * It used to be the literal 4000 — a number this product does not own. Anything else on
+ * It used to be the literal 4100 — a number this product does not own. Anything else on
  * the merchant's PC can already be holding it (on the machine this was built on,
  * something is), and the result was an app that could never work, with no way for the
  * merchant to change it and nothing on screen explaining why.
@@ -185,7 +185,7 @@ export async function clearRemoteApiUrl(): Promise<void> {
  * «تعذّر الوصول إلى الخادم — تحقّق من العنوان والشبكة», and they need opposite next
  * moves: the first means start the service or fix the port, the second means the
  * address belongs to something else entirely. A third case did not exist at all — a
- * ولاء server at a version this dashboard cannot talk to answered `service: walaa-api`
+ * ولاء server at a version this dashboard cannot talk to answered `service: loyalty-pro-api`
  * and was accepted, and the failure surfaced later as unexplained empty screens.
  *
  * Checking reachability at the moment the address is entered is the difference between
@@ -219,7 +219,7 @@ export async function testApiUrl(url: string): Promise<{ ok: boolean; message: s
     return { ok: false, message: locale.setup.errors.notWalaa };
   }
 
-  if (!response.ok || body.service !== 'walaa-api') {
+  if (!response.ok || body.service !== 'loyalty-pro-api') {
     return { ok: false, message: locale.setup.errors.notWalaa };
   }
 

@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import type { RealtimeEvent } from '@walaa/shared-types';
+import type { RealtimeEvent } from '@loyalty-pro/shared-types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { API_PREFIX, buildApp } from '../app';
@@ -20,7 +20,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, TEST_PASSWORD, type World } from './helpers/fixtures';
 
 /**
- * Free space on the database volume (CLAUDE_v3.md §12.15).
+ * Free space on the database volume (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * The feature exists because the failure is quiet: SQLite refuses writes cleanly and
  * keeps serving reads, so a full disk renders a perfectly healthy-looking dashboard

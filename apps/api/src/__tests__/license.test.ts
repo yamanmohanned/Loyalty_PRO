@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readRegistryAnchor } from '@walaa/license-native';
+import { readRegistryAnchor } from '@loyalty-pro/license-native';
 import { API_PREFIX, buildApp } from '../app';
 import { loadEnv } from '../config/env';
 import { AUDIT_ACTIONS } from '../services/audit.service';
@@ -469,7 +469,7 @@ describe('the clock', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().state.status).toBe('TRIAL');
     expect(await audits(AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_RESET)).toHaveLength(1);
-    expect(readRegistryAnchor(process.env.WALAA_LICENSE_REGISTRY_KEY!)).toBeLessThanOrEqual(now() + 60);
+    expect(readRegistryAnchor(process.env.LOYALTY_LICENSE_REGISTRY_KEY!)).toBeLessThanOrEqual(now() + 60);
   });
 });
 

@@ -1,7 +1,7 @@
 /**
  * Builds the demo database at BUILD time.
  *
- *   pnpm --filter @walaa/api db:seed:demo
+ *   pnpm --filter @loyalty-pro/api db:seed:demo
  *
  * A thin wrapper: every decision lives in `src/services/demo.service.ts`, so the shop
  * the installer ships and the shop the in-app reset restores are produced by one
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     Create the schema if this file does not have one yet.
 
     Without this the script only worked on a machine that had already built a demo
-    once — it opened whatever `walaa-demo.db` was lying around and assumed the tables
+    once — it opened whatever `loyalty-pro-demo.db` was lying around and assumed the tables
     existed. Deleting the file to force a clean rebuild produced
     "table main.voucher does not exist", which is a build step that cannot bootstrap
     itself. The same call the runtime uses does it properly, and on an already-seeded

@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 
 /**
- * Fonts are BUNDLED, never fetched (CLAUDE_v2.md §3, §14).
+ * Fonts are BUNDLED, never fetched (docs/legacy/CLAUDE_v2.md §3, §14).
  *
  * This is the single most common failure when converting a web app to a desktop
  * app: a `<link>` to Google Fonts works on the developer's machine and silently

@@ -7,7 +7,7 @@ import {
   type Card as CardRecord,
   type CustomerCard,
   type CustomerSearchResponse,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale } from '../lib/locale';
 import { usePrint } from '../lib/print';
@@ -16,7 +16,7 @@ import { PrintableCard } from '../components/Printable';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
 /**
- * Card lookup and reprint (CLAUDE_v3.md §6.2 #5).
+ * Card lookup and reprint (docs/legacy/CLAUDE_v3.md §6.2 #5).
  *
  * A customer who has lost their card cannot scan it, so this is the one place the
  * station searches by name as well as by card number or phone.

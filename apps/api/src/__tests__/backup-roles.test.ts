@@ -7,7 +7,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, TEST_PASSWORD } from './helpers/fixtures';
 
 /**
- * Who may do what in the backup key ceremony (CLAUDE_v3.md §12.19).
+ * Who may do what in the backup key ceremony (docs/legacy/CLAUDE_v3.md §12.19).
  *
  * ## Why this suite exists
  *

@@ -1,7 +1,7 @@
 import { statfsSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
-import type { StorageLevel, StorageStatus } from '@walaa/shared-types';
+import type { StorageLevel, StorageStatus } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../config/env';
 import { liveDatabasePath, resolveDataDir } from '../config/paths';
 import { prisma } from '../lib/prisma';
@@ -9,7 +9,7 @@ import { AUDIT_ACTIONS, recordAudit } from './audit.service';
 import { publish } from './realtime.service';
 
 /**
- * Free space on the volume that holds the database (CLAUDE_v3.md §12.15).
+ * Free space on the volume that holds the database (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * §12.15 set the thresholds and named the failure: below roughly 2 GB free, Windows
  * itself starts failing in ways that look like application bugs, and SQLite starts

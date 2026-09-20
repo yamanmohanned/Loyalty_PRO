@@ -15,7 +15,7 @@ import { installDatabaseTemplateIfAbsent } from './migrate';
  * ── The failure this closes ──────────────────────────────────────────────────
  *
  * A merchant installed 0.2.1 onto a machine that had had an earlier build on it. The
- * data directory still held that build's `walaa.db`, and the installer had — correctly
+ * data directory still held that build's `loyalty-pro.db`, and the installer had — correctly
  * — not touched it: an installer that overwrites a data directory is an installer that
  * can destroy a shop's customer list.
  *

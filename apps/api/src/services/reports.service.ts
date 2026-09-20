@@ -1,4 +1,4 @@
-import type { OverviewReport, ProgrammeReport, ReportRange } from '@walaa/shared-types';
+import type { OverviewReport, ProgrammeReport, ReportRange } from '@loyalty-pro/shared-types';
 import { prisma } from '../lib/prisma';
 import { describeReward, getActiveRules } from './lifetime.service';
 import { prisma as db } from '../lib/prisma';
@@ -19,7 +19,7 @@ import { reconcileDay } from './voucher.service';
  */
 
 // `ReportRange`, `OverviewReport` and `ProgrammeReport` are the shared contracts
-// (`@walaa/shared-types`), imported rather than declared: the manager app used to
+// (`@loyalty-pro/shared-types`), imported rather than declared: the manager app used to
 // carry its own copy of each, and a copy agrees with the server right up until it
 // does not (§12.27). Re-exported so existing importers of this module keep working.
 export type { OverviewReport, ProgrammeReport, ReportRange };

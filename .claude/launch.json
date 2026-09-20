@@ -4,14 +4,14 @@
     {
       "name": "manager-desktop",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@walaa/manager-desktop", "dev", "--", "--port", "5173", "--strictPort"],
-      "port": 5173
+      "runtimeArgs": ["--filter", "@loyalty-pro/manager-desktop", "dev", "--", "--port", "5183", "--strictPort"],
+      "port": 5183
     },
     {
       "name": "station",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@walaa/station", "dev", "--", "--port", "5174", "--strictPort"],
-      "port": 5174
+      "runtimeArgs": ["--filter", "@loyalty-pro/station", "dev", "--", "--port", "5184", "--strictPort"],
+      "port": 5184
     }
   ]
 }

@@ -15,13 +15,13 @@ const appVersion = JSON.parse(
 ).version;
 
 /**
- * Vite replaces Next.js for the desktop frontend (CLAUDE_v2.md §2.2). Tauri serves
+ * Vite replaces Next.js for the desktop frontend (docs/legacy/CLAUDE_v2.md §2.2). Tauri serves
  * static files from a system WebView — there is no server, so no SSR to configure.
  */
 export default defineConfig({
   plugins: [react()],
   /*
-    `WALAA_DEMO=1` at build time produces the demo build.
+    `LOYALTY_DEMO=1` at build time produces the demo build.
 
     A `define`, deliberately, and not `import.meta.env`: a define is a literal
     substitution, so `if (IS_DEMO)` becomes `if (false)` in a production build and
@@ -30,10 +30,10 @@ export default defineConfig({
   */
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
-    __DEMO_MODE__: JSON.stringify(process.env.WALAA_DEMO === '1'),
+    __DEMO_MODE__: JSON.stringify(process.env.LOYALTY_DEMO === '1'),
   },
   // Tauri expects a fixed port it can point the dev WebView at.
-  server: { port: 5173, strictPort: true },
+  server: { port: 5183, strictPort: true },
   build: {
     outDir: 'dist',
     // WebView2 on Windows is evergreen Chromium, so no legacy transpilation needed.
@@ -41,5 +41,5 @@ export default defineConfig({
     sourcemap: false,
   },
   // Shared workspace packages ship TypeScript source, not a build artifact.
-  optimizeDeps: { include: ['@walaa/shared-types'] },
+  optimizeDeps: { include: ['@loyalty-pro/shared-types'] },
 });

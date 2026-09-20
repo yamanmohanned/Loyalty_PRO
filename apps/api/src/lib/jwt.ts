@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
-import { AccessTokenClaimsSchema, type AccessTokenClaims } from '@walaa/shared-types';
+import { AccessTokenClaimsSchema, type AccessTokenClaims } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../config/env';
 import { tokenExpired, unauthenticated } from './errors';
 
@@ -24,8 +24,8 @@ import { tokenExpired, unauthenticated } from './errors';
 
 const env = loadEnv();
 
-const ISSUER = 'walaa';
-const AUDIENCE = 'walaa-api';
+const ISSUER = 'loyalty-pro';
+const AUDIENCE = 'loyalty-pro-api';
 
 const accessSecret = new TextEncoder().encode(env.JWT_ACCESS_SECRET);
 

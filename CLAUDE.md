@@ -1,12 +1,28 @@
-# CLAUDE.md — Supermarket Loyalty Platform ("ولاء")
+# CLAUDE.md — Loyalty Pro ("ولاء")
 
-> **Purpose of this file:** This is the single source of truth for building the
-> Supermarket Loyalty Platform. Claude Code MUST read this file at the start of every
+> **Purpose of this file:** This is the single source of truth for architecture, design,
+> security and coding standards. Claude Code MUST read this file at the start of every
 > session and adhere to every directive, standard, and constraint below. When any
 > instruction here conflicts with a default habit, THIS FILE WINS.
 >
-> **Companion file:** `PROMPT.md` contains the execution kickoff prompt and build order.
-> Read `PROMPT.md` after this file.
+> **This repository is a fork, not an upgrade.** It was copied from the frozen «ولاء»
+> line at tag `walaa-frozen-0.3.1`, and every identifier the operating system keys on —
+> service name, install directory, data directory, database filename, registry anchor,
+> port, update feed — was changed in one commit so that both products can be installed
+> on one machine without touching each other (§13.13). **The frozen line is never
+> modified from here.** `pnpm verify:identity` fails if any of its identifiers returns.
+>
+> **What governs what.** `docs/PRD.md` governs the product being built — the loyalty
+> journey, the catalogue, the storefront, the orders station, the Hub, and the roadmap
+> P0–P6. §1–§12 below were written for the frozen line and still govern the code
+> inherited from it; where the two disagree about the new product, **the PRD wins**, and
+> the disagreement gets an entry in §13. The frozen line's own documents are in
+> `docs/legacy/`, read-only — naming «ولاء» is what they are for.
+>
+> **Vocabulary.** The product is «ولاء» in Arabic and "Loyalty" in English; "Loyalty Pro"
+> and `loyalty-pro` are the technical identifiers that keep it distinct from the frozen
+> line. `docs/fork-study.md` records what the PRD asked for measured against the code
+> that actually existed.
 
 ---
 
@@ -679,7 +695,7 @@ bound user must match it. Otherwise an assistant at one branch could attribute s
 to another — both a fraud vector and a reporting mess. An OWNER is unbound and may
 link anywhere.
 
-**Tests run against a separate `walaa_test` database** and TRUNCATE between cases.
+**Tests run against a separate `loyalty_pro_test` database** and TRUNCATE between cases.
 Pointing that at the dev database would destroy it, so the isolation is a safety
 property rather than a convenience. Rate limiting is disabled in the general HTTP
 suite (it would otherwise exhaust one shared login bucket mid-file) and covered by
@@ -688,8 +704,8 @@ its own suite with limiting left on.
 ### 13.10 Offline licensing — decided in Rust, enforced in the service
 *(operator decisions, 2026-09-14; shipped in 0.3.0. Full account: `packaging/LICENSING.md`)*
 
-**Where it runs.** Codes are Ed25519-signed JSON verified by `crates/walaa-license`,
-compiled into a Node module the API loads (`@walaa/license-native`) with the provider's
+**Where it runs.** Codes are Ed25519-signed JSON verified by `crates/loyalty-pro-license`,
+compiled into a Node module the API loads (`@loyalty-pro/license-native`) with the provider's
 public key embedded as a constant. The issuer (`tools/license-issuer`) is never shipped.
 The UI decides nothing; it reads `GET /license`.
 
@@ -700,7 +716,7 @@ data is never withheld. A queued sync item refused this way is FAILED, so the St
 keeps it and sends it again after activation.
 
 **The clock.** The latest time seen is kept in three places (`installation_state`,
-`HKCU\Software\Walaa`, `.license-clock` in the data folder); a clock more than two
+`HKCU\Software\LoyaltyPro`, `.license-clock` in the data folder); a clock more than two
 hours behind it is TAMPERED until corrected, then clears by itself. A freshly issued
 code resets a recorded time that lies after its issue. Perpetual licences ignore the
 clock — there is no expiry to stretch.
@@ -711,7 +727,7 @@ changed source is an audit warning. Activated codes are mirrored to
 
 **Never lock out a paying shop** *(operator's first requirement, 2026-09-15)* — every stop
 has a way back with no visit and no internet:
-- **Emergency codes** (`crates/walaa-license/src/unlock.rs`): fifteen symbols read over the
+- **Emergency codes** (`crates/loyalty-pro-license/src/unlock.rs`): fifteen symbols read over the
   phone, from a hash chain derived from the private key; the program holds only the
   chain's public tip. They override every read-only state for 1–30 days, judged against
   the latest recorded time (a wound-back clock cannot stretch them). Direction and replay
@@ -780,5 +796,93 @@ nothing can undo that, so the documented commands use `--password-file`.
 `issue` is a device's first licence and refuses a device already licensed in the log;
 `renew --days N` adds to the end of its latest trial (or to today, if ended),
 `renew --perpetual` upgrades; note and features carry forward. `check` opens the key and
-writes nothing. The default key folder is whichever of `%USERPROFILE%\.walaa-issuer` and
-`%APPDATA%\walaa-license-issuer` holds a key.
+writes nothing. The default key folder is whichever of `%USERPROFILE%\.loyalty-pro-issuer` and
+`%APPDATA%\loyalty-pro-license-issuer` holds a key.
+
+### 13.13 The fork: every identifier the OS keys on is new, and a script proves it
+*(P0, 2026-09-20. The PRD's §5 is the requirement; this is what it cost and what it
+caught.)*
+
+This repository was copied from the «ولاء» line at tag `walaa-frozen-0.3.1` and
+renamed in one commit. The frozen line is never modified from here.
+
+| What | Frozen line | Here |
+|---|---|---|
+| Tauri `productName` (sets `$INSTDIR` **and** the uninstall registry key) | `ولاء` | `Loyalty` |
+| Tauri `identifier` | `com.walaa.manager` | `com.loyaltypro.manager` | <!-- identity-guard:allow -->
+| Windows service name | `WalaaApi` | `LoyaltyProApi` | <!-- identity-guard:allow -->
+| Firewall rule | `Walaa Loyalty API` | `Loyalty Pro API` | <!-- identity-guard:allow -->
+| Data directory | `%PROGRAMDATA%\Walaa` · `~/.walaa` | `%PROGRAMDATA%\LoyaltyPro` · `~/.loyalty-pro` |
+| Database · demo · template | `walaa.db` · `walaa-demo.db` · `walaa-template.db` | `loyalty-pro.db` · `loyalty-pro-demo.db` · `loyalty-pro-template.db` | <!-- identity-guard:allow -->
+| Environment file | `walaa.env` | `loyalty-pro.env` | <!-- identity-guard:allow -->
+| Environment variables | `WALAA_*` | `LOYALTY_*` |
+| Licence clock anchor | `HKCU\Software\Walaa` | `HKCU\Software\LoyaltyPro` | <!-- identity-guard:allow -->
+| API port | 4000 | 4100 |
+| Dev servers | 5173 · 5174 · 5180 | 5183 · 5184 · 5190 |
+| `/health` → `service` and the JWT audience | `walaa-api` | `loyalty-pro-api` |
+| npm scope · Cargo packages | `@walaa/*` · `walaa-*` | `@loyalty-pro/*` · `loyalty-pro-*` | <!-- identity-guard:allow -->
+| Station storage keys | `walaa.station.*` | `loyalty.station.*` |
+| Drive backup folder | `Walaa Backups` | `Loyalty Pro Backups` |
+
+**The one that would have been catastrophic.** `nsis/hooks.nsh` runs
+`…-service.exe uninstall` unconditionally on every install, and §12.36 records why:
+the service is deregistered **by name**, wherever its binary lives, so a renamed
+install can retire an older one it cannot see on disk. That is correct inside one
+product line and lethal across two. Had a single `SERVICE_NAME` been left reading
+`WalaaApi`, installing this product on a shop already running «ولاء» would have <!-- identity-guard:allow -->
+stopped that shop's live service, deregistered it, and registered this binary in its
+place — during trading hours, with no error shown.
+
+So the rename is not trusted to a careful diff. `packaging/scripts/verify-identity.mjs`
+fails the build if any of those strings survives, it runs first in CI and first in
+`pnpm test`, and `docs/legacy/` is exempt because naming the frozen line is what those
+documents are for.
+
+### 13.14 What deliberately kept the old name
+*(P0, 2026-09-20)*
+
+§12.36's distinction is the one that matters: **a name the OS keys on must change; a
+name a person reads is free.** These stayed, each for a reason:
+
+- **«ولاء»** — the operator's chosen Arabic name for this product too. English is
+  «Loyalty».
+- **`.walaabk` and the `WALAABK1` magic** — the archive format's identity, not an
+  installation's. Nothing collides: each product writes into its own data directory and
+  its own Drive folder. Changing it would cost the one thing worth keeping — a future
+  one-way migration tool (PRD §5) being able to read a merchant's old archive.
+- **`Walaa.Agent.*`** — the .NET print-capture agent, inherited unchanged by PRD §5.
+  Its only shared resource is the raw-print port 9100, which is a setting, not a
+  constant; two agents on one machine need one of them moved.
+- **`walaa-device-v1`, `walaa-clock-v1`, `walaa-unlock-*-v1`, `walaa.card-check.v1`,
+  `walaa/drive/*/v1`** — HKDF and domain-separation labels. Changing a label changes
+  every value derived from it, which would invalidate stored secrets and the checksum
+  on every membership card already printed. They buy no isolation that separate data
+  directories do not already give.
+- **`Walaa!Dev2026`** — a development seed password. Not an identifier, and it appears
+  in drills and tests that have nothing to do with branding.
+
+### 13.15 Two hazards the PRD's rename list missed
+*(P0, 2026-09-20)*
+
+**The updater was live, not absent.** PRD §5 records «بلا مفتاح توقيع حالياً» for the
+auto-updater. It is wrong: `tauri.conf.json` carried `"active": true`, a real minisign
+public key, and an endpoint at `github.com/yamanmo/walaa/releases`. Copied unchanged, <!-- identity-guard:allow -->
+this product would have polled the **frozen line's** release feed, accepted its
+signatures — same key — and updated itself into «ولاء» on a merchant's machine.
+
+The updater is therefore **off** here (`active: false`, empty `pubkey`,
+`createUpdaterArtifacts: false`) with the endpoint repointed. Turning it back on needs
+a new minisign keypair generated by the provider; until that exists, an updater that is
+off is the only honest setting.
+
+**The licence key must not be inherited.** §5 does not mention it. The frozen line's
+Ed25519 public key (fingerprint `FCA66207230B90CA`) and its emergency-unlock chain tip
+are compiled into `crates/…-license/src/public_key.rs`. Left alone, a licence code sold
+for one product activates the other, and a phone-read emergency code unlocks both —
+which is not survivable for a product meant to be sold as separate packages (PRD G6).
+
+`verify-license-key.mjs` now refuses that fingerprint by name at
+`pnpm package:installer`, alongside the existing refusal of a development key. It sits
+there rather than in CI on purpose: it must block **shipping**, not developing, because
+the key stays inherited until the provider runs `license-issuer keygen` on their own
+machine with their own password — which is theirs to do, not this repository's.

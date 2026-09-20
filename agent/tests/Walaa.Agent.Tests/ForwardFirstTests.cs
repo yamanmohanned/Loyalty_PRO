@@ -5,7 +5,7 @@ using Xunit;
 namespace Walaa.Agent.Tests;
 
 /// <summary>
-/// The Fail-Open rule for the in-path capture modes (CLAUDE_v3.md §4.6).
+/// The Fail-Open rule for the in-path capture modes (docs/legacy/CLAUDE_v3.md §4.6).
 /// </summary>
 /// <remarks>
 /// <para>

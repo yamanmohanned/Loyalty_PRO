@@ -25,7 +25,7 @@ export function onRestartRequested(fn: RestartListener): void {
 
 /** True when a restart will actually happen: a shutdown to run, and a host to start us again. */
 export function canRestart(): boolean {
-  return listener !== null && process.env.WALAA_SUPERVISED === '1';
+  return listener !== null && process.env.LOYALTY_SUPERVISED === '1';
 }
 
 /**

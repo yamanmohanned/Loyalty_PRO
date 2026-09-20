@@ -354,7 +354,7 @@ let installed = false;
 /**
  * Installs the map globally, once.
  *
- * Called from this package's entry point, so importing `@walaa/shared-types` anywhere
+ * Called from this package's entry point, so importing `@loyalty-pro/shared-types` anywhere
  * is what turns it on. There is no opt-in to forget: the API, the dashboard, the
  * Station and the Print Capture Agent all import this package to get their schemas,
  * and the schemas are useless without it.

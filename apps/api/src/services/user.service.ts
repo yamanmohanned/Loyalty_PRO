@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import type { CreateUserRequest, StaffListResponse, UpdateUserRequest } from '@walaa/shared-types';
+import type { CreateUserRequest, StaffListResponse, UpdateUserRequest } from '@loyalty-pro/shared-types';
 import { AppError, notFound, validationFailed } from '../lib/errors';
 import { hashPassword } from '../lib/password';
 import { prisma } from '../lib/prisma';

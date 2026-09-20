@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace Walaa.Agent.Capture;
 
 /// <summary>
-/// Bridges a virtual COM port to the real one (CLAUDE_v3.md §4.2).
+/// Bridges a virtual COM port to the real one (docs/legacy/CLAUDE_v3.md §4.2).
 /// </summary>
 /// <remarks>
 /// <para>

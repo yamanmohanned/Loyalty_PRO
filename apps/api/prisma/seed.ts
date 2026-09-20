@@ -22,7 +22,7 @@ import {
   validateRulesAgainstSettings,
   type DiscountRuleInput,
   type FeatureFlagKey,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { loadEnv } from '../src/config/env';
 import { createCustomer } from '../src/services/customer.service';
 import { ingestInvoice } from '../src/services/ingestion.service';
@@ -66,12 +66,12 @@ const env = loadEnv();
  *      into a live shop with no error at all.
  *
  * The check is `NODE_ENV`, which the installer writes as `production` into every
- * `walaa.env` it generates. `WALAA_ALLOW_PRODUCTION_SEED=1` overrides it for the one
+ * `loyalty-pro.env` it generates. `LOYALTY_ALLOW_PRODUCTION_SEED=1` overrides it for the one
  * legitimate case: rebuilding a demo dataset from a production-shaped environment.
  */
 function refuseInProduction(): void {
   const production = process.env.NODE_ENV === 'production';
-  const overridden = process.env.WALAA_ALLOW_PRODUCTION_SEED === '1';
+  const overridden = process.env.LOYALTY_ALLOW_PRODUCTION_SEED === '1';
   if (!production || overridden) return;
 
   console.error(
@@ -84,7 +84,7 @@ function refuseInProduction(): void {
       '  `bootstrap.service.ts` and the first-run screen.',
       '',
       '  If you genuinely mean to seed a production-shaped database (rebuilding a',
-      '  demo dataset, for instance), set WALAA_ALLOW_PRODUCTION_SEED=1.',
+      '  demo dataset, for instance), set LOYALTY_ALLOW_PRODUCTION_SEED=1.',
       '',
     ].join('\n'),
   );

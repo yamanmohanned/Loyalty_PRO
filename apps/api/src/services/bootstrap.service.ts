@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { OwnerPasswordSchema } from '@walaa/shared-types';
+import { OwnerPasswordSchema } from '@loyalty-pro/shared-types';
 import { AppError, validationFailed } from '../lib/errors';
 import { hashPassword } from '../lib/password';
 import { prisma } from '../lib/prisma';

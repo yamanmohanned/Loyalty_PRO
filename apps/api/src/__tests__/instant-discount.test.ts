@@ -52,7 +52,7 @@ const capture = (invoiceId: string, amountGross: number) =>
 const scan = (invoiceId?: string) =>
   scanCard(station, { barcodeToken: world.customerBarcode, ...(invoiceId ? { invoiceId } : {}) });
 
-describe('ingestion (CLAUDE_v3.md §4.8)', () => {
+describe('ingestion (docs/legacy/CLAUDE_v3.md §4.8)', () => {
   it('records a captured invoice with no customer attached', async () => {
     const result = await capture('INV-1', 30_000);
 

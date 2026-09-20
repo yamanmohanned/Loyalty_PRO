@@ -40,20 +40,20 @@ Contents
 |---|---|---|
 | **Provider** | Generates the key pair once; issues a first licence, renews it (more days, or perpetual); reads emergency codes over the phone | `tools/license-issuer` — never shipped |
 | **Merchant** | Reads the device number out; pastes a licence code or types an emergency code | «الإعدادات ← الترخيص» in the manager dashboard |
-| **Service** | Computes the device ID, verifies codes, decides the status, refuses what read-only refuses | `crates/walaa-license` (Rust), loaded by the API |
+| **Service** | Computes the device ID, verifies codes, decides the status, refuses what read-only refuses | `crates/loyalty-pro-license` (Rust), loaded by the API |
 
 ## 2. How it is built
 
 ```
-crates/walaa-license        the rules, in Rust: device ID, code format, Ed25519
+crates/loyalty-pro-license        the rules, in Rust: device ID, code format, Ed25519
                             verification, emergency-code chain, status evaluation,
                             clock anchors. The provider's PUBLIC key and the public
                             tip of the emergency-code chain are constants in
                             src/public_key.rs — compiled in, not configuration.
 packages/license-native     that crate as a Node native module (napi-rs), loaded by
                             the API. Two builds:
-                              walaa-license.node       — ships; trusts the provider key
-                              walaa-license.test.node  — tests only; trusts the
+                              loyalty-pro-license.node       — ships; trusts the provider key
+                              loyalty-pro-license.test.node  — tests only; trusts the
                                                          published test key and can sign.
                                                          Never staged, never shipped.
 apps/api/src/services/license.service.ts
@@ -147,22 +147,22 @@ live elsewhere. Full reference and real output: [`tools/license-issuer/README.md
 
 ```powershell
 # 0 · Prove the key and its password open (issues nothing, writes nothing)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" check
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" check
 
 # 1 · A device's FIRST licence — a 14-day trial (a paid shop: --perpetual instead of --days 14)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" issue --device WL-XXXX-XXXX --days 14 --note "shop name"
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" issue --device WL-XXXX-XXXX --days 14 --note "shop name"
 
 # 2 · RENEW a device that already has a licence — 30 more days
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --days 30
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --days 30
 
 # 3 · RENEW as perpetual — the one-time payment was received
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --perpetual
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --perpetual
 
 # 4 · An emergency code, read over the phone (1-30 days)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-XXXX-XXXX --days 7
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" unlock --device WL-XXXX-XXXX --days 7
 
 # 5 · Everything issued to a device (no password)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" list --device WL-XXXX-XXXX
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" list --device WL-XXXX-XXXX
 ```
 
 **The password, in any shell.** Every way in — the prompt, `--password-file`, `--password-stdin`
@@ -175,8 +175,8 @@ sends a pipe as ASCII**, so any non-English character piped in arrives as `?` �
 `--password-file` or the prompt, never `… | &`. Without `PASSWORD.txt`, drop `--password-file`
 and type the password when asked.
 
-**Where the key is found.** `--home`, else `$WALAA_ISSUER_HOME`, else whichever of
-`%USERPROFILE%\.walaa-issuer` and `%APPDATA%\walaa-license-issuer` holds `issuer-key.json`. A
+**Where the key is found.** `--home`, else `$LOYALTY_ISSUER_HOME`, else whichever of
+`%USERPROFILE%\.loyalty-pro-issuer` and `%APPDATA%\loyalty-pro-license-issuer` holds `issuer-key.json`. A
 missing key names both folders it looked in.
 
 **First licence and renewal are two commands, on purpose.** `issue` refuses a device that already
@@ -268,7 +268,7 @@ Anyone who hears a code can take the shop's mixing off (it is a public function)
 the link forward. **Forward is earlier:** the link for end day `d` hashes to the link for
 `d − 1`. So every code computable from a heard one **stops working on or before the day
 the heard one does**, and the next day's code is a preimage of today's — work only the
-key's holder avoids. The tests in `crates/walaa-license/src/unlock.rs`:
+key's holder avoids. The tests in `crates/loyalty-pro-license/src/unlock.rs`:
 
 | Test | What it shows |
 |---|---|
@@ -471,8 +471,8 @@ read together, the latest winning:
 | Where | What |
 |---|---|
 | The database | `installation_state.last_seen_at` |
-| The registry | `HKCU\Software\Walaa\LastSeenAt`. The service runs as LocalSystem, so this is `HKEY_USERS\S-1-5-18\Software\Walaa`. |
-| A hidden file | `.license-clock` in the data folder (`C:\ProgramData\Walaa`) |
+| The registry | `HKCU\Software\LoyaltyPro\LastSeenAt`. The service runs as LocalSystem, so this is `HKEY_USERS\S-1-5-18\Software\LoyaltyPro`. |
+| A hidden file | `.license-clock` in the data folder (`C:\ProgramData\LoyaltyPro`) |
 
 A clock more than 2 hours behind it makes a trial `TAMPERED` until corrected — then it
 clears by itself. **Every such event is recorded permanently**, and so is its end:
@@ -520,7 +520,7 @@ is derived from the same private key. See the
 
 ## 15. The development key, and the installer gate
 
-Until the provider runs `keygen`, `crates/walaa-license/src/public_key.rs` holds a
+Until the provider runs `keygen`, `crates/loyalty-pro-license/src/public_key.rs` holds a
 **development** key (fingerprint `49C862E0D57E50B7`) whose private half and password are
 committed in `tools/license-issuer/dev-key/`. It lets the tests and `pnpm package:verify`
 exercise activation and emergency codes end to end — and must never reach a shop:
@@ -530,7 +530,7 @@ exercise activation and emergency codes end to end — and must never reach a sh
 - `stage.mjs` copies the module by allowlist and fails if the test build reaches the
   staged runtime.
 
-`pnpm package:verify` uses `WALAA_VERIFY_LICENSE_CODE` / `WALAA_VERIFY_UNLOCK_CODE` if set
+`pnpm package:verify` uses `LOYALTY_VERIFY_LICENSE_CODE` / `LOYALTY_VERIFY_UNLOCK_CODE` if set
 (required once the production key is embedded — issued for the build machine), otherwise
 the development issuer.
 
@@ -546,9 +546,9 @@ an emergency code if the message cannot arrive in time.
 
 | Where | Run | Covers |
 |---|---|---|
-| `crates/walaa-license` | `cargo test --manifest-path crates\walaa-license\Cargo.toml` (from the repository root) | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened; the chain's direction — nothing derivable from a heard code outlives it, tomorrow's is not computable from today's; capacity and the chain's end |
+| `crates/loyalty-pro-license` | `cargo test --manifest-path crates\loyalty-pro-license\Cargo.toml` (from the repository root) | signatures, devices, versions, pasting; every status and warning grade; grace; clock rollback and recovery; conflicting anchors; emergency codes — round trip, every single misheard symbol caught, another shop's code refused, another key's refused, expired, a wound-back clock not reviving one, grace after the window, never hiding a better licence; queued sales judged by when they happened; the chain's direction — nothing derivable from a heard code outlives it, tomorrow's is not computable from today's; capacity and the chain's end |
 | `tools/license-issuer` | `cargo test --manifest-path tools\license-issuer\Cargo.toml` | key sealing; the password normaliser — every shape a shell delivers (BOM, UTF-16, CRLF, spaces, direction marks), a key sealed behind a BOM; first licence vs renewal — renewing a running and an ended trial, perpetual, each command refusing the other's case; the log; **the built program** driven with the password by file and by pipe |
-| `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @walaa/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore; a used phone code after a reinstall, a restore and a move; the fallback attacked — clock wound back, an older database, a long trial, a missing end; held sales counted and credited in full |
+| `apps/api` — `license.test.ts`, `license-resilience.test.ts` | `pnpm --filter @loyalty-pro/api test` | through HTTP with the real Rust verifier: every refusal; read-only's three refusals and everything it keeps open; emergency codes over a destroyed licence, a corrupted one and a clock problem; grace after them; a failing check with a licensed shop, an unlicensed copy and a running trial; queued sales synced after the licence lapsed, made while unlicensed, older than 30 days, dated in the future; clock events with their causes, their end, surviving a restore; a used phone code after a reinstall, a restore and a move; the fallback attacked — clock wound back, an older database, a long trial, a missing end; held sales counted and credited in full |
 | `packaging` | `pnpm package:verify` | a clean production-mode install: unlicensed → refused in Arabic → activated → trades; then **the recovery drill**: licence destroyed (rows deleted, mirror overwritten) → read-only → emergency code typed as heard → trades with no restart → licensing module deleted → service starts and still trades |
 
 ## 18. What this does not protect against
@@ -556,7 +556,7 @@ an emergency code if the message cannot arrive in time.
 Stated plainly, so nobody overestimates it — the bar is deterrence against casual copying:
 
 - **The gate runs in the API's JavaScript bundle.** An administrator who edits
-  `walaa-api.cjs` bypasses licensing.
+  `loyalty-pro-api.cjs` bypasses licensing.
 - **The fallback trusts database columns.** Someone who deletes the licensing module *and*
   edits `last_status` to `PERPETUAL` gets a working shop; a time-limited status buys at
   most the week `last_status_at` allows, which is a column too. The fallback does not

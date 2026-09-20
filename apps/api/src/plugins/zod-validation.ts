@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifySchemaCompiler } from 'fastify';
 import { ZodError, type ZodTypeAny } from 'zod';
-import { summarizeFieldErrors } from '@walaa/shared-types';
+import { summarizeFieldErrors } from '@loyalty-pro/shared-types';
 import { AppError } from '../lib/errors';
 
 /**
@@ -13,7 +13,7 @@ import { AppError } from '../lib/errors';
  * instead of Fastify's AJV-shaped one.
  *
  * Unknown-field rejection comes from the schemas themselves: every request schema in
- * `@walaa/shared-types` is `.strict()`, so an unexpected field is a 400 rather than a
+ * `@loyalty-pro/shared-types` is `.strict()`, so an unexpected field is a 400 rather than a
  * value silently dropped on the floor.
  *
  * ── The envelope names the field, and that is a fix ──────────────────────────

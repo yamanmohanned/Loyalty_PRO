@@ -4,7 +4,7 @@ import { registerErrorHandler } from '../plugins/error-handler';
 import { isStorageFailure, storageFailureCause } from '../lib/prisma';
 
 /**
- * A datastore that cannot store must not answer like a bug (CLAUDE_v3.md §12.15,
+ * A datastore that cannot store must not answer like a bug (docs/legacy/CLAUDE_v3.md §12.15,
  * §12.16).
  *
  * The failure this guards against is a deceptive one. SQLite fails writes cleanly

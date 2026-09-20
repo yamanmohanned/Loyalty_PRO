@@ -9,10 +9,10 @@ import { verifyPassword } from './password';
  *
  * ── The defect this exists to close ──────────────────────────────────────────
  *
- * The demo build shipped its shop as `walaa-demo.db` and the service configured the
- * API to open `walaa.db`. Two different names for what everyone assumed was one file.
+ * The demo build shipped its shop as `loyalty-pro-demo.db` and the service configured the
+ * API to open `loyalty-pro.db`. Two different names for what everyone assumed was one file.
  * `install_demo_seed_if_absent` then skipped — correctly, by its own rule — because a
- * `walaa.db` already existed on the machine from an earlier install, and the demo ran
+ * `loyalty-pro.db` already existed on the machine from an earlier install, and the demo ran
  * against a database it had never placed and knew nothing about. On the machine where
  * this was found that file happened to be empty, so the visible symptom was six
  * unexpected migrations rather than a merchant's real customer list being opened by a
@@ -31,13 +31,13 @@ import { verifyPassword } from './password';
  *
  * Two independent conditions, because either alone is defeatable:
  *
- *   1. **The name.** A demo build opens `walaa-demo.db` and nothing else; a production
+ *   1. **The name.** A demo build opens `loyalty-pro-demo.db` and nothing else; a production
  *      build opens a file with no `demo` in its name and nothing else. The two builds
  *      can now sit on one machine without being able to reach each other's data, and
  *      `assertDemoDatabase()` — which gates the destructive reset on the same
  *      substring — finally passes in a shipped demo, where it previously could not.
  *   2. **The provenance marker.** A row written into the file by the seed builder. A
- *      hand-made or Prisma-created `walaa-demo.db` has the right name and no marker,
+ *      hand-made or Prisma-created `loyalty-pro-demo.db` has the right name and no marker,
  *      so "the installer placed this" is a claim the file itself has to support.
  *
  * The error names the exact file it looked at, because the whole failure above came
@@ -45,7 +45,7 @@ import { verifyPassword } from './password';
  */
 
 /** The only database basename a demo build will ever open. */
-export const DEMO_DATABASE_BASENAME = 'walaa-demo.db';
+export const DEMO_DATABASE_BASENAME = 'loyalty-pro-demo.db';
 
 /**
  * Whether this process is a demo build.
@@ -55,7 +55,7 @@ export const DEMO_DATABASE_BASENAME = 'walaa-demo.db';
  * because the guard runs before the app is built, and importing the seed generator into
  * the boot path to read one environment variable would be a poor trade.
  */
-export const isDemoBuild = (): boolean => process.env.WALAA_DEMO === '1';
+export const isDemoBuild = (): boolean => process.env.LOYALTY_DEMO === '1';
 
 /** Table carrying the seed builder's signature. Created by `seed-demo.ts`. */
 const PROVENANCE_TABLE = 'demo_provenance';
@@ -137,7 +137,7 @@ export async function assertDatabaseMatchesBuild(
       /*
         «صحّح مسار قاعدة البيانات في ملف الإعدادات» asked a merchant to edit a file
         locked to SYSTEM, and printed the path. A reinstall genuinely fixes this one:
-        `walaa-service.exe install` finds the existing `walaa.env` and
+        `loyalty-pro-service.exe install` finds the existing `loyalty-pro.env` and
         `repair_database_url` points it at the database this build opens, without
         touching the secrets or the data. The path goes to the log.
       */

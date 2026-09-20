@@ -2,7 +2,7 @@
 //!
 //! ── Two launchers, one supervisor ────────────────────────────────────────────
 //!
-//! A production install registers `walaa-service.exe` with the Service Control
+//! A production install registers `loyalty-pro-service.exe` with the Service Control
 //! Manager, because the Loyalty Station and the Print Capture Agent need the API alive
 //! for every trading hour whether or not the dashboard window is open. A demo install
 //! cannot do that: it is per-user, it must not ask for UAC, and an unelevated process
@@ -11,14 +11,14 @@
 //! The temptation is to give the demo its own small supervisor. That would be a
 //! mistake — a demo whose backend is babysat by different code from the merchant's
 //! proves nothing about the merchant's install, which is the only reason to ship a
-//! demo at all. So both paths call the SAME `supervise()` inside `walaa-service.exe`;
+//! demo at all. So both paths call the SAME `supervise()` inside `loyalty-pro-service.exe`;
 //! the fork is one level up, in who starts it:
 //!
-//!   production  SCM ──────────────► walaa-service.exe run     ─┐
+//!   production  SCM ──────────────► loyalty-pro-service.exe run     ─┐
 //!                                                              ├─► supervise()
-//!   demo        this process ─────► walaa-service.exe console ─┘
+//!   demo        this process ─────► loyalty-pro-service.exe console ─┘
 //!
-//! `console` provisions its own `walaa.env` and honours `--port`, so the demo gets the
+//! `console` provisions its own `loyalty-pro.env` and honours `--port`, so the demo gets the
 //! same bounded retry, the same status file, the same log rotation and the same
 //! stdin-close shutdown as production.
 //!
@@ -50,10 +50,10 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Its presence is the demo signal here for the same reason it is in the service host:
 /// there is no separate flag that can fall out of step with whether the demo data
 /// actually exists. A production bundle has no such file to find.
-const DEMO_SEED: &str = "walaa-demo.db";
+const DEMO_SEED: &str = "loyalty-pro-demo.db";
 
 /// The supervisor we launch in a demo build, and the shipped runtime it lives in.
-const SERVICE_EXE: &str = "walaa-service.exe";
+const SERVICE_EXE: &str = "loyalty-pro-service.exe";
 const RUNTIME_DIR: &str = "runtime";
 
 /// The demo's backend child, so it can be stopped when the window closes.
@@ -95,7 +95,7 @@ pub fn data_dir(demo: bool) -> PathBuf {
     // only way to point an installed copy at a different directory without editing the
     // binary. Support uses it to reproduce a merchant's state; the tests here use it to
     // exercise a first run without disturbing the real one.
-    if let Some(dir) = std::env::var_os("WALAA_DATA_DIR") {
+    if let Some(dir) = std::env::var_os("LOYALTY_DATA_DIR") {
         let dir = PathBuf::from(dir);
         if !dir.as_os_str().is_empty() {
             return dir;
@@ -106,7 +106,7 @@ pub fn data_dir(demo: bool) -> PathBuf {
     let base = std::env::var_os(key)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(if demo { "C:\\" } else { "C:\\ProgramData" }));
-    base.join("Walaa")
+    base.join("LoyaltyPro")
 }
 
 /// Asks the OS for a port nobody is using, then gives it straight back.
@@ -116,7 +116,7 @@ pub fn data_dir(demo: bool) -> PathBuf {
 /// The window is milliseconds on a machine where the only other listener is whatever
 /// the merchant already had; and if it is lost, the API fails to bind, the supervisor
 /// records the reason, and the next launch picks a different number. That is a
-/// recoverable, explained failure rather than the alternative — a hardcoded 4000 that
+/// recoverable, explained failure rather than the alternative — a hardcoded 4100 that
 /// collides with something else on the shop's PC and produces a dead app forever.
 pub fn free_port() -> Option<u16> {
     TcpListener::bind("127.0.0.1:0")

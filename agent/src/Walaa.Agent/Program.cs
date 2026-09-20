@@ -6,7 +6,7 @@ using Walaa.Agent;
 using Walaa.Agent.Delivery;
 
 /// <summary>
-/// The Print Capture Agent's entry point (CLAUDE_v3.md §4).
+/// The Print Capture Agent's entry point (docs/legacy/CLAUDE_v3.md §4).
 ///
 /// A Windows Service on the cashier PC. It starts with the machine, and the SCM's own
 /// failure actions are the watchdog §4.6 rule 4 requires — for an in-path mode, the
@@ -14,10 +14,10 @@ using Walaa.Agent.Delivery;
 /// the restart is configured to be immediate.
 /// </summary>
 
-var settingsPath = Environment.GetEnvironmentVariable("WALAA_AGENT_SETTINGS")
+var settingsPath = Environment.GetEnvironmentVariable("LOYALTY_AGENT_SETTINGS")
     ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "Walaa",
+        "LoyaltyPro",
         "agent",
         "agent-settings.json");
 

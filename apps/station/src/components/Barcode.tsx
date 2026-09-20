@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { code128Bars, encodeCode128C, formatCardNumber } from '@walaa/shared-types';
+import { code128Bars, encodeCode128C, formatCardNumber } from '@loyalty-pro/shared-types';
 
 /**
  * The card's Code 128C barcode, as SVG.

@@ -8,7 +8,7 @@
   "codepage": "auto",
 
   // ─────────────────────────────────────────────────────────────────────────────
-  //  THIS FILE IS THE POINT OF THE AGENT (CLAUDE_v3.md §4.5).
+  //  THIS FILE IS THE POINT OF THE AGENT (docs/legacy/CLAUDE_v3.md §4.5).
   //
   //  Nothing about any particular POS is compiled into the binary. Supporting a new
   //  merchant is a new copy of this file, produced by the calibration flow (§4.7) —

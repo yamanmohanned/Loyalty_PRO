@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, KeyRound, LogOut, Printer, ShieldCheck } from 'lucide-react';
 import { api, ApiRequestError } from '../lib/api';
-import type { KeyStatus } from '@walaa/shared-types';
+import type { KeyStatus } from '@loyalty-pro/shared-types';
 import { locale, formatDate, formatDateTime } from '../lib/locale';
 import { Button, Card, ErrorState, Field, Input, Notice } from '../components/ui';
 import { failureSentence } from '../lib/failure';
 
 /**
- * The backup key ceremony (CLAUDE_v3.md §7.3, §12.19).
+ * The backup key ceremony (docs/legacy/CLAUDE_v3.md §7.3, §12.19).
  *
  * ## Why this is a wall and not a card on a settings page
  *

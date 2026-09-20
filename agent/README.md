@@ -2,7 +2,7 @@
 
 A Windows Service on the cashier PC. It sits wherever Al-Bayan prints, copies each
 receipt, reads the invoice number and total off it, and sends them to the Manager
-machine (CLAUDE_v3.md §4).
+machine (docs/legacy/CLAUDE_v3.md §4).
 
 **It copies. It never blocks, alters, or delays a receipt.**
 
@@ -76,7 +76,7 @@ it, or map `LPT1:` to the shared printer with `net use`.
 
    ```json
    {
-     "managerUrl": "http://192.168.0.106:4000",
+     "managerUrl": "http://192.168.0.106:4100",
      "username": "agent", "password": "…",
      "branchCode": "BAG-01",
      "agentId": "till-1",

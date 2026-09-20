@@ -1,4 +1,4 @@
-import type { DiscountSlip } from '@walaa/shared-types';
+import type { DiscountSlip } from '@loyalty-pro/shared-types';
 import { PrintableSlip } from './Printable';
 import { locale } from '../lib/locale';
 

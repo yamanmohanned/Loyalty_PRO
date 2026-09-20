@@ -27,7 +27,7 @@ import { createWorld, type World } from './helpers/fixtures';
 import { startFakeGoogle, type FakeGoogle } from './helpers/fake-google';
 
 /**
- * Setting Google Drive up from Settings (CLAUDE_v3.md §7.3, §7.6).
+ * Setting Google Drive up from Settings (docs/legacy/CLAUDE_v3.md §7.3, §7.6).
  *
  * The owner types the OAuth client in; it must be stored encrypted and never appear in
  * a config file, a log line, an audit row or a response. «اختبار الاتصال» must prove the
@@ -121,7 +121,7 @@ describe('the OAuth client, typed into Settings', () => {
   });
 
   it('ignores a client in the environment on a production machine', () => {
-    // A secret in walaa.env is a secret in a plain config file (§7.6).
+    // A secret in loyalty-pro.env is a secret in a plain config file (§7.6).
     expect(
       driveClient({ NODE_ENV: 'production', GOOGLE_DRIVE_CLIENT_ID: CLIENT_ID, GOOGLE_DRIVE_CLIENT_SECRET: 'x-secret-x' }),
     ).toBeNull();

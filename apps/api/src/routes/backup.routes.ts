@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES } from '@walaa/shared-types';
+import { DASHBOARD_ROLES } from '@loyalty-pro/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import {
   assertBackupsEnabled,
@@ -29,7 +29,7 @@ import { prisma } from '../lib/prisma';
 import { scheduleStatus } from '../services/backup/schedule.service';
 
 /**
- * Backup, and the key ceremony that gates it (CLAUDE_v3.md §7.3, §12.19).
+ * Backup, and the key ceremony that gates it (docs/legacy/CLAUDE_v3.md §7.3, §12.19).
  *
  * ## Roles
  *

@@ -31,7 +31,7 @@ import { SERIES, TOOLTIP_STYLE, VIZ } from '../lib/viz';
 /** Thousand-separated, the way money is (§12.33: an ungrouped count beside a grouped
  *  sum is the pair that made 4200000 unreadable next to 987,654,321). */
 const group = (value: number): string => new Intl.NumberFormat('en-US').format(value);
-import type { OverviewResponse } from '@walaa/shared-types';
+import type { OverviewResponse } from '@loyalty-pro/shared-types';
 import { locale, formatDate, formatTime } from '../lib/locale';
 import { RangePicker, type ReportRange } from '../components/RangePicker';
 import {

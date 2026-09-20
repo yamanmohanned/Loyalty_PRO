@@ -2,7 +2,7 @@
 
 use rusqlite::{params, Connection};
 use std::path::Path;
-use walaa_license::Payload;
+use loyalty_pro_license::Payload;
 
 pub struct Entry {
     pub license_id: String,
@@ -62,7 +62,7 @@ pub struct UnlockEntry {
 pub fn record_unlock(
     connection: &Connection,
     device: &str,
-    issued: &walaa_license::unlock::Issued,
+    issued: &loyalty_pro_license::unlock::Issued,
     issued_at: i64,
     note: Option<&str>,
     fingerprint: &str,
@@ -135,7 +135,7 @@ pub fn list(connection: &Connection, device: Option<&str>) -> rusqlite::Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use walaa_license::LicenseKind;
+    use loyalty_pro_license::LicenseKind;
 
     fn payload(lid: &str, exp: Option<i64>) -> Payload {
         Payload {
@@ -172,7 +172,7 @@ mod tests {
     fn records_and_lists_emergency_codes() {
         let connection = Connection::open_in_memory().unwrap();
         migrate(&connection).unwrap();
-        let issued = walaa_license::unlock::Issued { code: "ABCDE-FGHJK-MNPQR".into(), day: 5, valid_until: 9_000 };
+        let issued = loyalty_pro_license::unlock::Issued { code: "ABCDE-FGHJK-MNPQR".into(), day: 5, valid_until: 9_000 };
         record_unlock(&connection, "WL-2345-6789", &issued, 1_000, Some("drive died"), "FP").unwrap();
         let listed = list_unlocks(&connection, Some("WL-2345-6789")).unwrap();
         assert_eq!(listed.len(), 1);

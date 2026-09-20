@@ -1,4 +1,4 @@
-import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@walaa/shared-types';
+import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@loyalty-pro/shared-types';
 import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
@@ -8,7 +8,7 @@ import {
 } from './strategy';
 
 /**
- * **Merchant-defined settlement** — the default (CLAUDE_v3.md §9, closed).
+ * **Merchant-defined settlement** — the default (docs/legacy/CLAUDE_v3.md §9, closed).
  *
  * The merchant has his own accounting method for discounts and payment handling, and
  * ruled that the system must not prescribe one. So this strategy prints the three

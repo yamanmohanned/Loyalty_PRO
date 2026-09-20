@@ -12,7 +12,7 @@
     "tests_shared_types": 28,
     "packages_typecheck_clean": 4,
     "packages_typecheck_total": 5,
-    "packages_failing": ["@walaa/dashboard"],
+    "packages_failing": ["@loyalty-pro/dashboard"],
     "lint_clean": true,
     "git_commits": 9,
     "uncommitted_files": 14

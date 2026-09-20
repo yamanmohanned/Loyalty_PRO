@@ -4,7 +4,7 @@ import { CurrencySchema, PositiveIqdAmountSchema } from './money';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  THE CAPTURED INVOICE CONTRACT — CLAUDE_v3.md §4
+ *  THE CAPTURED INVOICE CONTRACT — docs/legacy/CLAUDE_v3.md §4
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Successor to v1's Normalized Invoice Schema. The Integration Gateway concept

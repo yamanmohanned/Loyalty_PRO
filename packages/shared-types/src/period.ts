@@ -8,7 +8,7 @@
  * earned by cumulative spend inside a fixed calendar window, and every transaction
  * carried the key of the window it counted toward.
  *
- * v4 decides the discount from the invoice amount alone (CLAUDE_UPDATE_4.md §1.1), so
+ * v4 decides the discount from the invoice amount alone (docs/legacy/CLAUDE_UPDATE_4.md §1.1), so
  * there is no window for spend to accumulate over. All of that is **deleted, not
  * deprecated** (§10.6): reporting windows come from `ReportRange`, and a per-customer
  * figure is now a lifetime total that no calendar bounds.

@@ -230,5 +230,5 @@ template edit; if not, it is one more parser and no other change (§13.6).
 
 Capture working here says nothing about the **Loyalty Station** on its tablet, the card
 scanner, or the discount reaching a customer. Those are separate checklist items
-(`PRE-INTEGRATION-CHECKLIST.md` §A). Do not let a good capture day turn into an
+(`docs/legacy/PRE-INTEGRATION-CHECKLIST.md` §A). Do not let a good capture day turn into an
 unplanned end-to-end attempt in a shop that is about to open.

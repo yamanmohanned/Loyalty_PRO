@@ -37,20 +37,20 @@ import {
  *
  * ── What this writes ─────────────────────────────────────────────────────────
  *
- *   prisma/walaa-template.db    the migrated, empty, identity-stamped database
- *   prisma/walaa-template.json  its sha256, its fingerprints, its migration list
+ *   prisma/loyalty-pro-template.db    the migrated, empty, identity-stamped database
+ *   prisma/loyalty-pro-template.json  its sha256, its fingerprints, its migration list
  *   src/config/schema-fingerprint.ts   the two constants compiled into the binary
  *
  * The JSON is content-addressed on purpose, following `demo-credentials.json`: a
  * timestamp cannot say WHICH bytes were verified, and `stage.mjs` refuses to ship a
  * template whose hash does not match the record.
  *
- *   pnpm --filter @walaa/api db:template
+ *   pnpm --filter @loyalty-pro/api db:template
  */
 
 const API_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TEMPLATE_PATH = join(API_ROOT, 'prisma', DB_TEMPLATE_FILENAME);
-const RECORD_PATH = join(API_ROOT, 'prisma', 'walaa-template.json');
+const RECORD_PATH = join(API_ROOT, 'prisma', 'loyalty-pro-template.json');
 const CONSTANTS_PATH = join(API_ROOT, 'src', 'config', 'schema-fingerprint.ts');
 
 const say = (message: string): void => {
@@ -288,8 +288,8 @@ async function checkTemplate(): Promise<void> {
         'make every production install refuse to start with a schema error that points at',
         "the merchant's database instead of at this build.",
         '',
-        '  Fix:  pnpm --filter @walaa/api db:template',
-        '        git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json',
+        '  Fix:  pnpm --filter @loyalty-pro/api db:template',
+        '        git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/loyalty-pro-template.json',
         '',
       ].join('\n'),
     );

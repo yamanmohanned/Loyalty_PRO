@@ -54,7 +54,7 @@ public sealed record CapturedInvoice
 }
 
 /// <summary>
-/// The agent's local queue of captures awaiting delivery (CLAUDE_v3.md §4, §7.2).
+/// The agent's local queue of captures awaiting delivery (docs/legacy/CLAUDE_v3.md §4, §7.2).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -88,7 +88,7 @@ public sealed class CaptureQueue(string directory, ILogger<CaptureQueue> logger)
     /// <remarks>
     /// <para>
     /// <b>This method does not throw on an I/O failure, and that is a correctness
-    /// requirement rather than a convenience</b> (CLAUDE_v3.md §4.6 rule 3, §12.15).
+    /// requirement rather than a convenience</b> (docs/legacy/CLAUDE_v3.md §4.6 rule 3, §12.15).
     /// Two callers, two different disasters, both reproduced in
     /// <c>StorageFailureTests</c> against the unguarded version:
     /// </para>

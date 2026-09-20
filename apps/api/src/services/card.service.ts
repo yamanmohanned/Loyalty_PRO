@@ -16,7 +16,7 @@ import {
   type Card as CardDto,
   type GenerateCardBatchRequest,
   type ScannedCard,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { loadEnv } from '../config/env';
 import { generateBarcodeToken } from '../lib/barcode-token';
 import {

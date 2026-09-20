@@ -6,7 +6,7 @@ namespace Walaa.Agent.Capture;
 
 /// <summary>
 /// Sits between the POS and a network-attached printer on port 9100
-/// (CLAUDE_v3.md §4.2).
+/// (docs/legacy/CLAUDE_v3.md §4.2).
 /// </summary>
 /// <remarks>
 /// <para>

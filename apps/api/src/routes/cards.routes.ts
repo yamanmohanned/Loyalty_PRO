@@ -11,7 +11,7 @@ import {
   VoidCardBatchRequestSchema,
   VoidCardRequestSchema,
   type ExportCardBatchRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import {
   exportCardBatch,

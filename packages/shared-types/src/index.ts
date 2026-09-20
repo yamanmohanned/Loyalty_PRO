@@ -1,5 +1,5 @@
 /**
- * @walaa/shared-types — the single definition of every cross-app contract (v3).
+ * @loyalty-pro/shared-types — the single definition of every cross-app contract (v3).
  *
  * Imported by the API service, the Manager Desktop app, the Loyalty Station, and
  * (over HTTP) the Print Capture Agent. Nothing in here may be duplicated into an app.

@@ -4,7 +4,7 @@ namespace Walaa.Agent.Capture;
 
 /// <summary>
 /// The default sink: buffers captured bytes in memory and hands complete print jobs to
-/// a consumer running on its own thread (CLAUDE_v3.md §4.6 rule 2).
+/// a consumer running on its own thread (docs/legacy/CLAUDE_v3.md §4.6 rule 2).
 /// </summary>
 /// <remarks>
 /// <para>

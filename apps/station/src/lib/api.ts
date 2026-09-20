@@ -1,4 +1,4 @@
-import type { ApiError, AuthUser } from '@walaa/shared-types';
+import type { ApiError, AuthUser } from '@loyalty-pro/shared-types';
 import { getStoredApiUrl } from './config';
 
 /**
@@ -15,7 +15,7 @@ import { getStoredApiUrl } from './config';
  * appliance is actually used: opened at the start of the day, closed at the end.
  */
 
-const REFRESH_KEY = 'walaa.station.refresh';
+const REFRESH_KEY = 'loyalty.station.refresh';
 
 let accessToken: string | null = null;
 let onUnauthenticated: (() => void) | null = null;
@@ -61,7 +61,7 @@ export class ApiRequestError extends Error {
   }
 
   /**
-   * True when a write reached the server and was not stored (CLAUDE_v3.md §12.16).
+   * True when a write reached the server and was not stored (docs/legacy/CLAUDE_v3.md §12.16).
    *
    * The offline queue must NOT swallow these. A network failure is benign — the
    * operation is queued and settles later. This is the opposite: the server answered

@@ -63,7 +63,7 @@
 }
 
 /**
- * Thermal printing (CLAUDE_v3.md §6.3, width selectable per CLAUDE_UPDATE_4.md §5).
+ * Thermal printing (docs/legacy/CLAUDE_v3.md §6.3, width selectable per docs/legacy/CLAUDE_UPDATE_4.md §5).
  *
  * The station has its own small thermal printer, separate from the cashier's. The
  * browser's print pipeline drives it, so what matters here is that the printed page is

@@ -1,5 +1,5 @@
 //! The latest time this installation has observed, kept in three places — a database
-//! table, `HKCU\Software\Walaa`, and a hidden file in the data folder — so that setting
+//! table, `HKCU\Software\LoyaltyPro`, and a hidden file in the data folder — so that setting
 //! the clock back is noticed even if one of them is deleted.
 //!
 //! This module resolves the three readings and keeps the file. The database is the

@@ -15,7 +15,7 @@ use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use walaa_license::{key_fingerprint, KeyKind};
+use loyalty_pro_license::{key_fingerprint, KeyKind};
 use zeroize::Zeroize;
 
 pub const FORMAT: &str = "walaa-issuer-key-v1";
@@ -49,13 +49,13 @@ pub struct UnlockParams {
 }
 
 impl UnlockParams {
-    pub fn from_chain(chain: &walaa_license::unlock::Chain) -> Self {
+    pub fn from_chain(chain: &loyalty_pro_license::unlock::Chain) -> Self {
         UnlockParams { epoch_day: chain.epoch_day, length: chain.length, tip: format!("{:016x}", chain.tip) }
     }
 
-    pub fn chain(&self) -> Result<walaa_license::unlock::Chain, String> {
+    pub fn chain(&self) -> Result<loyalty_pro_license::unlock::Chain, String> {
         let tip = u64::from_str_radix(&self.tip, 16).map_err(|_| "damaged key file (unlock tip)".to_string())?;
-        Ok(walaa_license::unlock::Chain { epoch_day: self.epoch_day, length: self.length, tip })
+        Ok(loyalty_pro_license::unlock::Chain { epoch_day: self.epoch_day, length: self.length, tip })
     }
 }
 

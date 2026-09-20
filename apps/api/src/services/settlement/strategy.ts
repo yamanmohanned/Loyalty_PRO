@@ -1,8 +1,8 @@
-import type { SettlementStrategy as SettlementStrategyName } from '@walaa/shared-types';
+import type { SettlementStrategy as SettlementStrategyName } from '@loyalty-pro/shared-types';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  DISCOUNT SETTLEMENT — CLAUDE_v3.md §9 (CLOSED, 2026-09-01)
+ *  DISCOUNT SETTLEMENT — docs/legacy/CLAUDE_v3.md §9 (CLOSED, 2026-09-01)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * The problem this interface exists for:

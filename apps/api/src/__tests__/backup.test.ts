@@ -30,7 +30,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, type World } from './helpers/fixtures';
 
 /**
- * Backup, and the property that makes one worth having (CLAUDE_v3.md §7.3, §12.17).
+ * Backup, and the property that makes one worth having (docs/legacy/CLAUDE_v3.md §7.3, §12.17).
  *
  * §7.3: "an untested backup is not a backup — this is the most commonly skipped step and
  * the most costly." The suite is arranged around the one assertion that makes a restore
@@ -98,7 +98,7 @@ describe('the on-machine backup directory', () => {
     // reports (§12.22), and a developer trained to scroll past it misses the real one.
     const directory = withoutOverride(() => localBackupDirectory());
 
-    expect(directory).toContain('.walaa-dev');
+    expect(directory).toContain('.loyalty-pro-dev');
     expect(directory.toLowerCase()).not.toContain('programdata');
   });
 
@@ -229,7 +229,7 @@ describe('taking a snapshot', () => {
     const path = liveDatabasePath(loadEnv().DATABASE_URL);
     expect(path).toBeTruthy();
     // Per-run name (see vitest.config.ts), so this matches the family, not one file.
-    expect(path).toMatch(/walaa_test.*\.db$/);
+    expect(path).toMatch(/loyalty_pro_test.*\.db$/);
   });
 
   it('produces a self-contained database that opens and reads', async () => {
@@ -433,7 +433,7 @@ describe('running a backup', () => {
     const target = destinations()[0]!;
     const run = await runBackup(context(), [target]);
 
-    const dir = tempDir('walaa-restore-sidecars-');
+    const dir = tempDir('loyalty-pro-restore-sidecars-');
     const fetched = join(dir, 'fetched.walaabk');
     await target.fetch(run.name, fetched);
 
@@ -453,7 +453,7 @@ describe('running a backup', () => {
     const target = destinations()[0]!;
     const run = await runBackup(context(), [target]);
 
-    const dir = tempDir('walaa-restore-');
+    const dir = tempDir('loyalty-pro-restore-');
     const fetched = join(dir, 'fetched.walaabk');
     await target.fetch(run.name, fetched);
 
@@ -537,7 +537,7 @@ describe('verifyRestore — the monthly test of §7.3, as one call', () => {
     // This threw a plain Error — «لم تصل النسخة الاحتياطية إلى أي وجهة» — which the API
     // answered as «حدث خطأ غير متوقع», and nothing was written to the trail.
     const verification = await verifyRestore(context(), [
-      new RefusingDestination("EACCES: permission denied, open 'C:\\ProgramData\\Walaa\\backups\\x'"),
+      new RefusingDestination("EACCES: permission denied, open 'C:\\ProgramData\\LoyaltyPro\\backups\\x'"),
     ]);
 
     expect(verification.ok).toBe(false);

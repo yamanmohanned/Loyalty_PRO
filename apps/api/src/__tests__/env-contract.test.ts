@@ -11,8 +11,8 @@ import { requiredEnvKeys } from '../config/env';
  *
  * ── The failure this is aimed at ─────────────────────────────────────────────
  *
- * `walaa.env` on a merchant's machine is written by the installer from
- * `packaging/walaa.env.template`, a hand-written file. The API validates what it finds
+ * `loyalty-pro.env` on a merchant's machine is written by the installer from
+ * `packaging/loyalty-pro.env.template`, a hand-written file. The API validates what it finds
  * there against a Zod schema. Nothing connected the two.
  *
  * So a setting added to the schema as required, and not added to the template, passes
@@ -58,8 +58,8 @@ describe('the configuration the installer writes', () => {
     expect(required).toContain('DATABASE_URL');
   });
 
-  it('supplies every required setting in packaging/walaa.env.template', () => {
-    const template = join(REPO, 'packaging', 'walaa.env.template');
+  it('supplies every required setting in packaging/loyalty-pro.env.template', () => {
+    const template = join(REPO, 'packaging', 'loyalty-pro.env.template');
     expect(existsSync(template), `${template} is missing`).toBe(true);
 
     const present = keysIn(template);
@@ -69,7 +69,7 @@ describe('the configuration the installer writes', () => {
       missing,
       'These settings are required by the API and absent from the template the installer ' +
         'writes, so a fresh install would refuse to start. Add them to ' +
-        'packaging/walaa.env.template.',
+        'packaging/loyalty-pro.env.template.',
     ).toEqual([]);
   });
 
@@ -89,7 +89,7 @@ describe('the configuration the installer writes', () => {
 
   /**
    * The placeholders the installer substitutes. If one is renamed in the template and
-   * not in `walaa-service.exe`, the shipped `walaa.env` keeps the literal `{{...}}`
+   * not in `loyalty-pro-service.exe`, the shipped `loyalty-pro.env` keeps the literal `{{...}}`
    * text — which fails validation on the merchant's machine and nowhere else.
    */
   it('uses only placeholders the service host knows how to fill', () => {
@@ -99,7 +99,7 @@ describe('the configuration the installer writes', () => {
       nothing — matching it would fail this test on its own documentation, which is how
       a check earns a `.skip`.
     */
-    const template = readFileSync(join(REPO, 'packaging', 'walaa.env.template'), 'utf8')
+    const template = readFileSync(join(REPO, 'packaging', 'loyalty-pro.env.template'), 'utf8')
       .split(/\r?\n/)
       .filter((line) => !line.trimStart().startsWith('#'))
       .join('\n');

@@ -201,7 +201,7 @@ describe('the development seed', () => {
     const source = readFileSync(join(__dirname, '..', '..', 'prisma', 'seed.ts'), 'utf8');
 
     expect(source).toContain("process.env.NODE_ENV === 'production'");
-    expect(source).toContain('WALAA_ALLOW_PRODUCTION_SEED');
+    expect(source).toContain('LOYALTY_ALLOW_PRODUCTION_SEED');
     expect(source).toContain('process.exit(1)');
 
     // And the guard is actually invoked, not merely defined.

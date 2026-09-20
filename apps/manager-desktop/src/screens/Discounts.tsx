@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, BadgePercent, Plus, Trash2 } from 'lucide-react';
-import type { DiscountConfigResponse, DiscountRuleRow } from '@walaa/shared-types';
-import { assessMargin, SAFE_PERCENTAGE_MAX, SAFE_PERCENTAGE_MIN } from '@walaa/shared-types';
+import type { DiscountConfigResponse, DiscountRuleRow } from '@loyalty-pro/shared-types';
+import { assessMargin, SAFE_PERCENTAGE_MAX, SAFE_PERCENTAGE_MIN } from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
@@ -22,7 +22,7 @@ import {
 } from '../components/ui';
 
 /**
- * The discount rules editor (CLAUDE_v3.md §2.3, PROMPT_v3 V3-3).
+ * The discount rules editor (docs/legacy/CLAUDE_v3.md §2.3, PROMPT_v3 V3-3).
  *
  * This screen has one job beyond editing: **stop the manager configuring a rate
  * that loses money.** A supermarket clears 2–4% net, so a 10% instant discount on

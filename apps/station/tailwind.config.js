@@ -1,4 +1,4 @@
-import preset from '@walaa/config/tailwind-preset';
+import preset from '@loyalty-pro/config/tailwind-preset';
 
 /** @type {import('tailwindcss').Config} */
 export default {

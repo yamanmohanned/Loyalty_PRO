@@ -7,7 +7,7 @@ import { createGunzip, createGzip } from 'node:zlib';
 import { fingerprintMatches, keyFingerprint } from './key';
 
 /**
- * The backup archive format (CLAUDE_v3.md §7.3, §12.17).
+ * The backup archive format (docs/legacy/CLAUDE_v3.md §7.3, §12.17).
  *
  * §7.3 makes encryption before upload mandatory: financial data must never leave the
  * merchant's machine in plaintext to third-party storage. This module is the whole of
@@ -268,7 +268,7 @@ function explainDecryptionFailure(error: unknown, archivePath: string): Error {
  *
  * It threw, and it left the partial file. The decrypt pipeline writes plaintext to the
  * destination as it goes, and GCM cannot detect tampering until `final()` — so a
- * single flipped bit in a 69 KB archive produced a **16,384-byte `walaa.db`** sitting
+ * single flipped bit in a 69 KB archive produced a **16,384-byte `loyalty-pro.db`** sitting
  * exactly where the operator had aimed the restore, beside an error they may or may not
  * have read.
  *

@@ -10,7 +10,7 @@ import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  THE INSTANT-DISCOUNT CONTRACT — CLAUDE_v3.md §2, as amended by v4 §1
+ *  THE INSTANT-DISCOUNT CONTRACT — docs/legacy/CLAUDE_v3.md §2, as amended by v4 §1
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * The discount applies to the basket the customer is standing there with, not a
@@ -19,7 +19,7 @@ import { IqdAmountSchema, PositiveIqdAmountSchema } from './money';
  *
  * **v4: the discount is decided by THIS INVOICE'S AMOUNT and nothing else.** There is
  * no accumulation across visits, no period, and no running balance feeding the
- * decision (CLAUDE_UPDATE_4.md §1.1). A tier is an *invoice-amount bracket*: spend
+ * decision (docs/legacy/CLAUDE_UPDATE_4.md §1.1). A tier is an *invoice-amount bracket*: spend
  * 25,000 on one basket and that basket earns 2%; spend 25,000 across five baskets and
  * none of them does.
  *

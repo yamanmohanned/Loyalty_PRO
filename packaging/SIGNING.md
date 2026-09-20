@@ -7,9 +7,9 @@ Read this before you lose it.
 ## Where it is
 
 ```
-C:\Users\yaman\.walaa-signing\
-    walaa-updater.key        the private key   ← THE SECRET
-    walaa-updater.key.pub    the public key    ← safe, already in the app
+C:\Users\yaman\.loyalty-pro-signing\
+    loyalty-pro-updater.key        the private key   ← THE SECRET
+    loyalty-pro-updater.key.pub    the public key    ← safe, already in the app
     PASSWORD.txt             the key's password ← THE OTHER SECRET
 ```
 
@@ -42,9 +42,9 @@ the keys to the shop.
 
 | What | Where | Why it is needed |
 |---|---|---|
-| `walaa-updater.key` | `C:\Users\yaman\.walaa-signing\` | the private key. Signs the update. **Irreplaceable.** |
+| `loyalty-pro-updater.key` | `C:\Users\yaman\.loyalty-pro-signing\` | the private key. Signs the update. **Irreplaceable.** |
 | the password | `PASSWORD.txt`, same folder | decrypts the key. Useless alone, and the key is useless without it. |
-| `walaa-updater.key.pub` | same folder | convenience only — it is also in `tauri.conf.json`, so it is recoverable. Back it up anyway; it costs nothing. |
+| `loyalty-pro-updater.key.pub` | same folder | convenience only — it is also in `tauri.conf.json`, so it is recoverable. Back it up anyway; it costs nothing. |
 
 Nothing else is required. Not the repository, not the installer, not this machine: with
 those three you can sign a release from anywhere that can build the app.
@@ -63,7 +63,7 @@ in none.
 
 ### Confirmed not to leak
 
-- **Not in git.** `.gitignore` covers `*.key`, `.walaa-signing/` and `walaa-updater.key*`,
+- **Not in git.** `.gitignore` covers `*.key`, `.loyalty-pro-signing/` and `loyalty-pro-updater.key*`,
   and `signing-key.test.ts` greps every *tracked* file for the key's content — both the
   decoded header and the base64 form Tauri actually writes. Verified by planting a real
   copy of this key in the tree: the test named the file and failed.
@@ -97,11 +97,11 @@ reinstall everywhere, and assume anything signed with the old key is untrustwort
 ## Building a signed release
 
 ```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.walaa-signing\walaa-updater.key"
+$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.loyalty-pro-signing\loyalty-pro-updater.key"
 # -Raw plus PowerShell's utf8 writer is a trap: it adds a BOM, the BOM travels into
 # the password, and the first signed build failed with "Wrong password for that key".
 # ReadAllText decodes the BOM away.
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.walaa-signing\PASSWORD.txt").Trim()
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.loyalty-pro-signing\PASSWORD.txt").Trim()
 pnpm package:build
 pnpm package:installer
 ```
@@ -123,7 +123,7 @@ reading the file.
 The app checks this endpoint, from `tauri.conf.json`:
 
 ```
-https://github.com/yamanmo/walaa/releases/latest/download/latest.json
+https://github.com/yamanmohanned/Loyalty_PRO/releases/latest/download/latest.json
 ```
 
 To release 0.2.1 to every installed copy:
@@ -141,7 +141,7 @@ To release 0.2.1 to every installed copy:
   "platforms": {
     "windows-x86_64": {
       "signature": "<the entire contents of the .sig file>",
-      "url": "https://github.com/yamanmo/walaa/releases/download/v0.2.1/ولاء_0.2.1_x64-setup.exe"
+      "url": "https://github.com/yamanmohanned/Loyalty_PRO/releases/download/v0.2.1/Loyalty_0.1.0_x64-setup.exe"
     }
   }
 }
@@ -162,7 +162,7 @@ is a change to `UpdateNotice`, not to the key.
 
 ### What has been proven, and what has not
 
-**Proven** — `pnpm --filter @walaa/api drill:update` and `drill:upgrade`:
+**Proven** — `pnpm --filter @loyalty-pro/api drill:update` and `drill:upgrade`:
 
 - a genuine 0.2.1 signed by this key **verifies** against the public key the app ships
 - an update signed by a **different** key is refused, by key id, before any maths runs

@@ -8,7 +8,7 @@ using Walaa.Agent.Parsing;
 namespace Walaa.Agent;
 
 /// <summary>
-/// The agent, assembled: capture → parse → queue → deliver (CLAUDE_v3.md §4).
+/// The agent, assembled: capture → parse → queue → deliver (docs/legacy/CLAUDE_v3.md §4).
 /// </summary>
 /// <remarks>
 /// <para>

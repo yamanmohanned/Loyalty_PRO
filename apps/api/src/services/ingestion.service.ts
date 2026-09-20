@@ -3,14 +3,14 @@ import {
   toCaptureModeOrDefault,
   type CapturedInvoice,
   type IngestInvoiceResponse,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { forbidden, notFound } from '../lib/errors';
 import { isUniqueViolation, prisma } from '../lib/prisma';
 import { publish } from './realtime.service';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  INGESTION — the Print Capture Agent's entry point (CLAUDE_v3.md §4)
+ *  INGESTION — the Print Capture Agent's entry point (docs/legacy/CLAUDE_v3.md §4)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Records an invoice the moment it printed. The customer is **not known here** and

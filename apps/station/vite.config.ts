@@ -2,18 +2,18 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 /**
- * The Loyalty Station is a plain web app (CLAUDE_v3.md §6.1): one codebase for a
+ * The Loyalty Station is a plain web app (docs/legacy/CLAUDE_v3.md §6.1): one codebase for a
  * touch tablet and for a desktop screen with a USB scanner, no app-store
  * distribution, and no device-specific code.
  *
  * In production the API serves this bundle from its own port, so `base` stays
- * relative-free ('/') and the app is reached at `http://<manager-lan-ip>:4000`.
+ * relative-free ('/') and the app is reached at `http://<manager-lan-ip>:4100`.
  */
 export default defineConfig({
   plugins: [react()],
   server: {
-    // 5173 belongs to the manager desktop; both are often running at once.
-    port: 5174,
+    // 5183 belongs to the manager desktop; both are often running at once.
+    port: 5184,
     strictPort: true,
     // A tablet on the LAN must be able to reach the dev server, or the touch
     // viewport can only ever be tested by resizing a desktop browser window.
@@ -26,5 +26,5 @@ export default defineConfig({
     target: 'chrome96',
     sourcemap: false,
   },
-  optimizeDeps: { include: ['@walaa/shared-types'] },
+  optimizeDeps: { include: ['@loyalty-pro/shared-types'] },
 });

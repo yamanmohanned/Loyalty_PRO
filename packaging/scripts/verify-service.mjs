@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const STAGE = join(REPO, 'packaging', 'dist', 'runtime');
-const CLEANROOM = join(process.env.WALAA_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom-service');
+const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom-service');
 const PROGRAM = join(CLEANROOM, 'program');
 const DATA = join(CLEANROOM, 'data');
 const PORT = 41235;
@@ -86,15 +86,15 @@ async function waitForHealth(timeoutMs) {
 
 console.log('\nWalaa — service host verification (unelevated surface)\n');
 
-if (!existsSync(join(STAGE, 'walaa-service.exe'))) {
-  console.error('  walaa-service.exe not staged. Run `pnpm --filter @walaa/packaging stage`.\n');
+if (!existsSync(join(STAGE, 'loyalty-pro-service.exe'))) {
+  console.error('  loyalty-pro-service.exe not staged. Run `pnpm --filter @loyalty-pro/packaging stage`.\n');
   process.exit(1);
 }
 
 removeCleanroom();
 mkdirSync(DATA, { recursive: true });
 cpSync(STAGE, PROGRAM, { recursive: true });
-const serviceExe = join(PROGRAM, 'walaa-service.exe');
+const serviceExe = join(PROGRAM, 'loyalty-pro-service.exe');
 console.log(`  clean room: ${CLEANROOM}`);
 
 // ── Install, unelevated ─────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ check(
   dataAcl.split('\n').filter(Boolean).slice(1, 4).join(' | ').slice(0, 160),
 );
 
-const envFile = join(DATA, 'walaa.env');
+const envFile = join(DATA, 'loyalty-pro.env');
 
 // Unreadable, and not merely absent: `existsSync` cannot be used as the gate here,
 // because the directory lockdown removes traverse rights and a stat of the file fails
@@ -175,7 +175,7 @@ check(
   'the three secrets differ from each other',
 );
 check(
-  envText.includes(`DATABASE_URL="file:${DATA.replace(/\\/g, '/')}/walaa.db"`),
+  envText.includes(`DATABASE_URL="file:${DATA.replace(/\\/g, '/')}/loyalty-pro.db"`),
   'the database is placed in the data directory, not under Program Files',
 );
 check(
@@ -254,9 +254,9 @@ try {
 
   // The database the service actually created, rather than the directory it was told
   // to create it in. The only non-inherited entry here is this test's own re-grant.
-  const databaseAcl = icacls([join(DATA, 'walaa.db')]);
+  const databaseAcl = icacls([join(DATA, 'loyalty-pro.db')]);
   check(
-    existsSync(join(DATA, 'walaa.db')) && !grantsGroupWideAccess(databaseAcl),
+    existsSync(join(DATA, 'loyalty-pro.db')) && !grantsGroupWideAccess(databaseAcl),
     'the customer database is not readable by ordinary local accounts',
     databaseAcl.split('\n').filter(Boolean).slice(1, 4).join(' | ').slice(0, 160),
   );

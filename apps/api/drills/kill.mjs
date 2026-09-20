@@ -41,7 +41,7 @@ const ROUNDS = Number(process.argv[2] ?? 4);
 const PORT = 4941;
 const SCRATCH = 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad';
 const ROOT = `${SCRATCH}/killdrill`;
-const DB = `${ROOT}/walaa.db`;
+const DB = `${ROOT}/loyalty-pro.db`;
 const ENV = `${ROOT}/env`;
 const BACKUPS = `${ROOT}/backups`;
 const API = 'E:/loyalty/apps/api';
@@ -60,7 +60,7 @@ const hardKill = (pid) => {
 const start = (extraEnv = {}) =>
   spawn('npx', ['tsx', 'src/server.ts'], {
     cwd: API,
-    env: { ...process.env, WALAA_ENV_FILE: ENV, WALAA_DATA_DIR: ROOT, ...extraEnv },
+    env: { ...process.env, LOYALTY_ENV_FILE: ENV, LOYALTY_DATA_DIR: ROOT, ...extraEnv },
     stdio: 'ignore',
     shell: true,
   });

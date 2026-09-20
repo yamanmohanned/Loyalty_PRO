@@ -46,7 +46,7 @@ const { PrismaClient } = require('@prisma/client');
 const { randomUUID } = require('node:crypto');
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:4931';
-const DB = process.argv[3] ?? 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad/prod-drill/walaa.db';
+const DB = process.argv[3] ?? 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad/prod-drill/loyalty-pro.db';
 const ROUNDS = Number(process.argv[4] ?? 40);
 /** The API's own boot log. Its `sqlite settings` line is what this run may claim. */
 const API_LOG = process.argv[5] ?? null;

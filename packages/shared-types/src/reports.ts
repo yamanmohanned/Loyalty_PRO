@@ -1,7 +1,7 @@
 import type { CaptureMode, CustomerCategory, SettlementStrategy } from './enums';
 
 /**
- * Reporting contracts (CLAUDE_v3.md §12.27).
+ * Reporting contracts (docs/legacy/CLAUDE_v3.md §12.27).
  *
  * These live here rather than beside the query that builds them because the
  * manager app had its own copy of every one of them, and a copy is a shape that

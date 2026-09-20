@@ -70,7 +70,7 @@ pub struct BackendStatus {
     ///
     /// A demo build knows it in this process, because this process chose it. A
     /// production install does not: the port is fixed at install time inside
-    /// `walaa.env`, which is locked to SYSTEM and Administrators. The service — which
+    /// `loyalty-pro.env`, which is locked to SYSTEM and Administrators. The service — which
     /// can read it — publishes it into `status.json` instead, which is how the
     /// dashboard resolves its own backend with nothing configured.
     pub port: Option<u16>,
@@ -81,7 +81,7 @@ pub struct BackendStatus {
        ─────────────────────────────────────────────────────────────────────────
 
        Three facts that were missing, and whose absence produced the worst message in
-       the product. On a manager PC whose `walaa.env` had gone, `backend_port`
+       the product. On a manager PC whose `loyalty-pro.env` had gone, `backend_port`
        returned `None`, the dashboard read that as "no address resolved", and showed
        «لم يُعثر على خادم ولاء» **with a box asking the shop owner to type a server
        address** — on the machine that IS the server.
@@ -96,11 +96,11 @@ pub struct BackendStatus {
        So the shell reports what it can see of the installation rather than leaving
        the frontend to infer it from a missing port. */
 
-    /// Whether this installation includes the service — `walaa-service.exe` beside the
+    /// Whether this installation includes the service — `loyalty-pro-service.exe` beside the
     /// app. False on a second machine that only runs the dashboard, which is the ONE
     /// place an address field belongs.
     pub hosts_service: bool,
-    /// Whether `walaa.env` is present. Its absence is a distinct failure with a
+    /// Whether `loyalty-pro.env` is present. Its absence is a distinct failure with a
     /// distinct remedy, and it is the one that was being reported as "no server".
     pub config_present: bool,
     /// Whether a database file exists in the data directory. Decides whether a missing
@@ -116,8 +116,8 @@ fn read_json(path: &Path) -> Option<serde_json::Value> {
 }
 
 /// The database file this build opens, by name.
-const PRODUCTION_DATABASE: &str = "walaa.db";
-const DEMO_DATABASE: &str = "walaa-demo.db";
+const PRODUCTION_DATABASE: &str = "loyalty-pro.db";
+const DEMO_DATABASE: &str = "loyalty-pro-demo.db";
 
 /// Reads the backend's own account of itself, and what this machine has installed.
 ///
@@ -143,7 +143,7 @@ pub fn read(
         port,
         demo,
         hosts_service: service_exe.map(|p| p.exists()).unwrap_or(false),
-        config_present: data_dir.join("walaa.env").exists(),
+        config_present: data_dir.join("loyalty-pro.env").exists(),
         database_present: data_dir
             .join(if demo { DEMO_DATABASE } else { PRODUCTION_DATABASE })
             .exists(),
@@ -165,7 +165,7 @@ pub fn read(
         // The in-process port wins when there is one: a demo build chose it here and
         // the file is only its echo. Otherwise this is the sole source, and it is
         // `null` rather than a guess whenever the service could not read its own
-        // configuration — so `None` here means "unknown", never "probably 4000".
+        // configuration — so `None` here means "unknown", never "probably 4100".
         if out.port.is_none() {
             out.port = v
                 .get("port")
@@ -267,7 +267,7 @@ mod tests {
             r#"{"state":"failed","at":"x","attempts":1,"port":null,"reason":"سبب"}"#,
             "hosts-service",
         );
-        let exe = dir.join("walaa-service.exe");
+        let exe = dir.join("loyalty-pro-service.exe");
 
         // Not installed here: the dashboard may legitimately ask for an address.
         assert!(!read(&dir, false, None, Some(&exe)).hosts_service);
@@ -276,7 +276,7 @@ mod tests {
         assert!(read(&dir, false, None, Some(&exe)).hosts_service);
     }
 
-    /// A missing `walaa.env` is its own state, and the one that was being reported as
+    /// A missing `loyalty-pro.env` is its own state, and the one that was being reported as
     /// "no server found".
     #[test]
     fn reports_whether_the_configuration_file_is_there() {
@@ -286,7 +286,7 @@ mod tests {
         );
         assert!(!read(&dir, false, None, None).config_present);
 
-        fs::write(dir.join("walaa.env"), b"API_PORT=4000
+        fs::write(dir.join("loyalty-pro.env"), b"API_PORT=4100
 ").unwrap();
         assert!(read(&dir, false, None, None).config_present);
     }
@@ -296,14 +296,14 @@ mod tests {
     #[test]
     fn reports_whether_a_database_is_present_for_this_build() {
         let dir = data_dir_with(
-            r#"{"state":"stopped","at":"x","attempts":0,"port":4000,"reason":null}"#,
+            r#"{"state":"stopped","at":"x","attempts":0,"port":4100,"reason":null}"#,
             "database-present",
         );
         assert!(!read(&dir, false, None, None).database_present);
 
-        // A production build looks for `walaa.db` and a demo for `walaa-demo.db`: the
+        // A production build looks for `loyalty-pro.db` and a demo for `loyalty-pro-demo.db`: the
         // two never share a file, so neither may answer for the other.
-        fs::write(dir.join("walaa.db"), b"x").unwrap();
+        fs::write(dir.join("loyalty-pro.db"), b"x").unwrap();
         assert!(read(&dir, false, None, None).database_present);
         assert!(!read(&dir, true, None, None).database_present);
     }

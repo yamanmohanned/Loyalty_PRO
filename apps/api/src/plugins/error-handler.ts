@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
-import type { StorageFailureCause } from '@walaa/shared-types';
+import type { StorageFailureCause } from '@loyalty-pro/shared-types';
 import { AppError, rateLimitedMessage, UNEXPECTED_FAILURE_MESSAGE } from '../lib/errors';
 import { isDatabaseDamaged, isUniqueViolation, storageFailureCause } from '../lib/prisma';
 import { isContentionError } from '../lib/write-transaction';

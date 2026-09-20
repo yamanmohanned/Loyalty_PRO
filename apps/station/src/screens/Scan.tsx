@@ -29,7 +29,7 @@ import {
   type PendingInvoice,
   type ScanCardResponse,
   type ScanCustomer,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { locale, money } from '../lib/locale';
 import { enqueue, HELD_CAP, LICENSE_REFUSED_EVENT } from '../lib/queue';
@@ -40,7 +40,7 @@ import { StepIndicator } from '../components/StepIndicator';
 import { Button, Card, Input, Money, Notice } from '../components/ui';
 
 /**
- * The station's guided two-step flow (CLAUDE_v3.md §6.2 #3, rebuilt 2026-09-02).
+ * The station's guided two-step flow (docs/legacy/CLAUDE_v3.md §6.2 #3, rebuilt 2026-09-02).
  *
  * ── The order, and why it is not negotiable ────────────────────────────────
  *
@@ -538,7 +538,7 @@ function IdentityBanner({
   );
 }
 
-/* ── Clearing the screen (CLAUDE_UPDATE_4.md §4) ───────────────────────────── */
+/* ── Clearing the screen (docs/legacy/CLAUDE_UPDATE_4.md §4) ───────────────────────────── */
 
 /**
  * How long a terminal result stays on screen before it clears itself.

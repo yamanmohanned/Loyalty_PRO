@@ -17,7 +17,7 @@ import { build } from 'esbuild';
 
 /**
  * Stages everything the API service needs to run on a machine that has no Node, no
- * pnpm, no repository and no Prisma CLI (CLAUDE_v3.md §12.3).
+ * pnpm, no repository and no Prisma CLI (docs/legacy/CLAUDE_v3.md §12.3).
  *
  * The output directory is what the NSIS installer ships as `runtime/`. Nothing in it
  * may point back at this repository or at the developer's global installs — that is
@@ -86,7 +86,7 @@ note(`staging directory: ${relative(REPO, STAGE)}`);
 // '@prisma/client'` in a pure-ESM bundle depends on Node's named-export detection
 // working on a package whose entry point spreads a `require()` — which it does not.
 // A CJS bundle requires it the way Prisma itself expects to be loaded.
-const bundleFile = join(STAGE, 'walaa-api.cjs');
+const bundleFile = join(STAGE, 'loyalty-pro-api.cjs');
 const result = await build({
   entryPoints: [join(API, 'src', 'server.ts')],
   outfile: bundleFile,
@@ -97,12 +97,12 @@ const result = await build({
   sourcemap: false,
   minify: false, // A readable stack trace in a shop's log file is worth the kilobytes.
   legalComments: 'none',
-  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@walaa/license-native', 'pino-pretty'],
+  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@loyalty-pro/license-native', 'pino-pretty'],
   logLevel: 'warning',
   metafile: true,
 });
 note(
-  `bundled ${Object.keys(result.metafile.inputs).length} modules → walaa-api.cjs (${mb(statSync(bundleFile).size)})`,
+  `bundled ${Object.keys(result.metafile.inputs).length} modules → loyalty-pro-api.cjs (${mb(statSync(bundleFile).size)})`,
 );
 
 /*
@@ -119,10 +119,10 @@ note(
   point that cannot start a server cannot be talked into starting one.
 
   Run on the merchant's machine as:
-      node.exe walaa-restore.cjs --list
-      node.exe walaa-restore.cjs <archive> --to <output.db> [--key <printed key>]
+      node.exe loyalty-pro-restore.cjs --list
+      node.exe loyalty-pro-restore.cjs <archive> --to <output.db> [--key <printed key>]
 */
-const restoreFile = join(STAGE, 'walaa-restore.cjs');
+const restoreFile = join(STAGE, 'loyalty-pro-restore.cjs');
 const restoreResult = await build({
   entryPoints: [join(API, 'src', 'tools', 'restore-cli.ts')],
   outfile: restoreFile,
@@ -133,12 +133,12 @@ const restoreResult = await build({
   sourcemap: false,
   minify: false,
   legalComments: 'none',
-  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@walaa/license-native', 'pino-pretty'],
+  external: ['@prisma/client', '.prisma/client', '@node-rs/argon2', '@loyalty-pro/license-native', 'pino-pretty'],
   logLevel: 'warning',
   metafile: true,
 });
 note(
-  `bundled ${Object.keys(restoreResult.metafile.inputs).length} modules → walaa-restore.cjs (${mb(statSync(restoreFile).size)})`,
+  `bundled ${Object.keys(restoreResult.metafile.inputs).length} modules → loyalty-pro-restore.cjs (${mb(statSync(restoreFile).size)})`,
 );
 
 // ── 3. Prisma client + query engine ─────────────────────────────────────────────
@@ -188,29 +188,29 @@ note('argon2 native addon (win32-x64-msvc)');
 
 // ── 4a. The licensing module ────────────────────────────────────────────────────
 /*
-  The Rust verifier (crates/walaa-license), built by `pnpm --filter
-  @walaa/license-native build` — which `package:build` runs just before this — with the
+  The Rust verifier (crates/loyalty-pro-license), built by `pnpm --filter
+  @loyalty-pro/license-native build` — which `package:build` runs just before this — with the
   provider's public key compiled in.
 
   An allowlist of three files, and the allowlist is the point: the package directory
-  also holds `walaa-license.test.node`, the build that trusts the PUBLISHED test key and
+  also holds `loyalty-pro-license.test.node`, the build that trusts the PUBLISHED test key and
   can sign codes. Shipping it would let anyone who reads this repository mint a licence.
   `index.js` only loads it when `VITEST` is set, but the defence is that it is not on
   the merchant's disk at all.
 */
-const licenseDir = dirname(fromApi.resolve('@walaa/license-native/package.json'));
-const licenseBinary = join(licenseDir, 'walaa-license.node');
+const licenseDir = dirname(fromApi.resolve('@loyalty-pro/license-native/package.json'));
+const licenseBinary = join(licenseDir, 'loyalty-pro-license.node');
 if (!existsSync(licenseBinary)) {
   throw new Error(
-    `licensing module not built at ${licenseBinary} — run \`pnpm --filter @walaa/license-native build\` first`,
+    `licensing module not built at ${licenseBinary} — run \`pnpm --filter @loyalty-pro/license-native build\` first`,
   );
 }
-copyAllowlist(licenseDir, join(STAGE, 'node_modules', '@walaa', 'license-native'), [
+copyAllowlist(licenseDir, join(STAGE, 'node_modules', '@loyalty-pro', 'license-native'), [
   'package.json',
   'index.js',
-  'walaa-license.node',
+  'loyalty-pro-license.node',
 ]);
-if (existsSync(join(STAGE, 'node_modules', '@walaa', 'license-native', 'walaa-license.test.node'))) {
+if (existsSync(join(STAGE, 'node_modules', '@loyalty-pro', 'license-native', 'loyalty-pro-license.test.node'))) {
   throw new Error('the test build of the licensing module reached the staged runtime — refusing to continue');
 }
 note(`licensing module (${mb(statSync(licenseBinary).size)})`);
@@ -236,19 +236,19 @@ note(`${migrationCount} migration(s)`);
   instead, where a developer is standing in front of it, and the merchant's machine
   only copies and verifies.
 
-  **The hash is checked, not trusted.** `walaa-template.json` records the sha256 of the
+  **The hash is checked, not trusted.** `loyalty-pro-template.json` records the sha256 of the
   bytes that were built and verified. Shipping a template that does not match it would
   ship a database nobody checked — and, because `EXPECTED_SCHEMA_HASH` is compiled into
   the binary from the same run, a mismatch here means every install refuses to start
   with a schema error that points at the merchant's machine instead of at this build.
   Refusing to stage is how that stays a build-time failure.
 */
-const templateSource = join(API, 'prisma', 'walaa-template.db');
-const templateRecordPath = join(API, 'prisma', 'walaa-template.json');
+const templateSource = join(API, 'prisma', 'loyalty-pro-template.db');
+const templateRecordPath = join(API, 'prisma', 'loyalty-pro-template.json');
 
 if (!existsSync(templateSource) || !existsSync(templateRecordPath)) {
   throw new Error(
-    'the database template is missing — run `pnpm --filter @walaa/api db:template` before staging',
+    'the database template is missing — run `pnpm --filter @loyalty-pro/api db:template` before staging',
   );
 }
 
@@ -264,12 +264,12 @@ if (templateSha !== templateRecord.sha256) {
 ` +
       `  on disk: ${templateSha}
 ` +
-      'Re-run `pnpm --filter @walaa/api db:template` — the template, its record and the ' +
+      'Re-run `pnpm --filter @loyalty-pro/api db:template` — the template, its record and the ' +
       'fingerprints compiled into the binary are written together and must ship together.',
   );
 }
 
-cpSync(templateSource, join(STAGE, 'walaa-template.db'));
+cpSync(templateSource, join(STAGE, 'loyalty-pro-template.db'));
 note(
   `database template (${mb(templateBytes.length)}, schema ${String(templateRecord.schemaHash).slice(0, 12)})`,
 );
@@ -309,7 +309,7 @@ if (!existsSync(join(stationDist, 'index.html')) || !existsSync(join(stationDist
       '',
       '  ERROR: the Loyalty Station is not built.',
       '',
-      '         Run:  pnpm --filter @walaa/station build',
+      '         Run:  pnpm --filter @loyalty-pro/station build',
       '',
       '         Without it the installer ships an API that serves nothing at its own',
       '         address, and the tablet at the till has nothing to open.',
@@ -352,7 +352,7 @@ if (stationBuiltAt < newestStationSource) {
       `         bundle  ${new Date(stationBuiltAt).toISOString()}`,
       `         source  ${new Date(newestStationSource).toISOString()}`,
       '',
-      '         Run:  pnpm --filter @walaa/station build',
+      '         Run:  pnpm --filter @loyalty-pro/station build',
       '',
       '         Staging copies `apps/station/dist` as it finds it. A stale bundle ships',
       '         silently: the till runs the code from whenever it was last built.',
@@ -374,14 +374,14 @@ const serviceExe = join(
   'service-host',
   'target',
   'release',
-  'walaa-service.exe',
+  'loyalty-pro-service.exe',
 );
 if (!existsSync(serviceExe)) {
   console.error(
     [
       '',
-      '  ERROR: walaa-service.exe has not been built.',
-      '         Run `pnpm --filter @walaa/packaging service:build` first.',
+      '  ERROR: loyalty-pro-service.exe has not been built.',
+      '         Run `pnpm --filter @loyalty-pro/packaging service:build` first.',
       '',
     ].join('\n'),
   );
@@ -413,19 +413,19 @@ if (statSync(serviceExe).mtimeMs < newestSource) {
   console.error(
     [
       '',
-      '  ERROR: walaa-service.exe is OLDER than its source.',
+      '  ERROR: loyalty-pro-service.exe is OLDER than its source.',
       `         binary  ${new Date(statSync(serviceExe).mtimeMs).toISOString()}`,
       `         source  ${new Date(newestSource).toISOString()}`,
       '',
       '         `cargo check` does not produce a binary. Run:',
-      '           pnpm --filter @walaa/packaging service:build',
+      '           pnpm --filter @loyalty-pro/packaging service:build',
       '',
     ].join('\n'),
   );
   process.exit(1);
 }
 
-cpSync(serviceExe, join(STAGE, 'walaa-service.exe'));
+cpSync(serviceExe, join(STAGE, 'loyalty-pro-service.exe'));
 note(`service host (${mb(statSync(serviceExe).size)})`);
 
 // ── 6c. Post-reboot verification script ─────────────────────────────────────────
@@ -437,28 +437,28 @@ note('verify-install.ps1 (the five post-reboot checks)');
 
 // ── 6b. The demo shop ───────────────────────────────────────────────────────────
 //
-// `WALAA_DEMO=1` stages the pre-seeded database beside the service. Its PRESENCE is
-// what puts the installed app into demo mode — `walaa-service.exe` looks for this file
-// and sets `WALAA_DEMO` for the API accordingly — so there is no separate flag that can
+// `LOYALTY_DEMO=1` stages the pre-seeded database beside the service. Its PRESENCE is
+// what puts the installed app into demo mode — `loyalty-pro-service.exe` looks for this file
+// and sets `LOYALTY_DEMO` for the API accordingly — so there is no separate flag that can
 // fall out of step with the data, and a production stage has no such file to find.
 //
 // Seeded at build time rather than on first launch: replaying six months through the
 // real services takes about half a minute, and a merchant double-clicking a shortcut
 // should not watch that happen.
-if (process.env.WALAA_DEMO === '1') {
-  const demoDb = join(API, 'prisma', 'walaa-demo.db');
+if (process.env.LOYALTY_DEMO === '1') {
+  const demoDb = join(API, 'prisma', 'loyalty-pro-demo.db');
   if (!existsSync(demoDb)) {
     console.error(
       [
         '',
-        '  ERROR: WALAA_DEMO=1 but apps/api/prisma/walaa-demo.db does not exist.',
-        '         Run `pnpm --filter @walaa/api db:seed:demo` first.',
+        '  ERROR: LOYALTY_DEMO=1 but apps/api/prisma/loyalty-pro-demo.db does not exist.',
+        '         Run `pnpm --filter @loyalty-pro/api db:seed:demo` first.',
         '',
       ].join('\n'),
     );
     process.exit(1);
   }
-  cpSync(demoDb, join(STAGE, 'walaa-demo.db'));
+  cpSync(demoDb, join(STAGE, 'loyalty-pro-demo.db'));
   note(`demo database (${mb(statSync(demoDb).size)})`);
 
   /*
@@ -476,7 +476,7 @@ if (process.env.WALAA_DEMO === '1') {
       [
         '',
         '  ERROR: the demo seed has not been login-verified.',
-        '         Run `pnpm --filter @walaa/api db:assert:login` first.',
+        '         Run `pnpm --filter @loyalty-pro/api db:assert:login` first.',
         '',
       ].join('\n'),
     );
@@ -499,7 +499,7 @@ if (process.env.WALAA_DEMO === '1') {
         `         shipping  ${actual}`,
         `         verified  ${proof.sha256 ?? '(no hash recorded)'}`,
         '',
-        '         Run `pnpm --filter @walaa/api db:assert:login`.',
+        '         Run `pnpm --filter @loyalty-pro/api db:assert:login`.',
         '',
       ].join('\n'),
     );
@@ -510,7 +510,7 @@ if (process.env.WALAA_DEMO === '1') {
   // A stale demo database left over from a previous demo stage would silently turn a
   // production build into a demo one, which is the exact failure the presence-as-flag
   // design has to be defended against.
-  const stray = join(STAGE, 'walaa-demo.db');
+  const stray = join(STAGE, 'loyalty-pro-demo.db');
   if (existsSync(stray)) {
     rmSync(stray);
     note('removed a stale demo database from the stage');
@@ -532,15 +532,15 @@ if (process.env.WALAA_DEMO === '1') {
   `apps/api/src/__tests__/env-contract.test.ts` holds it to the schema.
 
   Still not a working configuration: the `{{PLACEHOLDER}}` secrets are generated per
-  installation by `walaa-service.exe install`, so no two shops share a JWT signing key
+  installation by `loyalty-pro-service.exe install`, so no two shops share a JWT signing key
   and no secret is ever committed to this repository.
 */
-const envTemplate = join(REPO, 'packaging', 'walaa.env.template');
+const envTemplate = join(REPO, 'packaging', 'loyalty-pro.env.template');
 if (!existsSync(envTemplate)) {
   throw new Error(`the configuration template is missing: ${envTemplate}`);
 }
-cpSync(envTemplate, join(STAGE, 'walaa.env.template'));
-note('walaa.env.template');
+cpSync(envTemplate, join(STAGE, 'loyalty-pro.env.template'));
+note('loyalty-pro.env.template');
 
 // ── 8. Manifest ─────────────────────────────────────────────────────────────────
 // Recorded so a support call can establish what is actually installed on a machine
@@ -550,7 +550,7 @@ writeFileSync(
   join(STAGE, 'manifest.json'),
   `${JSON.stringify(
     {
-      product: 'walaa-api',
+      product: 'loyalty-pro-api',
       version: apiPackage.version,
       node: process.version,
       platform: 'win32-x64',

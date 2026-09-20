@@ -10,28 +10,28 @@ SHA-256 `7EB47888D3264748C6463E877697B8F2269DAF65E0E5B9BB0A5DC115549B5967`
 Check it in the folder that holds it: `Get-FileHash .\ولاء_0.3.1_x64-setup.exe -Algorithm SHA256`
 
 **Before you leave home:** the laptop holds `license-issuer.exe` **and** the key folder
-`C:\Users\yaman\.walaa-issuer`. Run **0** — it opens the key, issues nothing, writes nothing.
+`C:\Users\yaman\.loyalty-pro-issuer`. Run **0** — it opens the key, issues nothing, writes nothing.
 
 ## The licence commands
 
 ```powershell
 # 0 · Before leaving: prove the key and its password open (issues nothing)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" check
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" check
 
 # 1 · FIRST licence for a shop PC — 14-day trial (paid shop: replace --days 14 with --perpetual)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" issue --device WL-XXXX-XXXX --days 14 --note "shop name"
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" issue --device WL-XXXX-XXXX --days 14 --note "shop name"
 
 # 2 · RENEW a PC that already has a licence — 30 more days (licensed or already read-only)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --days 30
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --days 30
 
 # 3 · The shop paid: make its licence permanent
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --perpetual
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" renew --device WL-XXXX-XXXX --perpetual
 
 # 4 · Phone code — 15 symbols to read out when no message can reach the shop PC
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-XXXX-XXXX --days 7
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" unlock --device WL-XXXX-XXXX --days 7
 
 # 5 · What has this PC been issued? (no password)
-& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" list --device WL-XXXX-XXXX
+& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" list --device WL-XXXX-XXXX
 ```
 
 - **No `PASSWORD.txt` on the laptop?** Delete `--password-file "…"` from the line and type the
@@ -64,10 +64,10 @@ once; any sale held meanwhile is credited. Message can't reach the PC → comman
 **Check:** the SHA-256 above. Blue box = SmartScreen. File gone / service dies = Windows
 Security → Protection history, and the shop's own antivirus.
 **Fix:** SmartScreen → **More info → Run anyway**. Antivirus: exclude `C:\Program Files\ولاء`
-and `C:\ProgramData\Walaa`, then reinstall. Never switch the antivirus off.
+and `C:\ProgramData\LoyaltyPro`, then reinstall. Never switch the antivirus off.
 
 ### 3 · The till tablet cannot reach the manager PC
-**Check:** on the tablet open `http://<PC-IP>:4000/health` (must show `"status":"ok"`). On the PC:
+**Check:** on the tablet open `http://<PC-IP>:4100/health` (must show `"status":"ok"`). On the PC:
 
 ```powershell
 Get-NetConnectionProfile
@@ -77,9 +77,9 @@ Get-NetConnectionProfile
 PC's IP on the router.
 
 ### 4 · The installer ran without Administrator — «جارٍ تشغيل البرنامج» never goes away
-**Check:** `services.msc` → is **WalaaApi** listed?
+**Check:** `services.msc` → is **LoyaltyProApi** listed?
 **Fix:** right-click the installer → **Run as administrator** → accept UAC. *(The manual
-`walaa-service.exe install` route needs an elevated prompt and was not run on the build PC.)*
+`loyalty-pro-service.exe install` route needs an elevated prompt and was not run on the build PC.)*
 
 ### 5 · «ربط حساب Google» — what you should see now
 Pressing it opens Google's sign-in page **in the PC's own browser** within a second, and the card
@@ -101,8 +101,8 @@ Get-NetTCPConnection -LocalPort 4000 -State Listen | Select-Object OwningProcess
 ```
 then `Get-Process -Id <that number>`.
 **Fix:** stop the other program. Changing ولاء's port means editing `API_PORT` in
-`C:\ProgramData\Walaa\walaa.env` from an elevated Notepad, then elevated
-`walaa-service.exe uninstall` and `install` (the install re-reads the port for the firewall rule)
+`C:\ProgramData\LoyaltyPro\loyalty-pro.env` from an elevated Notepad, then elevated
+`loyalty-pro-service.exe uninstall` and `install` (the install re-reads the port for the firewall rule)
 — **not run on the build PC; call me first.** `install --port` alone does *not* change an
 existing installation.
 
@@ -116,7 +116,7 @@ and a **برنامج الالتقاط** account for the cashier PC.
 **Do not install over a PC that already holds ولاء with customers on it.** Take its backup and
 call me first.
 
-**If none of these:** stop. Copy `C:\ProgramData\Walaa\logs\` to USB, photograph the Arabic
+**If none of these:** stop. Copy `C:\ProgramData\LoyaltyPro\logs\` to USB, photograph the Arabic
 message, note the version at the bottom of the navigation rail. The till keeps selling without us.
 
 **Before you leave — the two-minute proof:** activate; enter the discount rules; register a

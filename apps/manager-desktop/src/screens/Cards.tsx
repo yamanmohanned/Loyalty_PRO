@@ -13,7 +13,7 @@ import type {
   CardBatch,
   CardBatchExportResponse,
   CardBatchListResponse,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { useFormErrors } from '../lib/form';
 import { locale, formatDate } from '../lib/locale';
@@ -34,7 +34,7 @@ import {
 } from '../components/ui';
 
 /**
- * Physical card stock (CLAUDE_v3.md §12.25; laid out again 2026-09-02).
+ * Physical card stock (docs/legacy/CLAUDE_v3.md §12.25; laid out again 2026-09-02).
  *
  * The screen answers one question the merchant asks out loud — **how many blank
  * cards are left before I have to order more** — and makes the collision he worries

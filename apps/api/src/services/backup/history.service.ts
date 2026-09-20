@@ -2,7 +2,7 @@ import { prisma } from '../../lib/prisma';
 import { AUDIT_ACTIONS } from '../audit.service';
 
 /**
- * Recent backup outcomes, read out of the audit trail (CLAUDE_v3.md §7.3, §12.21).
+ * Recent backup outcomes, read out of the audit trail (docs/legacy/CLAUDE_v3.md §7.3, §12.21).
  *
  * No separate history table. Every run already writes an append-only audit row naming
  * what happened and why, and a second store would be a second thing to keep in step with

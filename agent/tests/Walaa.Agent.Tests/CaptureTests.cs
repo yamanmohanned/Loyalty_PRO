@@ -8,7 +8,7 @@ using Xunit;
 namespace Walaa.Agent.Tests;
 
 /// <summary>
-/// The four capture modes (CLAUDE_v3.md §4.2) and how one is chosen (§4.3).
+/// The four capture modes (docs/legacy/CLAUDE_v3.md §4.2) and how one is chosen (§4.3).
 /// </summary>
 public class CaptureTests
 {

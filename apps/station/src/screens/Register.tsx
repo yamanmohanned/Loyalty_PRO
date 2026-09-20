@@ -6,8 +6,8 @@ import {
   looksLikeCardNumber,
   normalizeCardNumber,
   type Customer,
-} from '@walaa/shared-types';
-import { CreateCustomerRequestSchema } from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
+import { CreateCustomerRequestSchema } from '@loyalty-pro/shared-types';
 import { api, ApiRequestError } from '../lib/api';
 import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';
@@ -17,7 +17,7 @@ import { PrintableCard } from '../components/Printable';
 import { Button, Card, Field, Input, Notice } from '../components/ui';
 
 /**
- * Quick registration (CLAUDE_v3.md §6.2 #4, §12.25).
+ * Quick registration (docs/legacy/CLAUDE_v3.md §6.2 #4, §12.25).
  *
  * **Name and phone only.** Every extra field at the counter costs enrolment, and
  * enrolment is the whole programme — a form that takes thirty seconds while a queue
@@ -53,7 +53,7 @@ export function RegisterScreen({ shopName }: { shopName: string }): JSX.Element 
   const [cardError, setCardError] = useState<string | null>(null);
   /**
    * A registration the server accepted the request for and did not store
-   * (CLAUDE_v3.md §12.16). Held apart from `error` because it is not a field problem
+   * (docs/legacy/CLAUDE_v3.md §12.16). Held apart from `error` because it is not a field problem
    * the operator can correct by retyping — the card was not created and retrying will
    * not create it.
    */

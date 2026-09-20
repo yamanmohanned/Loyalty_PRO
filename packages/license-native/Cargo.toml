@@ -1,6 +1,6 @@
 [package]
-name = "walaa-license-node"
-version = "0.3.1"
+name = "loyalty-pro-license-node"
+version = "0.1.0"
 edition = "2021"
 publish = false
 description = "The API's native licensing module: device ID, code verification, status and clock anchors, in Rust."
@@ -10,13 +10,13 @@ crate-type = ["cdylib"]
 
 [features]
 # The test build: trusts only the published test key and can sign with it. Built to
-# walaa-license.test.node, which the API's test suite loads and staging never copies.
-test-key = ["walaa-license/test-key"]
+# loyalty-pro-license.test.node, which the API's test suite loads and staging never copies.
+test-key = ["loyalty-pro-license/test-key"]
 
 [dependencies]
 napi = { version = "2", default-features = false, features = ["napi6"] }
 napi-derive = "2"
-walaa-license = { path = "../../crates/walaa-license" }
+loyalty-pro-license = { path = "../../crates/loyalty-pro-license" }
 
 [build-dependencies]
 napi-build = "2"

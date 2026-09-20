@@ -7,7 +7,7 @@ Heuristics and measured facts, not confirmed defects. Ordered by severity.
 Measured: `C: 119G total, 118G used, 146M free`.
 
 This already stopped Phase 2: `pnpm install` for the dashboard failed, which is why
-`@walaa/dashboard` does not typecheck. It will equally block:
+`@loyalty-pro/dashboard` does not typecheck. It will equally block:
 - the Rust toolchain (~2 GB for rustup + cargo registry + target dirs)
 - any further npm installs (temp space)
 - Docker, whose containerd metadata already flipped read-only once during Phase 1

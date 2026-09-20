@@ -163,7 +163,7 @@ different client, disconnect first.
 
 ### Where the credentials are kept — and where they are not
 
-In the service's data folder (`C:\ProgramData\Walaa\drive\` on a shop PC, locked to SYSTEM and
+In the service's data folder (`C:\ProgramData\LoyaltyPro\drive\` on a shop PC, locked to SYSTEM and
 Administrators):
 
 - `drive-client.json` — the Client ID in the clear (Google treats it as public; it appears in
@@ -172,7 +172,7 @@ Administrators):
   record.
 - `drive.key` — the key for both.
 
-Not in `walaa.env`: on a shop PC a client or refresh token placed there is **ignored**. Not in
+Not in `loyalty-pro.env`: on a shop PC a client or refresh token placed there is **ignored**. Not in
 any log: the request log redacts the secret field and nothing else writes it. Not in any
 response: the API returns the Client ID only. Not in the audit trail: the row records the
 Client ID and that a secret was stored. Checked on the packaged build by searching every file
@@ -260,7 +260,7 @@ How Google's replies map to these (from `apps/api/src/services/backup/drive-erro
 
 ## What has been proven, and what has not
 
-**Proven** — on the packaged build (`walaa-api.cjs`), a fresh installation, talking over TCP to
+**Proven** — on the packaged build (`loyalty-pro-api.cjs`), a fresh installation, talking over TCP to
 a local stand-in that speaks Google's token, consent and Drive endpoints
 (`apps/api/src/__tests__/helpers/fake-google.ts`, which checks PKCE and withholds the refresh
 token unless offline access with a consent prompt was requested, as Google does):

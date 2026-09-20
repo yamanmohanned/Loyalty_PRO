@@ -22,7 +22,7 @@ import { InsufficientSpaceError, takeSnapshot } from './snapshot';
 
 /**
  * Backup, restore, and the verification that makes either worth having
- * (CLAUDE_v3.md §7.3, §12.17).
+ * (docs/legacy/CLAUDE_v3.md §7.3, §12.17).
  *
  * §5.1 accepted a real risk when it put all storage on one machine: a disk failure, a
  * theft or ransomware loses everything. §7.3 is the mitigation and calls it mandatory,
@@ -83,7 +83,7 @@ export function configuredKeyFingerprint(): string | null {
  * Where the on-machine copy is written.
  *
  * `BACKUP_LOCAL_DIR` wins wherever it is set. Otherwise the installed service writes
- * under its data directory (`%PROGRAMDATA%\Walaa\backups`), which is the right
+ * under its data directory (`%PROGRAMDATA%\LoyaltyPro\backups`), which is the right
  * answer on a merchant machine and the wrong one in a checkout: a dev process runs
  * unelevated and cannot write there, so every scheduled run failed with EPERM and
  * logged a 507 every five minutes.
@@ -103,7 +103,7 @@ export function localBackupDirectory(): string {
   if (configured) return configured;
 
   const repoEnvFile = findRepoEnvFile();
-  if (repoEnvFile) return join(dirname(repoEnvFile), '.walaa-dev', 'backups');
+  if (repoEnvFile) return join(dirname(repoEnvFile), '.loyalty-pro-dev', 'backups');
 
   return join(resolveDataDir(), 'backups');
 }
@@ -444,7 +444,7 @@ export interface RestoreResult {
  * That is not tidiness, it is the only defence against a **killed** restore — the case
  * no `try/catch` can reach. Measured against a 420 MB archive:
  *
- *   - `Stop-Process -Force` at t+2s left a 267,908,956-byte truncated `walaa.db`;
+ *   - `Stop-Process -Force` at t+2s left a 267,908,956-byte truncated `loyalty-pro.db`;
  *   - at t+3.5s it left a **full-length 420,716,544-byte file that opens cleanly,
  *     passes `PRAGMA quick_check` and reports the correct 28 transactions** — because
  *     decryption had finished and only the SHA-256 verification had not.
@@ -452,7 +452,7 @@ export interface RestoreResult {
  * The second is the dangerous one. It is indistinguishable from a completed restore by
  * every check an operator would think to run, and the runbook's next instruction is to
  * copy that file over the shop's database. With the rename, the same kill leaves
- * `walaa.db.partial`, which nobody puts into place, and no `walaa.db` at all.
+ * `loyalty-pro.db.partial`, which nobody puts into place, and no `loyalty-pro.db` at all.
  */
 export async function restoreArchive(
   archivePath: string,
@@ -567,12 +567,12 @@ export interface RestoreVerification {
 }
 
 /**
- * The monthly restore test of §7.3, as one call (CLAUDE_v3.md §12.17).
+ * The monthly restore test of §7.3, as one call (docs/legacy/CLAUDE_v3.md §12.17).
  *
  * ## Why it is shaped like this
  *
  * A restore test that only proves the file opens would pass against exactly the bug
- * §12.17 is about. A backup taken by naively copying `walaa.db` without its `-wal`
+ * §12.17 is about. A backup taken by naively copying `loyalty-pro.db` without its `-wal`
  * sidecar restores cleanly, reports healthy, contains every table — and is missing the
  * most recent day of sales, which is precisely the day anyone restoring actually needs.
  *

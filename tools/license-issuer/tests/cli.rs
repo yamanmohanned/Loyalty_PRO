@@ -121,7 +121,7 @@ fn a_first_licence_is_issued_and_every_later_one_is_a_renewal() {
 fn a_missing_key_names_the_folders_it_looked_in() {
     let empty = tempfile::tempdir().unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_license-issuer"))
-        .env_remove("WALAA_ISSUER_HOME")
+        .env_remove("LOYALTY_ISSUER_HOME")
         .env("USERPROFILE", empty.path())
         .env("APPDATA", empty.path())
         .args(["--password-stdin", "unlock", "--device", "WL-2222-2222"])
@@ -130,5 +130,5 @@ fn a_missing_key_names_the_folders_it_looked_in() {
         .unwrap();
     assert!(!output.status.success());
     let out = text(&output);
-    assert!(out.contains(".walaa-issuer") && out.contains("walaa-license-issuer"), "{out}");
+    assert!(out.contains(".loyalty-pro-issuer") && out.contains("loyalty-pro-license-issuer"), "{out}");
 }

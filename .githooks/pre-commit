@@ -45,7 +45,7 @@ echo "pre-commit: the database schema changed — checking the compiled fingerpr
 # staged only the migration, leaving the new fingerprints behind as unstaged changes.
 # The commit would then carry a schema the constants do not describe, while every check
 # on the machine that made it says everything is fine.
-fingerprints="apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json"
+fingerprints="apps/api/src/config/schema-fingerprint.ts apps/api/prisma/loyalty-pro-template.json"
 for f in $fingerprints; do
   if ! git diff --quiet -- "$f"; then
     echo ""
@@ -60,7 +60,7 @@ for f in $fingerprints; do
   fi
 done
 
-if ! pnpm --filter @walaa/api db:template:check; then
+if ! pnpm --filter @loyalty-pro/api db:template:check; then
   echo ""
   echo "pre-commit: REFUSED."
   echo ""
@@ -68,8 +68,8 @@ if ! pnpm --filter @walaa/api db:template:check; then
   echo "  match it. Committing this ships a build that refuses to open a correct"
   echo "  database, and says so in a message that blames the merchant's data."
   echo ""
-  echo "  Fix:  pnpm --filter @walaa/api db:template"
-  echo "        git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json"
+  echo "  Fix:  pnpm --filter @loyalty-pro/api db:template"
+  echo "        git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/loyalty-pro-template.json"
   echo ""
   exit 1
 fi

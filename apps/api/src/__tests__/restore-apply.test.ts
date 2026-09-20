@@ -34,7 +34,7 @@ const log = (): void => {};
 function shop(): { live: string; restore: string } {
   const root = mkdtempSync(join(tmpdir(), 'walaa-apply-'));
   roots.push(root);
-  const live = join(root, 'walaa.db');
+  const live = join(root, 'loyalty-pro.db');
   writeFileSync(live, 'OLD');
   // The WAL holds committed sales. It must travel with its database, in both directions.
   writeFileSync(`${live}-wal`, 'OLD-WAL');
@@ -85,7 +85,7 @@ describe('applying a restore at startup', () => {
     // No stale WAL beside the restored file: SQLite would try to replay it.
     expect(existsSync(`${live}-wal`)).toBe(false);
 
-    const kept = join(restore, applied!.record.keptAs, 'walaa.db');
+    const kept = join(restore, applied!.record.keptAs, 'loyalty-pro.db');
     expect(readFileSync(kept, 'utf8')).toBe('OLD');
     expect(readFileSync(`${kept}-wal`, 'utf8')).toBe('OLD-WAL');
 

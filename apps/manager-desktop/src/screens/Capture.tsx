@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, Printer, ShieldCheck } from 'lucide-react';
-import { PAPER_WIDTHS, type CaptureStatus, type PaperWidth } from '@walaa/shared-types';
+import { PAPER_WIDTHS, type CaptureStatus, type PaperWidth } from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { failureSentence } from '../lib/failure';
 import { formatDate, locale } from '../lib/locale';
@@ -21,7 +21,7 @@ import { DemoHardwareNotice } from '../components/DemoSurfaces';
 import { IS_DEMO } from '../lib/demo';
 
 /**
- * Print capture settings (CLAUDE_v3.md §4, PROMPT_v3 V3-3).
+ * Print capture settings (docs/legacy/CLAUDE_v3.md §4, PROMPT_v3 V3-3).
  *
  * The screen's real job is to make the **Fail-Open distinction visible** before a
  * merchant picks a mode. `SPOOL_WATCH` observes the print spool from outside the

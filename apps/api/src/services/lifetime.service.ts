@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import type { CustomerLifetime, DiscountRule, InvoiceOutcome } from '@walaa/shared-types';
-import { formatIqd } from '@walaa/shared-types';
+import type { CustomerLifetime, DiscountRule, InvoiceOutcome } from '@loyalty-pro/shared-types';
+import { formatIqd } from '@loyalty-pro/shared-types';
 import { prisma } from '../lib/prisma';
 
 type Db = PrismaClient | Prisma.TransactionClient;

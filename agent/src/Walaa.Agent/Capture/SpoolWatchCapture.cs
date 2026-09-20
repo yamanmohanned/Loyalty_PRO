@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 namespace Walaa.Agent.Capture;
 
 /// <summary>
-/// Watches the Windows spool directory for RAW print jobs (CLAUDE_v3.md §4.2).
+/// Watches the Windows spool directory for RAW print jobs (docs/legacy/CLAUDE_v3.md §4.2).
 /// </summary>
 /// <remarks>
 /// <para>

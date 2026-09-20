@@ -13,7 +13,7 @@
     (d) the API answers on the machine's LAN address, not only on localhost
     (e) Windows Firewall allows the API port inbound on Private networks
 
-  Check (b) is the one that validates CLAUDE_v3.md §3's choice of a Windows Service
+  Check (b) is the one that validates docs/legacy/CLAUDE_v3.md §3's choice of a Windows Service
   over a Tauri sidecar. If it fails, that decision is wrong and the Loyalty Station
   cannot be built on it.
 
@@ -26,9 +26,9 @@
 
 [CmdletBinding()]
 param(
-    [string] $ServiceName = 'WalaaApi',
-    [string] $DataDir = (Join-Path $env:ProgramData 'Walaa'),
-    [string] $FirewallRule = 'Walaa Loyalty API'
+    [string] $ServiceName = 'LoyaltyProApi',
+    [string] $DataDir = (Join-Path $env:ProgramData 'LoyaltyPro'),
+    [string] $FirewallRule = 'Loyalty Pro API'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -76,7 +76,7 @@ Write-Check ($null -ne $service) "the service $ServiceName is registered"
 if ($null -eq $service) {
     Write-Host ""
     Write-Host "  Nothing further can be checked. Install with:" -ForegroundColor Red
-    Write-Host "    walaa-service.exe install" -ForegroundColor Red
+    Write-Host "    loyalty-pro-service.exe install" -ForegroundColor Red
     Write-Host ""
     exit 1
 }
@@ -132,16 +132,16 @@ if ($apiProcess) {
     }
 }
 # The dashboard must be irrelevant to the API being up. That is the entire argument
-# for a service over a Tauri sidecar (CLAUDE_v3.md §3).
-$dashboard = Get-Process 'walaa-manager' -ErrorAction SilentlyContinue
+# for a service over a Tauri sidecar (docs/legacy/CLAUDE_v3.md §3).
+$dashboard = Get-Process 'loyalty-pro-manager' -ErrorAction SilentlyContinue
 Write-Check ($null -eq $dashboard) "the manager dashboard is NOT running" $(
-    if ($dashboard) { "walaa-manager.exe is open - close it and re-run for a clean result" } else { "the API is up with the dashboard closed" }
+    if ($dashboard) { "loyalty-pro-manager.exe is open - close it and re-run for a clean result" } else { "the API is up with the dashboard closed" }
 )
 
 # ── configuration, needed by (c) (d) (e) ────────────────────────────────────────
-$envFile = Join-Path $DataDir 'walaa.env'
-$configuredPort = 4000
-$databasePath = Join-Path $DataDir 'walaa.db'
+$envFile = Join-Path $DataDir 'loyalty-pro.env'
+$configuredPort = 4100
+$databasePath = Join-Path $DataDir 'loyalty-pro.db'
 
 if (Test-Path $envFile) {
     foreach ($line in Get-Content $envFile) {
@@ -256,7 +256,7 @@ Write-Check $lanOk "the API answers on the machine's own LAN address" $lanEviden
 if ($candidates) {
     $urls = ($candidates | ForEach-Object { "http://{0}:{1}/health  ({2})" -f $_.IPAddress, $configuredPort, $_.InterfaceAlias }) -join "`n        "
     Write-Manual "the API answers from a SECOND DEVICE on the store network" (
-        "On the tablet, open the address on the shop's own network:`n        {0}`n        Expect: {{`"status`":`"ok`",`"service`":`"walaa-api`"}}" -f $urls
+        "On the tablet, open the address on the shop's own network:`n        {0}`n        Expect: {{`"status`":`"ok`",`"service`":`"loyalty-pro-api`"}}" -f $urls
     )
 } else {
     Write-Check $false "the machine has a usable LAN address" "only loopback or virtual adapters found"

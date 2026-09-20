@@ -2,7 +2,7 @@ namespace Walaa.Agent.Parsing;
 
 /// <summary>
 /// Strips ESC/POS control sequences from a captured print job, leaving the text
-/// (CLAUDE_v3.md §4.5 step 1).
+/// (docs/legacy/CLAUDE_v3.md §4.5 step 1).
 /// </summary>
 /// <remarks>
 /// <para>

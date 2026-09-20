@@ -28,8 +28,8 @@ import { fileURLToPath } from 'node:url';
 const REPO = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const STAGE = join(REPO, 'packaging', 'dist', 'runtime');
 // Outside the repository on purpose — see (1) above. `E:` because `C:` on this
-// machine has no free space (CLAUDE_v3.md §12.1).
-const CLEANROOM = join(process.env.WALAA_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom');
+// machine has no free space (docs/legacy/CLAUDE_v3.md §12.1).
+const CLEANROOM = join(process.env.LOYALTY_CLEANROOM_DIR ?? tmpdir(), 'walaa-cleanroom');
 const PROGRAM = join(CLEANROOM, 'program');
 const DATA = join(CLEANROOM, 'data');
 const PORT = 41234;
@@ -46,21 +46,21 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /**
  * A licence code for the device the staged runtime reports, or null.
  *
- * `WALAA_VERIFY_LICENSE_CODE` wins: with the production key embedded, the provider
+ * `LOYALTY_VERIFY_LICENSE_CODE` wins: with the production key embedded, the provider
  * issues one for the build machine and passes it in. Otherwise, and only while the
  * staged module still embeds the DEVELOPMENT key, one is issued here with the committed
  * development issuer — whose codes that build, and no production build, accepts.
  */
 function licenceCodeFor(deviceId) {
-  if (process.env.WALAA_VERIFY_LICENSE_CODE) {
-    return { code: process.env.WALAA_VERIFY_LICENSE_CODE, source: 'WALAA_VERIFY_LICENSE_CODE' };
+  if (process.env.LOYALTY_VERIFY_LICENSE_CODE) {
+    return { code: process.env.LOYALTY_VERIFY_LICENSE_CODE, source: 'LOYALTY_VERIFY_LICENSE_CODE' };
   }
   delete process.env.VITEST;
-  const staged = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@walaa', 'license-native'));
+  const staged = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@loyalty-pro', 'license-native'));
   const key = staged.keyInfo();
   const issuer = join(REPO, 'tools', 'license-issuer', 'target', 'release', 'license-issuer.exe');
   if (key.kind !== 'development' || !deviceId || !existsSync(issuer)) {
-    return { code: null, source: `${key.kind} key, no WALAA_VERIFY_LICENSE_CODE` };
+    return { code: null, source: `${key.kind} key, no LOYALTY_VERIFY_LICENSE_CODE` };
   }
   /*
     A copy of the development key with an empty log, every run: `issue` is a device's
@@ -100,8 +100,8 @@ async function waitForHealth(timeoutMs) {
 
 console.log('\nWalaa — clean-room verification of the staged runtime\n');
 
-if (!existsSync(join(STAGE, 'walaa-api.cjs'))) {
-  console.error('  staged runtime not found. Run `pnpm --filter @walaa/packaging stage` first.\n');
+if (!existsSync(join(STAGE, 'loyalty-pro-api.cjs'))) {
+  console.error('  staged runtime not found. Run `pnpm --filter @loyalty-pro/packaging stage` first.\n');
   process.exit(1);
 }
 
@@ -113,25 +113,25 @@ console.log(`  clean room: ${CLEANROOM}`);
 
 // The environment file the installer would have written, with per-installation
 // secrets. Note there is no `.env` anywhere above this directory.
-const envFile = join(DATA, 'walaa.env');
+const envFile = join(DATA, 'loyalty-pro.env');
 writeFileSync(
   envFile,
-  readFileSync(join(PROGRAM, 'walaa.env.template'), 'utf8')
-    // The database name differs by build kind — `walaa.db` for production,
-    // `walaa-demo.db` for a demo — so the installer fills this in rather than the
+  readFileSync(join(PROGRAM, 'loyalty-pro.env.template'), 'utf8')
+    // The database name differs by build kind — `loyalty-pro.db` for production,
+    // `loyalty-pro-demo.db` for a demo — so the installer fills this in rather than the
     // template carrying one name that both would have to share. That sharing is what
     // let a demo silently adopt a database it had not placed. This is the production
-    // path, so: walaa.db.
-    .replace('{{DATABASE_FILE}}', join(DATA, 'walaa.db').replace(/\\/g, '/'))
+    // path, so: loyalty-pro.db.
+    .replace('{{DATABASE_FILE}}', join(DATA, 'loyalty-pro.db').replace(/\\/g, '/'))
     .replace('{{DATA_DIR}}', DATA.replace(/\\/g, '/'))
     .replace('{{JWT_ACCESS_SECRET}}', secret())
     .replace('{{JWT_REFRESH_SECRET}}', secret())
     .replace('{{QR_TOKEN_SECRET}}', secret())
-    .replace('API_PORT=4000', `API_PORT=${PORT}`),
+    .replace('API_PORT=4100', `API_PORT=${PORT}`),
 );
 
 // ── Static checks ───────────────────────────────────────────────────────────────
-const bundle = readFileSync(join(PROGRAM, 'walaa-api.cjs'), 'utf8');
+const bundle = readFileSync(join(PROGRAM, 'loyalty-pro-api.cjs'), 'utf8');
 check(
   !bundle.includes(REPO) && !bundle.toLowerCase().includes('e:\\\\loyalty'),
   'the bundle embeds no path back into the build machine',
@@ -151,13 +151,13 @@ const childEnv = {
   TEMP: process.env.TEMP ?? CLEANROOM,
   TMP: process.env.TMP ?? CLEANROOM,
   PATH: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32'),
-  WALAA_DATA_DIR: DATA,
-  WALAA_ENV_FILE: envFile,
-  WALAA_MIGRATIONS_DIR: join(PROGRAM, 'migrations'),
+  LOYALTY_DATA_DIR: DATA,
+  LOYALTY_ENV_FILE: envFile,
+  LOYALTY_MIGRATIONS_DIR: join(PROGRAM, 'migrations'),
 };
 
 const output = [];
-const child = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], {
+const child = spawn(join(PROGRAM, 'node.exe'), ['loyalty-pro-api.cjs'], {
   cwd: PROGRAM,
   env: childEnv,
   windowsHide: true,
@@ -178,9 +178,9 @@ try {
     JSON.stringify(health),
   );
 
-  check(existsSync(join(DATA, 'walaa.db')), 'the database file was created in the data directory');
+  check(existsSync(join(DATA, 'loyalty-pro.db')), 'the database file was created in the data directory');
   check(
-    existsSync(join(DATA, 'walaa.db-wal')),
+    existsSync(join(DATA, 'loyalty-pro.db-wal')),
     'WAL mode is active',
     'the -wal sidecar exists (§12.5)',
   );
@@ -436,7 +436,7 @@ try {
   // Second boot: the migrator must find nothing to do.
   child.kill();
   await sleep(1500);
-  const second = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], {
+  const second = spawn(join(PROGRAM, 'node.exe'), ['loyalty-pro-api.cjs'], {
     cwd: PROGRAM,
     env: childEnv,
     windowsHide: true,
@@ -477,7 +477,7 @@ try {
 */
 async function bootService(label) {
   const lines = [];
-  const proc = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], { cwd: PROGRAM, env: childEnv, windowsHide: true });
+  const proc = spawn(join(PROGRAM, 'node.exe'), ['loyalty-pro-api.cjs'], { cwd: PROGRAM, env: childEnv, windowsHide: true });
   proc.stdout.on('data', (chunk) => lines.push(chunk.toString()));
   proc.stderr.on('data', (chunk) => lines.push(chunk.toString()));
   try {
@@ -514,16 +514,16 @@ async function tokenFor(username, password) {
   return (await api('POST', '/auth/login', { username, password })).json?.tokens?.accessToken ?? null;
 }
 
-/** A phone code for `deviceId`: from WALAA_VERIFY_UNLOCK_CODE, or the development issuer. */
+/** A phone code for `deviceId`: from LOYALTY_VERIFY_UNLOCK_CODE, or the development issuer. */
 function phoneCodeFor(deviceId) {
-  if (process.env.WALAA_VERIFY_UNLOCK_CODE) {
-    return { code: process.env.WALAA_VERIFY_UNLOCK_CODE, source: 'WALAA_VERIFY_UNLOCK_CODE' };
+  if (process.env.LOYALTY_VERIFY_UNLOCK_CODE) {
+    return { code: process.env.LOYALTY_VERIFY_UNLOCK_CODE, source: 'LOYALTY_VERIFY_UNLOCK_CODE' };
   }
   delete process.env.VITEST;
-  const key = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@walaa', 'license-native')).keyInfo();
+  const key = createRequire(import.meta.url)(join(STAGE, 'node_modules', '@loyalty-pro', 'license-native')).keyInfo();
   const issuer = join(REPO, 'tools', 'license-issuer', 'target', 'release', 'license-issuer.exe');
   if (key.kind !== 'development' || !existsSync(issuer)) {
-    return { code: null, source: `${key.kind} key, no WALAA_VERIFY_UNLOCK_CODE` };
+    return { code: null, source: `${key.kind} key, no LOYALTY_VERIFY_UNLOCK_CODE` };
   }
   const output = execFileSync(
     issuer,
@@ -556,7 +556,7 @@ async function sellOnce(invoiceId, phone) {
 async function recoveryDrill() {
   // 1. Destroy the licence while the service is stopped.
   const { DatabaseSync } = await import('node:sqlite');
-  const db = new DatabaseSync(join(DATA, 'walaa.db'));
+  const db = new DatabaseSync(join(DATA, 'loyalty-pro.db'));
   db.exec('DELETE FROM license_activation; DELETE FROM license_unlock;');
   db.close();
   writeFileSync(join(DATA, 'license-codes.json'), '   destroyed');
@@ -584,8 +584,8 @@ async function recoveryDrill() {
   // With the production key the provider supplies this machine's code in the environment,
   // and `phoneCodeFor` would hand back that same code for any device — accepted, because it
   // IS this machine's. Another shop's code has to be issued for another shop.
-  const other = process.env.WALAA_VERIFY_UNLOCK_CODE
-    ? (process.env.WALAA_VERIFY_OTHER_UNLOCK_CODE ?? null)
+  const other = process.env.LOYALTY_VERIFY_UNLOCK_CODE
+    ? (process.env.LOYALTY_VERIFY_OTHER_UNLOCK_CODE ?? null)
     : phoneCodeFor('WL-2222-2222').code;
   const wrongShop = other ? await api('POST', '/license/unlock', { code: other }, owner) : { status: 0, json: null };
   check(
@@ -617,7 +617,7 @@ async function recoveryDrill() {
   await sleep(1500);
 
   // 5. A broken installation: the licensing module itself is gone.
-  rmSync(join(PROGRAM, 'node_modules', '@walaa', 'license-native', 'walaa-license.node'), { force: true });
+  rmSync(join(PROGRAM, 'node_modules', '@loyalty-pro', 'license-native', 'loyalty-pro-license.node'), { force: true });
   const fourth = await bootService('missing licensing module');
   const degraded = await api('GET', '/license', undefined, await tokenFor('cleanowner', 'Clean-room!2026'));
   check(
@@ -640,7 +640,7 @@ async function recoveryDrill() {
   ── A configuration failure must leave a readable reason ─────────────────────
 
   Configuration is resolved while the module graph is being evaluated, so a missing
-  `walaa.env` throws before `main` runs. `server.ts` defers the application behind a
+  `loyalty-pro.env` throws before `main` runs. `server.ts` defers the application behind a
   dynamic import specifically so that throw is catchable and gets written down — and
   that only works if the bundler keeps the import lazy rather than hoisting it.
 
@@ -654,12 +654,12 @@ async function recoveryDrill() {
   const failDir = join(CLEANROOM, 'bootfail');
   mkdirSync(join(failDir, 'logs'), { recursive: true });
 
-  const dead = spawn(join(PROGRAM, 'node.exe'), ['walaa-api.cjs'], {
+  const dead = spawn(join(PROGRAM, 'node.exe'), ['loyalty-pro-api.cjs'], {
     cwd: PROGRAM,
     env: {
       ...childEnv,
-      WALAA_DATA_DIR: failDir,
-      WALAA_ENV_FILE: join(failDir, 'no-such-file.env'),
+      LOYALTY_DATA_DIR: failDir,
+      LOYALTY_ENV_FILE: join(failDir, 'no-such-file.env'),
     },
     windowsHide: true,
   });
@@ -671,7 +671,7 @@ async function recoveryDrill() {
   if (existsSync(recorded)) {
     const reason = JSON.parse(readFileSync(recorded, 'utf8').replace(/^﻿/, '')).reason ?? '';
     /*
-      This asserted `reason.includes('WALAA_ENV_FILE')` — that the sentence the merchant
+      This asserted `reason.includes('LOYALTY_ENV_FILE')` — that the sentence the merchant
       reads contained an English environment-variable name. A check that REQUIRES the
       leak is the clearest kind of proxy: it measured "the message is specific" by the
       presence of a token nobody at the counter can read, and it would have failed the
@@ -682,7 +682,7 @@ async function recoveryDrill() {
     */
     check(
       reason.includes('ملف إعدادات البرنامج') &&
-        !/WALAA_|[A-Za-z]:[\\/]/.test(reason),
+        !/LOYALTY_|[A-Za-z]:[\\/]/.test(reason),
       'the recorded reason names the real cause in Arabic, with no variable name or path',
       reason,
     );

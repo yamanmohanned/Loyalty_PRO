@@ -11,7 +11,7 @@
  *  1. **Every pixel comes from the real API.** The only exception is the three state
  *     frames (loading / empty / error), which are produced by holding, replacing or
  *     failing the `/reports/overview` response at the network layer. Those three are
- *     labelled as such in `VISUAL-QA.md`, because a screenshot of an empty state is a
+ *     labelled as such in `docs/legacy/VISUAL-QA.md`, because a screenshot of an empty state is a
  *     picture of a UI state and must never be mistaken for a picture of the data.
  *
  *  2. **"Full page" means a tall viewport, not a tall document.** This app pins
@@ -22,8 +22,8 @@
  *     and captures. That is a real render at that height, not a stitch.
  *
  * Usage:  node design/visual-qa/capture.mjs
- * Needs:  API on :4001 (pnpm --filter @walaa/api dev:alt)
- *         dashboard on :5180 (pnpm --filter @walaa/manager-desktop dev:alt)
+ * Needs:  API on :4101 (pnpm --filter @loyalty-pro/api dev:alt)
+ *         dashboard on :5190 (pnpm --filter @loyalty-pro/manager-desktop dev:alt)
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -33,11 +33,11 @@ import { launch, sleep } from './cdp.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, 'shots');
-const APP = 'http://localhost:5180';
-const API = process.env.WALAA_QA_API ?? 'http://localhost:4001';
+const APP = 'http://localhost:5190';
+const API = process.env.LOYALTY_QA_API ?? 'http://localhost:4101';
 const CREDENTIALS = {
   username: 'manager',
-  password: process.env.WALAA_QA_PASSWORD ?? 'Walaa!Dev2026',
+  password: process.env.LOYALTY_QA_PASSWORD ?? 'Walaa!Dev2026',
 };
 
 // 1366 is the merchant's likely laptop, so it is a review width, not a spot check.
@@ -321,7 +321,7 @@ async function withInterception(mode, fn) {
           **The injected response has to carry CORS headers, or it is not an empty
           state — it is an error state wearing one.**
 
-          The dashboard runs on :5180 and the API on :4001, so every call is
+          The dashboard runs on :5190 and the API on :4101, so every call is
           cross-origin and the bearer token makes it preflighted. The first attempt
           fulfilled the GET with a bare `content-type`, the browser refused the
           response for want of `access-control-allow-origin`, `api.get` threw, and
@@ -330,7 +330,7 @@ async function withInterception(mode, fn) {
           wrong in a review sheet.
         */
         const cors = [
-          { name: 'access-control-allow-origin', value: 'http://localhost:5180' },
+          { name: 'access-control-allow-origin', value: 'http://localhost:5190' },
           { name: 'access-control-allow-credentials', value: 'true' },
           { name: 'access-control-allow-headers', value: '*' },
           { name: 'access-control-allow-methods', value: 'GET,OPTIONS' },

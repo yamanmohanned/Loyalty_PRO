@@ -1,6 +1,6 @@
 /**
  * Dev-only: put the backup key ceremony back to its first-run state
- * (CLAUDE_v3.md §12.19).
+ * (docs/legacy/CLAUDE_v3.md §12.19).
  *
  * The ceremony is deliberately one-way in normal use — that is the whole point of it —
  * so redoing it needs a tool that says out loud what it is doing. Two things make the

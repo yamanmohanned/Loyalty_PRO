@@ -22,7 +22,7 @@ import {
 /**
  * The packaging spike's central claim, tested rather than asserted: a machine with
  * **no Prisma CLI, no repository and no database file** can be brought to a working
- * schema by the service itself (CLAUDE_v3.md §12.3, §12.11).
+ * schema by the service itself (docs/legacy/CLAUDE_v3.md §12.3, §12.11).
  *
  * The interesting case is the fresh one. `prisma migrate deploy` is what provisions
  * every database in development and in CI, so nothing else in the suite would notice
@@ -276,27 +276,27 @@ describe('path resolution', () => {
     // a relative path — the service would then create its database beside whatever
     // directory it happened to start in. The bug is invisible on any machine where
     // PROGRAMDATA is set, which is every machine except a stripped service host.
-    const previousData = process.env.WALAA_DATA_DIR;
+    const previousData = process.env.LOYALTY_DATA_DIR;
     const previousProgramData = process.env.PROGRAMDATA;
-    delete process.env.WALAA_DATA_DIR;
+    delete process.env.LOYALTY_DATA_DIR;
     delete process.env.PROGRAMDATA;
     try {
       const dir = resolveDataDir();
       expect(isAbsolute(dir)).toBe(true);
       // `isAbsolute` is the assertion that matters: the bug produced
       // `C:ProgramDataWalaa`, a DRIVE-RELATIVE path, which is not absolute.
-      expect(dir.endsWith('Walaa')).toBe(true);
+      expect(dir.endsWith('LoyaltyPro')).toBe(true);
     } finally {
-      if (previousData !== undefined) process.env.WALAA_DATA_DIR = previousData;
+      if (previousData !== undefined) process.env.LOYALTY_DATA_DIR = previousData;
       if (previousProgramData !== undefined) process.env.PROGRAMDATA = previousProgramData;
     }
   });
 
   it('reads a Windows-absolute path out of a file: URL without mangling the drive', () => {
-    expect(sqlitePathFromUrl('file:C:/ProgramData/Walaa/walaa.db')).toBe(
-      'C:/ProgramData/Walaa/walaa.db',
+    expect(sqlitePathFromUrl('file:C:/ProgramData/LoyaltyPro/loyalty-pro.db')).toBe(
+      'C:/ProgramData/LoyaltyPro/loyalty-pro.db',
     );
-    expect(sqlitePathFromUrl('file:./walaa.db')).toBe('./walaa.db');
+    expect(sqlitePathFromUrl('file:./loyalty-pro.db')).toBe('./loyalty-pro.db');
     expect(sqlitePathFromUrl('postgresql://localhost/walaa')).toBeNull();
   });
 });
@@ -329,7 +329,7 @@ describe('path resolution', () => {
 describe('migrations preserve existing merchant data (§10.1)', () => {
   it('leaves vouchers, transactions and discount figures intact', async () => {
     const dir = scratch();
-    const databaseFile = join(dir, 'walaa.db');
+    const databaseFile = join(dir, 'loyalty-pro.db');
     const client = clientFor(databaseFile);
 
     const migrations = readMigrationDirectory(resolveMigrationsDir() as string);
@@ -489,7 +489,7 @@ describe('migrations preserve existing merchant data (§10.1)', () => {
 describe('a pending migration is refused without a snapshot (§10.2)', () => {
   it('lists exactly what is pending, and nothing once applied', async () => {
     const dir = scratch();
-    const client = clientFor(join(dir, 'walaa.db'));
+    const client = clientFor(join(dir, 'loyalty-pro.db'));
 
     const all = readMigrationDirectory(resolveMigrationsDir() as string);
     const previousDir = join(dir, 'previous');
@@ -511,15 +511,15 @@ describe('a pending migration is refused without a snapshot (§10.2)', () => {
 
   it('fails closed when the snapshot cannot be written, and changes nothing', async () => {
     const dir = scratch();
-    const client = clientFor(join(dir, 'walaa.db'));
+    const client = clientFor(join(dir, 'loyalty-pro.db'));
 
     // A FILE where the data directory should be: the snapshot cannot be created, and
     // no other part of the boot touches this path.
     const blocked = join(dir, 'blocked');
     writeFileSync(blocked, 'not a directory', 'utf8');
 
-    const previousDataDir = process.env.WALAA_DATA_DIR;
-    process.env.WALAA_DATA_DIR = blocked;
+    const previousDataDir = process.env.LOYALTY_DATA_DIR;
+    process.env.LOYALTY_DATA_DIR = blocked;
     try {
       // The test database is already fully migrated, so nothing is pending against it
       // and `ensureDatabaseReady` must NOT attempt a snapshot at all.
@@ -553,8 +553,8 @@ describe('a pending migration is refused without a snapshot (§10.2)', () => {
       );
       expect(applied.map((r) => r.migration_name)).not.toContain(pendingName);
     } finally {
-      if (previousDataDir === undefined) delete process.env.WALAA_DATA_DIR;
-      else process.env.WALAA_DATA_DIR = previousDataDir;
+      if (previousDataDir === undefined) delete process.env.LOYALTY_DATA_DIR;
+      else process.env.LOYALTY_DATA_DIR = previousDataDir;
     }
   });
 });

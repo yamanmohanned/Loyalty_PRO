@@ -25,11 +25,11 @@ import type {
   RestoreOutcome,
   StagedRestore,
   VerificationResult,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { KeyConfirmedSummary } from './KeyCeremony';
 
 /**
- * Backup (CLAUDE_v3.md §7.3, §12.17–§12.21).
+ * Backup (docs/legacy/CLAUDE_v3.md §7.3, §12.17–§12.21).
  *
  * §5.1 put every byte this shop owns on one machine, and §7.3 answered that backup is
  * therefore mandatory rather than optional. This screen leads with the risk, and it is

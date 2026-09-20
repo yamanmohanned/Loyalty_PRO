@@ -25,7 +25,7 @@
  * text field anywhere in a demo build into which a real server URL could be typed.
  *
  * **A production build cannot become a demo.** The flag is compiled in. Separately,
- * the API's own demo endpoints are registered only when `WALAA_DEMO=1` is set in the
+ * the API's own demo endpoints are registered only when `LOYALTY_DEMO=1` is set in the
  * service environment, and the destructive one re-checks the open database filename
  * before it deletes anything. Three independent things have to be wrong at once.
  */
@@ -35,12 +35,12 @@ export const IS_DEMO: boolean = __DEMO_MODE__;
 /**
  * Used only when the shell cannot be asked which port it chose.
  *
- * The real port is picked at launch — see `demoPort()` in `config.ts`. A fixed 4000
+ * The real port is picked at launch — see `demoPort()` in `config.ts`. A fixed 4100
  * was the previous behaviour and it is exactly how a demo dies permanently on a
  * machine where something else already owns that port, which is not rare. This
  * constant exists for the browser dev server, where there is no shell to ask.
  */
-export const DEMO_API_FALLBACK_PORT = 4000;
+export const DEMO_API_FALLBACK_PORT = 4100;
 
 /** Remembered per machine, so the welcome line appears once and never again. */
-export const DEMO_NOTICE_DISMISSED_KEY = 'walaa.demo.noticeDismissed';
+export const DEMO_NOTICE_DISMISSED_KEY = 'loyalty.demo.noticeDismissed';

@@ -1,6 +1,6 @@
 [package]
 name = "license-issuer"
-version = "0.3.1"
+version = "0.1.0"
 edition = "2021"
 publish = false
 description = "Issues ولاء license codes. Holds the private key. Never shipped with the application."
@@ -10,7 +10,7 @@ name = "license-issuer"
 path = "src/main.rs"
 
 [dependencies]
-walaa-license = { path = "../../crates/walaa-license" }
+loyalty-pro-license = { path = "../../crates/loyalty-pro-license" }
 argon2 = "0.5"
 base64 = "0.22"
 chacha20poly1305 = "0.10"

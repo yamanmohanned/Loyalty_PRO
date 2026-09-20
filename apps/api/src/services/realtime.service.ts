@@ -1,7 +1,7 @@
-import type { RealtimeEvent } from '@walaa/shared-types';
+import type { RealtimeEvent } from '@loyalty-pro/shared-types';
 
 /**
- * Real-time broadcast (CLAUDE_v3.md §7.2).
+ * Real-time broadcast (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * The Station and Agent hold persistent WebSocket connections; the manager
  * dashboard updates in under a second with no polling. This module owns the

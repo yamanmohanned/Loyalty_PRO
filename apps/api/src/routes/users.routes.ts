@@ -6,7 +6,7 @@ import {
   type StaffListResponse,
   type UpdateUserRequest,
   UpdateUserRequestSchema,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { createStaffUser, listStaff, updateStaffUser } from '../services/user.service';
 

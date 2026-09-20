@@ -18,7 +18,7 @@ import { resolveDataDir } from '../config/paths';
  * It used to be a function inside `server.ts`, wired up as `main().catch(...)`. That
  * covers every failure inside `main` and misses an entire class in front of it:
  * **configuration is resolved at module scope**, by this module's own imports and by
- * `jwt.ts` and others, so a bad or missing `walaa.env` throws while the module graph is
+ * `jwt.ts` and others, so a bad or missing `loyalty-pro.env` throws while the module graph is
  * still being evaluated — before `main` is ever called, and before any `.catch` is
  * attached.
  *

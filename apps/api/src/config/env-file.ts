@@ -13,7 +13,7 @@ import { resolveEnvFile } from './paths';
  *
  * ## Why temp-then-rename is safe here, specifically
  *
- * `walaa.env` holds the JWT signing keys. Getting its permissions wrong would let any
+ * `loyalty-pro.env` holds the JWT signing keys. Getting its permissions wrong would let any
  * local account mint tokens, so this deserves more than a shrug.
  *
  * The installer runs `icacls` on `%PROGRAMDATA%\Walaa` with `/inheritance:r` and grants
@@ -30,7 +30,7 @@ import { resolveEnvFile } from './paths';
  *
  * An in-place truncate-and-write would also preserve the ACL, and is rejected for a
  * different reason: a crash midway through leaves a half-written file, and a
- * `walaa.env` missing its JWT secrets does not start the till in the morning.
+ * `loyalty-pro.env` missing its JWT secrets does not start the till in the morning.
  */
 
 /** The characters a value may contain without quoting. Anything else is rejected. */

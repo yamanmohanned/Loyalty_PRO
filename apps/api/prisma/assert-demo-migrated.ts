@@ -21,7 +21,7 @@
  * recorded none of it, so every migration on disk looked pending. Running
  * `ensureDatabaseReady` against the file once, at build time, reconciles the two.
  *
- *   pnpm --filter @walaa/api db:seed:demo   (runs this at the end)
+ *   pnpm --filter @loyalty-pro/api db:seed:demo   (runs this at the end)
  *   node packaging/scripts/stage.mjs        (runs it again before shipping the file)
  */
 
@@ -45,8 +45,8 @@ async function main(): Promise<void> {
 
     This assertion once reported "0 pending migrations" while the installed product
     applied six on its first launch. Both statements were true. They were about
-    different files: the build checked `walaa-demo.db`, and the service opened
-    `walaa.db`. An assertion that does not say which file it examined cannot be
+    different files: the build checked `loyalty-pro-demo.db`, and the service opened
+    `loyalty-pro.db`. An assertion that does not say which file it examined cannot be
     caught disagreeing with the runtime, so it says so now, and the runtime guard
     prints the same line — one string to compare across the two.
   */
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     console.error('  BUILD FAILED: the demo database carries no provenance marker.');
     console.error('  The runtime refuses any demo database it cannot prove it placed,');
     console.error('  so shipping this file would produce an installer that will not start.');
-    console.error('  Rebuild it with `pnpm --filter @walaa/api db:seed:demo`.');
+    console.error('  Rebuild it with `pnpm --filter @loyalty-pro/api db:seed:demo`.');
     console.error('');
     process.exitCode = 1;
     return;

@@ -28,7 +28,7 @@ const { PrismaClient } = require('@prisma/client');
 const PORT = Number(process.argv[2] ?? 4971);
 const SCRATCH = 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad';
 const ROOT = `${SCRATCH}/matrix`;
-const DB = `${ROOT}/walaa.db`;
+const DB = `${ROOT}/loyalty-pro.db`;
 const ENV = `${ROOT}/env`;
 const BACKUPS = `${ROOT}/backups`;
 const RUNTIME = 'E:/loyalty/packaging/dist/runtime';
@@ -46,10 +46,10 @@ const hardKill = (pid) => {
 
 /** The staged service, exactly as the installer ships it: node.exe + the CJS bundle. */
 const start = () =>
-  spawn(`${RUNTIME}/node.exe`, ['walaa-api.cjs'], {
+  spawn(`${RUNTIME}/node.exe`, ['loyalty-pro-api.cjs'], {
     cwd: RUNTIME,
     /*
-      `WALAA_SUPERVISED=1` because that is how the service host runs it.
+      `LOYALTY_SUPERVISED=1` because that is how the service host runs it.
 
       Windows has no SIGTERM and a service process has no console, so the supervisor's
       only way to ask for a graceful stop is to close the child's stdin — and the API
@@ -57,7 +57,7 @@ const start = () =>
       service ignored it, and the "clean shutdown" step measured a hard kill: the WAL
       was still there afterwards, correctly, because nothing had checkpointed it.
     */
-    env: { ...process.env, WALAA_ENV_FILE: ENV, WALAA_DATA_DIR: ROOT, WALAA_SUPERVISED: '1' },
+    env: { ...process.env, LOYALTY_ENV_FILE: ENV, LOYALTY_DATA_DIR: ROOT, LOYALTY_SUPERVISED: '1' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
@@ -323,7 +323,7 @@ const before = await query(async (db) => ({
 
 // ── 11. Restore the backup into a clean directory and check the contents ───
 {
-  const target = `${ROOT}/restored/walaa.db`;
+  const target = `${ROOT}/restored/loyalty-pro.db`;
   rmSync(`${ROOT}/restored`, { recursive: true, force: true });
   mkdirSync(`${ROOT}/restored`, { recursive: true });
 

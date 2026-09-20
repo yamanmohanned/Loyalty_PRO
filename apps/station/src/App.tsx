@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { LogOut, Search } from 'lucide-react';
-import type { AuthUser, LicenseState, PaperWidth as PaperWidthValue, SyncState } from '@walaa/shared-types';
+import type { AuthUser, LicenseState, PaperWidth as PaperWidthValue, SyncState } from '@loyalty-pro/shared-types';
 import { api, restoreSession, setTokens, setUnauthenticatedHandler } from './lib/api';
 import { resolveApiUrl } from './lib/config';
 import { locale } from './lib/locale';

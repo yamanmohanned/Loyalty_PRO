@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import { rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
-import type { DriveAccount, DriveTestStep } from '@walaa/shared-types';
+import type { DriveAccount, DriveTestStep } from '@loyalty-pro/shared-types';
 import type { BackupDestination, DestinationKind, StoredBackup } from './destinations';
 import {
   asDriveError,
@@ -16,7 +16,7 @@ import { readClient, readConnection, recordAttempt, type DriveConnection } from 
 import { licensedFeature } from '../license.service';
 
 /**
- * Google Drive as a backup destination (CLAUDE_v3.md §7.3).
+ * Google Drive as a backup destination (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * §7.3 requires an encrypted copy off the machine, and this is the off-machine leg. What
  * it uploads is already ciphertext — `archive.ts` runs before any destination sees a
@@ -484,7 +484,7 @@ export interface DriveClient {
  * The OAuth client, or null when none is set up.
  *
  * **The encrypted store first; the environment only outside production.** A client
- * secret in `walaa.env` is a secret in a plain configuration file, and on a shop's
+ * secret in `loyalty-pro.env` is a secret in a plain configuration file, and on a shop's
  * machine it is ignored — the owner enters it in Settings, where it is stored sealed
  * (`drive-store.ts`). The environment remains for the test suite and a developer's
  * stand-in for Google, which is the only place it was ever meant to be.

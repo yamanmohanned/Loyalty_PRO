@@ -43,8 +43,8 @@ afterEach(() => {
 /** A copy of the shipped template — a real, migrated, empty database. */
 function templateAt(dir: string): string {
   const template = resolveDatabaseTemplate();
-  if (!template) throw new Error('no shipped template — run `pnpm --filter @walaa/api db:template`');
-  const path = join(dir, 'walaa.db');
+  if (!template) throw new Error('no shipped template — run `pnpm --filter @loyalty-pro/api db:template`');
+  const path = join(dir, 'loyalty-pro.db');
   copyFileSync(template, path);
   return path;
 }
@@ -131,7 +131,7 @@ describe('the census', () => {
 
   it('reports unreadable rather than empty when the file will not answer', async () => {
     const dir = scratch();
-    const path = join(dir, 'walaa.db');
+    const path = join(dir, 'loyalty-pro.db');
     // Not a database at all — the shape a truncated copy or a half-written restore has.
     writeFileSync(path, 'this is not a SQLite file, it is a text file with a .db name');
 
@@ -160,7 +160,7 @@ describe('the triage', () => {
     expect(result.verdict).toBe('superseded');
     // Renamed beside itself, never deleted: if this judgement is ever wrong the bytes
     // are still on the disk.
-    expect(result.parkedAt).toMatch(/walaa\.db\.superseded-/);
+    expect(result.parkedAt).toMatch(/loyalty-pro\.db\.superseded-/);
     expect(existsSync(result.parkedAt ?? '')).toBe(true);
     // And a usable database is in its place, so the merchant meets the setup screen
     // rather than a refusal.
@@ -200,7 +200,7 @@ describe('the triage', () => {
 
   it('REFUSES when the file cannot be read, rather than reading that as empty', async () => {
     const dir = scratch();
-    const path = join(dir, 'walaa.db');
+    const path = join(dir, 'loyalty-pro.db');
     writeFileSync(path, 'not a database');
 
     const result = await triage(path);

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { createPortal } from 'react-dom';
 
 /**
- * Printing to the station's thermal printer (CLAUDE_v3.md §6.3).
+ * Printing to the station's thermal printer (docs/legacy/CLAUDE_v3.md §6.3).
  *
  * The browser's own print pipeline drives the printer. That is a deliberate choice
  * over ESC/POS: a web app cannot open a USB device, and asking a shop to install a

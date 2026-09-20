@@ -2,7 +2,7 @@ import { copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /**
- * Where backups go (CLAUDE_v3.md §7.3).
+ * Where backups go (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * §7.3 asks for 3-2-1: Drive, plus a local copy, plus an external USB copy. "One medium
  * is never enough" is the requirement, and it has a consequence the interface has to

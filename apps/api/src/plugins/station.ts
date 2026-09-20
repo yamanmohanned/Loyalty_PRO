@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { resolveStationDir } from '../config/paths';
 
 /**
- * Serves the Loyalty Station from the API itself (CLAUDE_v3.md §12.3).
+ * Serves the Loyalty Station from the API itself (docs/legacy/CLAUDE_v3.md §12.3).
  *
  * The tablet browses to `http://<manager-lan-ip>:<port>` and gets the app. There is
  * no second web server to install, keep running, or explain to a shop owner — one

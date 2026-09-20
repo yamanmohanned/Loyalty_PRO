@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
-import { summarizeFieldErrors } from '@walaa/shared-types';
+import { summarizeFieldErrors } from '@loyalty-pro/shared-types';
 import { ApiRequestError } from './api';
 import { locale } from './locale';
 
@@ -22,7 +22,7 @@ import { locale } from './locale';
  *
  * ── Client rules and server rules are the same object ────────────────────────
  *
- * `validate()` parses with a schema out of `@walaa/shared-types` — the SAME schema the
+ * `validate()` parses with a schema out of `@loyalty-pro/shared-types` — the SAME schema the
  * route validates with, not a copy of its rules. A value this form accepts therefore
  * cannot be refused by the API for a shape reason, because the two are one definition.
  * Copying the rules into the component is what produced the password field that

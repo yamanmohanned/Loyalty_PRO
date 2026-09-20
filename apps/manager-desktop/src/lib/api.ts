@@ -1,4 +1,4 @@
-import type { ApiError } from '@walaa/shared-types';
+import type { ApiError } from '@loyalty-pro/shared-types';
 import { getApiUrl } from './config';
 import { locale } from './locale';
 

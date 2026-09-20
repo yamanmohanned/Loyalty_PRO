@@ -1,14 +1,14 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, AlertTriangle, HelpCircle } from 'lucide-react';
-import type { StorageStatus } from '@walaa/shared-types';
+import type { StorageStatus } from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { cn } from './ui';
 import { locale } from '../lib/locale';
 import { onRealtimeConnect, onRealtimeEvent } from '../lib/realtime';
 
 /**
- * Free space on the manager machine (CLAUDE_v3.md §12.15).
+ * Free space on the manager machine (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * §12.15 is blunt about why this is on screen at all: at a merchant, a full `C:` is not
  * a nuisance but an outage, and its symptom lies. SQLite refuses writes cleanly and goes
@@ -127,7 +127,7 @@ function present(status: StorageStatus): Presentation | null {
  * The drive letter, and nothing else of the path.
  *
  * The whole path was printed here — `C:/Users/<account>/…` on a development layout,
- * `C:\ProgramData\Walaa` on a shop's — which disclosed the Windows account name and
+ * `C:\ProgramData\LoyaltyPro` on a shop's — which disclosed the Windows account name and
  * gave the merchant nothing to act on. The disk is the useful fact: it is what he
  * frees space on.
  */

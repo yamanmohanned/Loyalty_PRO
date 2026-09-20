@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 import {
   validateRulesAgainstSettings,
   type DiscountRuleInput,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { loadEnv } from '../../config/env';
 import { generateBarcodeToken } from '../../lib/barcode-token';
 import { hashPassword } from '../../lib/password';

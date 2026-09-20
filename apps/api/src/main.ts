@@ -137,7 +137,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
     ── An EMPTY database from another build is moved aside, not refused ────────
 
     A merchant installed this release onto a machine that had had an earlier one on it.
-    The installer left the old `walaa.db` alone — correctly; an installer that
+    The installer left the old `loyalty-pro.db` alone — correctly; an installer that
     overwrites a data directory is one that can destroy a shop. So the service opened a
     file of the wrong shape and refused to start, telling him to restore a backup that
     did not exist from a screen he could not reach, or to reinstall, which does not
@@ -154,7 +154,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
   */
   const supersede = await supersedeUnusableDatabase(bootstrapLog, {
     buildIsSound: migrationsMatchBuild() === true,
-    /* The build's own signal, not the shape of a filename. `walaa-demo.db` in the
+    /* The build's own signal, not the shape of a filename. `loyalty-pro-demo.db` in the
        path would have been a proxy for "this is a demo", and a proxy is what every
        defect in this class has been made of. */
     demo: isDemoBuild(),
@@ -186,7 +186,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
 
     Ordered ahead of `ensureDatabaseReady` deliberately. That call may migrate and take a
     snapshot, and both are writes. A demo build that has latched onto a shop's live
-    `walaa.db` must stop BEFORE it touches it, not after it has helpfully migrated it.
+    `loyalty-pro.db` must stop BEFORE it touches it, not after it has helpfully migrated it.
   */
   await assertDatabaseMatchesBuild(bootstrapLog);
 
@@ -271,7 +271,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
 
         The WAL is folded back in and truncated after the last request has finished and
         before the connection closes. Two things come from that: the next start has no
-        log to replay, and anything that copies `walaa.db` while the service is stopped
+        log to replay, and anything that copies `loyalty-pro.db` while the service is stopped
         — an operator, a file-level backup, an upgrade script — gets the whole database
         rather than one that is behind by up to the WAL's ceiling (§12.17).
 
@@ -314,7 +314,7 @@ async function serve(bootstrapLog: BootstrapLog): Promise<void> {
   // cannot send the child a CTRL_BREAK either — `GenerateConsoleCtrlEvent` needs a
   // console the service does not have. Closing stdin is the one stop signal that
   // crosses that boundary without opening a control port on the network.
-  if (process.env.WALAA_SUPERVISED === '1') {
+  if (process.env.LOYALTY_SUPERVISED === '1') {
     process.stdin.on('end', () => {
       void shutdown('stdin-closed');
     });

@@ -60,13 +60,13 @@ target/
 [Oo]bj/
 
 # Stitch design exports: the extracted directory is tracked (it is the reference the
-# four surviving screens were built against, see CLAUDE_v3.md 12.26). The archive it came
+# four surviving screens were built against, see docs/legacy/CLAUDE_v3.md 12.26). The archive it came
 # out of is a binary duplicate of it and is not.
 stitch_wala_a_loyalty_management_dashboard.zip
 
 # Dev-only backup destination. The installed service writes under %PROGRAMDATA%;
 # a checkout writes here, because it cannot write there (see backup.service.ts).
-.walaa-dev/
+.loyalty-pro-dev/
 
 # Updater signing key — losing it means no shop can ever be updated again.
 packaging/updater/*.key
@@ -87,8 +87,8 @@ apps/manager-desktop/uilab.*
 # committed. `signing-key.test.ts` asserts the same thing from the other direction.
 *.key
 !**/node_modules/**/*.key
-.walaa-signing/
-walaa-updater.key*
+.loyalty-pro-signing/
+loyalty-pro-updater.key*
 TAURI_SIGNING*
 
 # Card batches carry real printed card numbers, and dist-demo holds a built installer:

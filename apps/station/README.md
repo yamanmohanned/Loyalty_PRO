@@ -2,7 +2,7 @@
 
 The screen beside the register. A customer scans their card; the station tells them
 one of four things and, when they have earned a discount, prints the slip they hand to
-the cashier (CLAUDE_v3.md §6).
+the cashier (docs/legacy/CLAUDE_v3.md §6).
 
 **One screen, one field, learnable in two minutes.** Everything configurable lives in
 the manager app behind manager authentication — there is no settings screen here, and
@@ -13,20 +13,20 @@ adding one would be a change to §6.4, not a feature.
 ## Running it
 
 ```bash
-pnpm --filter @walaa/station dev     # http://localhost:5174
+pnpm --filter @loyalty-pro/station dev     # http://localhost:5184
 ```
 
 It needs an API. In development that is usually the repo's own:
 
 ```bash
-pnpm --filter @walaa/api dev         # port 4000
+pnpm --filter @loyalty-pro/api dev         # port 4000
 ```
 
 If port 4000 is taken — most likely by an **installed** Walaa service, which is a
 different database — run the development API beside it:
 
 ```bash
-pnpm --filter @walaa/api dev:alt     # port 4001, same repo database
+pnpm --filter @loyalty-pro/api dev:alt     # port 4101, same repo database
 ```
 
 On first load the station asks for the server address. In production it does not: the
@@ -71,7 +71,7 @@ drive a USB printer, and a bridge service would be one more thing to install in 
 shop. **In the field, enable kiosk printing** so slips print without a dialog:
 
 ```
-chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4000
+chrome.exe --kiosk-printing --kiosk http://<manager-lan-ip>:4100
 ```
 
 **The connection indicator is driven by a socket, not by `navigator.onLine`.** That

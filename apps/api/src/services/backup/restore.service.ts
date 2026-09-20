@@ -2,7 +2,7 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import type { RestoreOutcome, RestoreRefusalReason, StagedRestore } from '@walaa/shared-types';
+import type { RestoreOutcome, RestoreRefusalReason, StagedRestore } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../../config/env';
 import { liveDatabasePath, resolveMigrationsDir } from '../../config/paths';
 import { EXPECTED_SCHEMA_HASH } from '../../config/schema-fingerprint';
@@ -32,7 +32,7 @@ import { DriveError, asDriveError } from './drive-errors';
 import { fingerprintMatches, keyFingerprint, parseBackupKey } from './key';
 
 /**
- * Restoring a copy over the shop's data, from the Backup screen (CLAUDE_v3.md §7.3).
+ * Restoring a copy over the shop's data, from the Backup screen (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * Two steps, and nothing live changes in the first:
  *

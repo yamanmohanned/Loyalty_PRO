@@ -3,8 +3,8 @@
 /*
   Loads the licensing module.
 
-  Two builds exist. `walaa-license.node` embeds the vendor's public key and is the only
-  one staging copies into a shop's runtime. `walaa-license.test.node` embeds the
+  Two builds exist. `loyalty-pro-license.node` embeds the vendor's public key and is the only
+  one staging copies into a shop's runtime. `loyalty-pro-license.test.node` embeds the
   published TEST key and can sign with it; the API's test suite (which vitest marks with
   VITEST) loads it. On a shop machine the test build is not present, so setting VITEST
   there loads nothing and every licensing call fails — it can never fall back to
@@ -21,7 +21,7 @@
 const { existsSync } = require('node:fs');
 const { join } = require('node:path');
 
-const file = process.env.VITEST ? 'walaa-license.test.node' : 'walaa-license.node';
+const file = process.env.VITEST ? 'loyalty-pro-license.test.node' : 'loyalty-pro-license.node';
 const path = join(__dirname, file);
 
 const MISSING =

@@ -1,4 +1,4 @@
-import type { CaptureMode, CustomerCategory } from '@walaa/shared-types';
+import type { CaptureMode, CustomerCategory } from '@loyalty-pro/shared-types';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -177,7 +177,7 @@ export const TOOLTIP_STYLE = {
  */
 export const GLOW = {
   /** id of the shared SVG filter; defined once per chart. */
-  id: 'walaa-viz-glow',
+  id: 'loyalty-viz-glow',
   shadow: { dx: 0, dy: 2, stdDeviation: 3, flood: 'rgba(17,24,39,0.18)' },
   bloom: { dx: 0, dy: 6, stdDeviation: 10, floodOpacity: 0.28 },
 } as const;

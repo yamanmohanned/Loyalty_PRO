@@ -5,7 +5,7 @@ import {
   type BootstrapStatus,
   LoginRequestSchema,
   RefreshRequestSchema,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { login, logout, refresh, revokeAllForUser } from '../services/auth.service';
 import { bootstrapInstallation, bootstrapRequired } from '../services/bootstrap.service';

@@ -81,7 +81,7 @@ if (expect === 'production') {
 } else {
   if (missing.length > 0) {
     failed = true;
-    console.error('✗ demo bundle is missing demo-only code — was WALAA_DEMO=1 set?');
+    console.error('✗ demo bundle is missing demo-only code — was LOYALTY_DEMO=1 set?');
     for (const marker of missing) console.error(`    "${marker}" not found`);
   } else {
     console.log(`✓ demo bundle carries all ${DEMO_MARKERS.length} demo markers`);

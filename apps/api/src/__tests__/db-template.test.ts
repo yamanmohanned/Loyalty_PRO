@@ -90,8 +90,8 @@ describe('the schema fingerprints compiled into this build', () => {
     const actual = computeMigrationsFingerprint(directory!);
     expect(
       actual,
-      'EXPECTED_MIGRATIONS_FINGERPRINT is stale. Run `pnpm --filter @walaa/api db:template` ' +
-        'and commit src/config/schema-fingerprint.ts and prisma/walaa-template.json.',
+      'EXPECTED_MIGRATIONS_FINGERPRINT is stale. Run `pnpm --filter @loyalty-pro/api db:template` ' +
+        'and commit src/config/schema-fingerprint.ts and prisma/loyalty-pro-template.json.',
     ).toBe(EXPECTED_MIGRATIONS_FINGERPRINT);
   });
 
@@ -99,8 +99,8 @@ describe('the schema fingerprints compiled into this build', () => {
     const actual = await schemaHashOfMigrations(directory!);
     expect(
       actual,
-      'EXPECTED_SCHEMA_HASH is stale. Run `pnpm --filter @walaa/api db:template` and commit ' +
-        'src/config/schema-fingerprint.ts and prisma/walaa-template.json.',
+      'EXPECTED_SCHEMA_HASH is stale. Run `pnpm --filter @loyalty-pro/api db:template` and commit ' +
+        'src/config/schema-fingerprint.ts and prisma/loyalty-pro-template.json.',
     ).toBe(EXPECTED_SCHEMA_HASH);
   }, 60_000);
 
@@ -158,7 +158,7 @@ describe('the schema fingerprints compiled into this build', () => {
    * built one yet, and `package:build` builds it before anything is staged.
    */
   it('agrees with the record beside the shipped template', () => {
-    const recordPath = join(API_ROOT, 'prisma', 'walaa-template.json');
+    const recordPath = join(API_ROOT, 'prisma', 'loyalty-pro-template.json');
     let record: { schemaHash?: string; migrationsFingerprint?: string };
     try {
       record = JSON.parse(readFileSync(recordPath, 'utf8')) as typeof record;

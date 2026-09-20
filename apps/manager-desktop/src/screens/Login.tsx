@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LoginRequestSchema, isDashboardRole, type AuthUser, type LoginResponse } from '@walaa/shared-types';
+import { LoginRequestSchema, isDashboardRole, type AuthUser, type LoginResponse } from '@loyalty-pro/shared-types';
 import { api, ApiRequestError, setTokens } from '../lib/api';
 import { useFormErrors } from '../lib/form';
 import { locale } from '../lib/locale';

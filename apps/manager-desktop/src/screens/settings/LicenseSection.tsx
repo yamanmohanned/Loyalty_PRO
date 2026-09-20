@@ -8,8 +8,8 @@ import type {
   LicenseEventsResponse,
   LicenseOverview,
   LicenseState,
-} from '@walaa/shared-types';
-import { formatIqd } from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
+import { formatIqd } from '@loyalty-pro/shared-types';
 import { failureSentence } from '../../lib/failure';
 import { api } from '../../lib/api';
 import { formatDate, formatDateTime, locale } from '../../lib/locale';

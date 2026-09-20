@@ -1,6 +1,6 @@
 {
-  "name": "@walaa/license-native",
-  "version": "0.3.1",
+  "name": "@loyalty-pro/license-native",
+  "version": "0.1.0",
   "private": true,
   "description": "Licensing for the ولاء API, in Rust: device ID, code verification, status, clock anchors.",
   "main": "index.js",
@@ -8,10 +8,10 @@
   "files": [
     "index.js",
     "index.d.ts",
-    "walaa-license.node"
+    "loyalty-pro-license.node"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "cargo test --manifest-path ../../crates/walaa-license/Cargo.toml"
+    "test": "cargo test --manifest-path ../../crates/loyalty-pro-license/Cargo.toml"
   }
 }

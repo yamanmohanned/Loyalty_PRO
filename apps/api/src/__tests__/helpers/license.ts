@@ -7,7 +7,7 @@ import {
   signForTests,
   writeFileAnchor,
   writeRegistryAnchor,
-} from '@walaa/license-native';
+} from '@loyalty-pro/license-native';
 import { reloadLicensingForTests } from '../../services/license.service';
 
 /**
@@ -103,7 +103,7 @@ export async function ensureInstallationRow(prisma: PrismaClient): Promise<void>
  */
 export async function removeLicenses(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe('DELETE FROM "license_activation"');
-  const dir = process.env.WALAA_LICENSE_DIR;
+  const dir = process.env.LOYALTY_LICENSE_DIR;
   if (dir) rmSync(join(dir, 'license-codes.json'), { force: true });
   reloadLicensingForTests();
 }
@@ -129,10 +129,10 @@ export async function setAnchors(
     });
   }
   if (typeof seconds.registry === 'number') {
-    writeRegistryAnchor(process.env.WALAA_LICENSE_REGISTRY_KEY!, seconds.registry);
+    writeRegistryAnchor(process.env.LOYALTY_LICENSE_REGISTRY_KEY!, seconds.registry);
   }
   if (typeof seconds.file === 'number') {
-    writeFileAnchor(join(process.env.WALAA_LICENSE_DIR!, '.license-clock'), seconds.file);
+    writeFileAnchor(join(process.env.LOYALTY_LICENSE_DIR!, '.license-clock'), seconds.file);
   }
   reloadLicensingForTests();
 }

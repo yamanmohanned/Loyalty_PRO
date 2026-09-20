@@ -3,7 +3,7 @@
 services:
   postgres:
     image: postgres:16.6-alpine
-    container_name: walaa-postgres
+    container_name: loyalty-pro-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: walaa
@@ -16,7 +16,7 @@ services:
     ports:
       - '5433:5432'
     volumes:
-      - walaa-pgdata:/var/lib/postgresql/data
+      - loyalty-pro-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U walaa -d walaa']
       interval: 5s
@@ -24,4 +24,4 @@ services:
       retries: 20
 
 volumes:
-  walaa-pgdata:
+  loyalty-pro-pgdata:

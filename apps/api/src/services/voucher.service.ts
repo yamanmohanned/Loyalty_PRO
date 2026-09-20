@@ -4,7 +4,7 @@ import {
   localDateKey,
   localDayBounds,
   type VoucherReconciliation,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { AppError, notFound } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';

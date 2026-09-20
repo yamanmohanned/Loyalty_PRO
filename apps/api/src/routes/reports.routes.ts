@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES } from '@walaa/shared-types';
+import { DASHBOARD_ROLES } from '@loyalty-pro/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import { getOverview, getProgrammeReport, type ReportRange } from '../services/reports.service';
 

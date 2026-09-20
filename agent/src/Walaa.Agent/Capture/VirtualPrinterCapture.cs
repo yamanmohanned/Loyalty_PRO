@@ -5,7 +5,7 @@ namespace Walaa.Agent.Capture;
 
 /// <summary>
 /// A pass-through printer: captures the job, then forwards it to the real printer
-/// (CLAUDE_v3.md §4.2).
+/// (docs/legacy/CLAUDE_v3.md §4.2).
 /// </summary>
 /// <remarks>
 /// <para>

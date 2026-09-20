@@ -1,7 +1,7 @@
 //! Building a licence payload from the command line's request.
 
-use walaa_license::device::{is_valid_device_id, normalize_device_id};
-use walaa_license::{LicenseKind, Payload, FORMAT_VERSION, KNOWN_FEATURES};
+use loyalty_pro_license::device::{is_valid_device_id, normalize_device_id};
+use loyalty_pro_license::{LicenseKind, Payload, FORMAT_VERSION, KNOWN_FEATURES};
 
 const DAY: i64 = 86_400;
 pub const MAX_DAYS: u32 = 3650;

@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { KEY_BYTES } from './archive';
 
 /**
- * The backup encryption key (CLAUDE_v3.md §7.3).
+ * The backup encryption key (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * ## The rule that governs this file
  *
@@ -11,7 +11,7 @@ import { KEY_BYTES } from './archive';
  * encrypts the drive — take the key with them. The merchant would then hold a folder of
  * Drive archives that nobody on earth can open, having done everything they were asked.
  *
- * So the key is generated once, stored in `walaa.env` so scheduled backups can run
+ * So the key is generated once, stored in `loyalty-pro.env` so scheduled backups can run
  * unattended, **and shown to the operator to be written down and kept off the machine.**
  * The manager app is responsible for making that unavoidable rather than optional; this
  * module is responsible for making it possible, and for never making the key guessable.
@@ -25,7 +25,7 @@ import { KEY_BYTES } from './archive';
  * — which is honest about what is actually being asked of the merchant.
  */
 
-/** A fresh key, base64, for `walaa.env`. */
+/** A fresh key, base64, for `loyalty-pro.env`. */
 export function generateBackupKey(): string {
   return randomBytes(KEY_BYTES).toString('base64');
 }

@@ -12,7 +12,7 @@ Supersedes `HANDOVER-0.3.0.md`. **Carry 0.3.1, not 0.3.0.** The commands for the
 - **Licensing:** your **production** key, fingerprint `FCA66207230B90CA` (`verify-license-key.mjs`).
 - **Update signature:** `….setup.exe.sig`, 420 bytes, SHA-256 `92518563EDCB263F77E94FB2F5C36DDEA55E949FCC84F9D3654EFDA116479099`, by key `BE2E4C7B42C8D100`.
 - **Not** Windows code-signed: SmartScreen will warn. Check the hash, then *More info → Run anyway*.
-- Installs to `C:\Program Files\ولاء\` (the product name), data in `C:\ProgramData\Walaa\`.
+- Installs to `C:\Program Files\ولاء\` (the product name), data in `C:\ProgramData\LoyaltyPro\`.
 - Built from commit `aa3b5b1` by running `RELEASING.md` §1–§6 as written. No migration since 0.3.0. The walks in §3 ran on an earlier build of the same source (`52C3E397…`), identical code.
 
 ## 2 · What changed since 0.3.0
@@ -25,7 +25,7 @@ Supersedes `HANDOVER-0.3.0.md`. **Carry 0.3.1, not 0.3.0.** The commands for the
 | Other screens | Silent failures: Modules switch, paper width, key generate/reveal, customer export, restore cancel, staff enable/disable with the form closed. Success + error could stack on Staff, Cards, Backup | Each failure is said; one outcome slot per card (`FormOutcome`), cleared when the next action starts |
 | Licence password | Failed twice: a BOM from a shell, then a wrapper adding one | Normalised on every way in, same at keygen; `--password-file`; a key sealed behind U+FEFF still opens |
 | Renewal | `issue --days N` (counted from today — could end before the licence the shop holds) or `--extend` | `renew --days N` / `renew --perpetual`; `issue` refuses an already-licensed PC; `check` proves the key before you leave |
-| Issuer key folder | Default `%APPDATA%\walaa-license-issuer` (empty) — every command needed `--home` | Finds `%USERPROFILE%\.walaa-issuer` too |
+| Issuer key folder | Default `%APPDATA%\loyalty-pro-license-issuer` (empty) — every command needed `--home` | Finds `%USERPROFILE%\.loyalty-pro-issuer` too |
 
 ## 3 · The full flow, run on this PC — pass/fail with what was observed
 
@@ -37,7 +37,7 @@ this session was not elevated. Your installed 0.3.0 at `F:\loyyyyyyyy\ولاء` 
 |---|---|---|---|
 | 1 | Licence renewal while still licensed | **PASS** | Production-mode 0.3.1 shop on this PC's number `WL-34V4-WZNE`, activated with your real 365-day code → TRIAL to 2027-09-16. Card command **2** in a fresh PowerShell printed «was … until 2027-09-16 (still running) / now … until 2027-10-16»; pasted → TRIAL to **2027-10-16** at once, not read-only; the old 365-day code pasted again → still 2027-10-16 |
 | 2 | Licence renewal after expiry into read-only | **PASS** | Same shop type, service clock run 401 days ahead: **EXPIRED**, read-only; registering a customer → 423 «لم تُسجَّل العملية: انتهت الفترة التجريبية ومهلتها…»; a scan → refused and **held** on the manager PC. Card command **2** → pasted → **TRIAL, 24 days left, not read-only**, at once; the held sale was credited (that card: 2 sales); the next sale recorded 60,000 → 1,800 discount |
-| 3 | Drive connect: click → browser opens | **PASS, without the click** | Release `walaa-manager.exe` 0.3.1 against the scratch shop holding your saved OAuth client. From inside that window, the exact call the button now makes (`plugin:opener\|open_url` with the service's real auth URL, `accounts.google.com/o/oauth2/v2/auth`) returned `opened`, and your Chrome's window title became **«Sign in - Google accounts - Google Chrome»**. In the same window `window.open(…)` returned `null` and nothing opened — the old defect, measured. A second connect call returned the same attempt. The button itself was not clicked in the packaged window: that needs signing in, which means typing a password — see §6 |
+| 3 | Drive connect: click → browser opens | **PASS, without the click** | Release `loyalty-pro-manager.exe` 0.3.1 against the scratch shop holding your saved OAuth client. From inside that window, the exact call the button now makes (`plugin:opener\|open_url` with the service's real auth URL, `accounts.google.com/o/oauth2/v2/auth`) returned `opened`, and your Chrome's window title became **«Sign in - Google accounts - Google Chrome»**. In the same window `window.open(…)` returned `null` and nothing opened — the old defect, measured. A second connect call returned the same attempt. The button itself was not clicked in the packaged window: that needs signing in, which means typing a password — see §6 |
 | 4 | Google login → approve | **NOT DONE — needs your Google account** | Stopped at Google's sign-in page, as you asked. The tab may still be open in Chrome; that attempt expired after 10 minutes |
 | 5 | Callback received → account shown as connected | **PASS against a local stand-in for Google** | The Drive card (real component, dev page) against 0.3.1 in test mode with `helpers/fake-google`: «ربط حساب Google» → consent URL → redirect to the `127.0.0.1` listener → page «تم الربط بنجاح» → service `CONNECTED` → card chip «مربوط», one status «مربوط بحساب Google: shop.owner@example.test». **Not Google** |
 | 6 | Backup to Drive | **PASS (stand-in)** | «ارفع نسخة الآن» → «جارٍ أخذ نسخة ورفعها…» (button disabled) → «أُخذت نسخة جديدة ورُفعت إلى Google Drive.»; «النسخ الموجودة في Drive: 1 من أصل 14» |
@@ -60,10 +60,10 @@ RELEASING.md §1–§6 were run as written to build this installer. LICENSING.md
 
 | # | What | Where | If it is lost |
 |---|---|---|---|
-| 1 | **Licensing key + password** | `C:\Users\yaman\.walaa-issuer\` (`issuer-key.json`, `PASSWORD.txt`, `issued.db`) | No licence and no phone code can ever be issued again |
-| 2 | **Update signing key + password** | `C:\Users\yaman\.walaa-signing\` | No installed shop can ever be updated again |
+| 1 | **Licensing key + password** | `C:\Users\yaman\.loyalty-pro-issuer\` (`issuer-key.json`, `PASSWORD.txt`, `issued.db`) | No licence and no phone code can ever be issued again |
+| 2 | **Update signing key + password** | `C:\Users\yaman\.loyalty-pro-signing\` | No installed shop can ever be updated again |
 | 3 | The issuer program | `tools\license-issuer\target\release\license-issuer.exe` (0.3.1) | Rebuildable — but you need it at the shop |
-| 4 | The shop's `walaa.env` | `C:\ProgramData\Walaa\walaa.env` (elevated copy) | Every printed card must be re-issued |
+| 4 | The shop's `loyalty-pro.env` | `C:\ProgramData\LoyaltyPro\loyalty-pro.env` (elevated copy) | Every printed card must be re-issued |
 | 5 | The backup key from the ceremony | on paper, off the premises | Every backup of that shop is unopenable |
 | 6 | The owner password | the merchant's | No reset exists |
 | 7 | The first `.walaabk` | your USB stick | — |
@@ -79,14 +79,14 @@ commands and type the password when asked.
 
 | Severity | Issue | Workaround |
 |---|---|---|
-| Medium | Installer not Authenticode-signed → SmartScreen / antivirus suspicion | Check the SHA-256; *More info → Run anyway*; exclude `C:\Program Files\ولاء` and `C:\ProgramData\Walaa` |
+| Medium | Installer not Authenticode-signed → SmartScreen / antivirus suspicion | Check the SHA-256; *More info → Run anyway*; exclude `C:\Program Files\ولاء` and `C:\ProgramData\LoyaltyPro` |
 | Medium | Installing over a PC that already holds 0.2.x shop data is unverified (0.3.0's two migrations) | Install only on a PC without shop data; otherwise back up and call first |
 | Medium | A Google OAuth client in **Testing** mode expires its refresh token after 7 days (Google's rule): Drive then shows «خطأ» with the reason | Publish the OAuth consent screen (GOOGLE-DRIVE-SETUP.md), or reconnect weekly |
-| Medium | Changing ولاء's port needs `walaa.env` edited and the service re-registered, elevated — never run | Call me; `install --port` alone does not change an installed shop |
+| Medium | Changing ولاء's port needs `loyalty-pro.env` edited and the service re-registered, elevated — never run | Call me; `install --port` alone does not change an installed shop |
 | Low | Windows PowerShell 5.1 turns non-ASCII in a pipe into `?` — a password piped that way cannot open the key | Use `--password-file` or the prompt (the card does) |
 | Low | `renew` counts from the latest expiry in **this** log; a licence issued from another copy of the key folder is invisible to it | Use that copy's `--home` |
 | Low | `drill:contention` and `drill:recover` need a 0.3.x production dataset that does not exist yet | Not run for 0.3.1 (RELEASING.md §4) |
-| Low | `apps/api/prisma/walaa-template.json` gets a new `installationId` and hash on every `db:template`, so each build leaves a small diff | Commit it with the release |
+| Low | `apps/api/prisma/loyalty-pro-template.json` gets a new `installationId` and hash on every `db:template`, so each build leaves a small diff | Commit it with the release |
 | Low | A held sale's discount is not credited later — v4 settles a discount at its own payment | Shown on the cashier's card and the dashboard |
 | Low | The tablet's *offline* queue lives in browser storage | Don't clear the tablet's browser data while it shows «بانتظار الإرسال» |
 | Low | Sign-in is rate-limited per address; the dashboard does not keep a session across restarts | Wait a minute / sign in again |

@@ -1,5 +1,5 @@
 /**
- * Backup and key-ceremony contracts (CLAUDE_v3.md §12.27).
+ * Backup and key-ceremony contracts (docs/legacy/CLAUDE_v3.md §12.27).
  *
  * The manager app carried its own copy of every shape in this file, including
  * `KeyStatus` — the one that decides whether a shop's backups are openable at all.

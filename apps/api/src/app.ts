@@ -177,7 +177,7 @@ export function rateLimitingDisabled(options: BuildAppOptions = {}): {
   refusedInProduction: boolean;
 } {
   const asked =
-    options.rateLimit === false || process.env.WALAA_DISABLE_RATE_LIMIT === '1';
+    options.rateLimit === false || process.env.LOYALTY_DISABLE_RATE_LIMIT === '1';
 
   if (!asked) return { disabled: false, refusedInProduction: false };
 
@@ -396,7 +396,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await prisma.$queryRaw`SELECT 1`;
     return {
       status: 'ok',
-      service: 'walaa-api',
+      service: 'loyalty-pro-api',
       version: API_VERSION,
       demo: isDemoBuild(),
     };

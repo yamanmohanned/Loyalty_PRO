@@ -3,7 +3,7 @@ import { SettlementStrategySchema, VoucherStatusSchema } from './enums';
 import { PositiveIqdAmountSchema } from './money';
 
 /**
- * Vouchers — the printed discount slip (CLAUDE_v3.md §5.2, §6.3).
+ * Vouchers — the printed discount slip (docs/legacy/CLAUDE_v3.md §5.2, §6.3).
  *
  * Replaces v1's coupon entirely. The difference is not cosmetic: a coupon was a
  * promise redeemable on a *future* visit, whereas a voucher is proof of a discount

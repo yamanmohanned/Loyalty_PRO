@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    walaa_manager_lib::run()
+    loyalty_pro_manager_lib::run()
 }

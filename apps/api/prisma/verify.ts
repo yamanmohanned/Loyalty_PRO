@@ -6,13 +6,13 @@
  * in CI as well as by hand.
  *
  * The invariant it exists for above all others: **cumulative balance is computed
- * from transactions, never stored** (CLAUDE_v3.md §5.3). There is no snapshot
+ * from transactions, never stored** (docs/legacy/CLAUDE_v3.md §5.3). There is no snapshot
  * table any more, so this proves the derivation returns the right number rather
  * than proving a cache agrees with its source.
  */
 
 import { PrismaClient } from '@prisma/client';
-import { computeDiscount, formatIqd, formatPhoneLocal } from '@walaa/shared-types';
+import { computeDiscount, formatIqd, formatPhoneLocal } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../src/config/env';
 import { applySqlitePragmas } from '../src/lib/prisma';
 

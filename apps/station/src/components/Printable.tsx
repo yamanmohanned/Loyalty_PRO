@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { DiscountSlip } from '@walaa/shared-types';
+import type { DiscountSlip } from '@loyalty-pro/shared-types';
 import { Barcode } from './Barcode';
 import { locale, money } from '../lib/locale';
 

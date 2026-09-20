@@ -14,7 +14,7 @@ pub const PUBLIC_KEY: [u8; 32] = [
     0xee, 0x2a, 0xac, 0x85, 0xad, 0x87, 0xdd, 0x2f,
 ];
 
-// The emergency-code chain (crates/walaa-license/src/unlock.rs). Public values:
+// The emergency-code chain (crates/loyalty-pro-license/src/unlock.rs). Public values:
 // phone codes are checked by hashing forward to this tip.
 pub const UNLOCK_EPOCH_DAY: i64 = 20703;
 pub const UNLOCK_CHAIN_LENGTH: u32 = 7300;

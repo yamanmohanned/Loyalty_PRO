@@ -1,4 +1,4 @@
-import type { LicenseState } from '@walaa/shared-types';
+import type { LicenseState } from '@loyalty-pro/shared-types';
 import { AppError } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit, type AuditAction } from './audit.service';

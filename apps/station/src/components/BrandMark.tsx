@@ -4,7 +4,7 @@ import { cn } from './ui';
  * The product mark (operator-supplied, 2026-09-02).
  *
  * Replaces the placeholder that stood here: a teal square with the letterform «و»,
- * written when there was no brand asset (CLAUDE_v2.md §5.3 step 3 explicitly called
+ * written when there was no brand asset (docs/legacy/CLAUDE_v2.md §5.3 step 3 explicitly called
  * it a stand-in to be replaced before distribution). The real mark now exists, so
  * the stand-in goes.
  *

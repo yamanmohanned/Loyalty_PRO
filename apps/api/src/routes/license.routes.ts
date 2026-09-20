@@ -6,7 +6,7 @@ import {
   STATION_ROLES,
   type ActivateLicenseRequest,
   type EnterUnlockRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth, requireDashboardRole } from '../plugins/auth';
 import { applyHeldSales, withHeldSummary } from '../services/held-sale.service';
 import {

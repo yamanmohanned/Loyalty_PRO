@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { encodeCode128C, formatCardSerial, MAX_CARD_SERIAL } from '@walaa/shared-types';
+import { encodeCode128C, formatCardSerial, MAX_CARD_SERIAL } from '@loyalty-pro/shared-types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { API_PREFIX, buildApp } from '../app';
@@ -9,7 +9,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, TEST_PASSWORD, type World } from './helpers/fixtures';
 
 /**
- * Physical card stock (CLAUDE_v3.md §12.25).
+ * Physical card stock (docs/legacy/CLAUDE_v3.md §12.25).
  *
  * Three properties are worth more than the rest of this file put together, and each
  * one is a way that a shop loses trust rather than a way that code goes wrong:

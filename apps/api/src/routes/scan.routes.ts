@@ -5,12 +5,12 @@ import {
   STATION_ROLES,
   type IdentifyCardRequest,
   type ScanCardRequest,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { requireAuth } from '../plugins/auth';
 import { identifyCard, scanCard } from '../services/scan.service';
 
 /**
- * The Loyalty Station's endpoint (CLAUDE_v3.md §6.2).
+ * The Loyalty Station's endpoint (docs/legacy/CLAUDE_v3.md §6.2).
  *
  * Two calls, in the order the core loop demands (CLAUDE.md §0 rule 1): `/identify`
  * answers *who is this* and writes nothing, then `/card` attributes the invoice and

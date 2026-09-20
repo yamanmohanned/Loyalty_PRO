@@ -46,8 +46,8 @@ function build(label, targetDir, features, output) {
     console.error(`license-native: ${label} build failed`);
     process.exit(result.status ?? 1);
   }
-  install(label, join(HERE, targetDir, 'release', 'walaa_license_node.dll'), output);
+  install(label, join(HERE, targetDir, 'release', 'loyalty_pro_license_node.dll'), output);
 }
 
-build('shipped build', 'target', null, 'walaa-license.node');
-build('test build', 'target-test', 'test-key', 'walaa-license.test.node');
+build('shipped build', 'target', null, 'loyalty-pro-license.node');
+build('test build', 'target-test', 'test-key', 'loyalty-pro-license.test.node');

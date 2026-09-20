@@ -10,9 +10,9 @@ import { resolveEnvFile } from './paths';
  * `process.env` directly — that is how a typo becomes a production outage.
  */
 
-// Configuration comes from one file, chosen by `resolveEnvFile()` — `WALAA_ENV_FILE`
+// Configuration comes from one file, chosen by `resolveEnvFile()` — `LOYALTY_ENV_FILE`
 // when the service host sets it, otherwise the repository `.env`, otherwise the
-// installed `walaa.env` in the data directory (§12.11 spells out why the repository
+// installed `loyalty-pro.env` in the data directory (§12.11 spells out why the repository
 // outranks the installed file). Real environment variables always win: dotenv never
 // overwrites what is already set, which is how the test runner and the service host
 // inject their own values.
@@ -36,16 +36,16 @@ const EnvSchema = z.object({
 
   DATABASE_URL: z.string().url('DATABASE_URL يجب أن يكون رابطاً صالحاً'),
 
-  API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  API_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
   API_HOST: z.string().default('0.0.0.0'),
   API_CORS_ORIGINS: z
     .string()
-    // Defaults cover the Tauri webview and both Vite dev servers (5173 manager,
-    // 5174 station). A LAN deployment may need the manager machine's own address
+    // Defaults cover the Tauri webview and both Vite dev servers (5183 manager,
+    // 5184 station). A LAN deployment may need the manager machine's own address
     // added — in production the Station is served BY the API, so it is same-origin
     // and needs no entry here at all.
     .default(
-      'http://tauri.localhost,https://tauri.localhost,http://localhost:5173,http://localhost:5174,http://localhost:4000',
+      'http://tauri.localhost,https://tauri.localhost,http://localhost:5183,http://localhost:5184,http://localhost:4100',
     )
     .transform((v) =>
       v
@@ -93,7 +93,7 @@ const EnvSchema = z.object({
   BACKUP_KEY: z.string().optional(),
   /** Defaults to `<data dir>/backups` when unset. */
   BACKUP_LOCAL_DIR: z.string().optional(),
-  /** The removable drive of §7.3's third copy, e.g. `E:\walaa-backups`. */
+  /** The removable drive of §7.3's third copy, e.g. `E:\loyalty-pro-backups`. */
   BACKUP_USB_DIR: z.string().optional(),
   /**
    * How many archives each destination keeps.
@@ -166,12 +166,12 @@ const EnvSchema = z.object({
   /**
    * Where licensing keeps its clock anchor in the registry (under HKCU) and its files
    * (the hidden anchor and the mirror of activated codes). **Tests only**: in production
-   * both are ignored and a shop always uses `Software\Walaa` and its data folder
-   * (`license.service.ts`), so writing them into `walaa.env` cannot move the anchors —
+   * both are ignored and a shop always uses `Software\LoyaltyPro` and its data folder
+   * (`license.service.ts`), so writing them into `loyalty-pro.env` cannot move the anchors —
    * which would otherwise be a way to reset the recorded time.
    */
-  WALAA_LICENSE_REGISTRY_KEY: z.string().optional(),
-  WALAA_LICENSE_DIR: z.string().optional(),
+  LOYALTY_LICENSE_REGISTRY_KEY: z.string().optional(),
+  LOYALTY_LICENSE_DIR: z.string().optional(),
 });
 
 /**
@@ -179,7 +179,7 @@ const EnvSchema = z.object({
  *
  * ── Why this is derived rather than listed ───────────────────────────────────
  *
- * The installer writes `walaa.env` from `packaging/walaa.env.template`, which is a
+ * The installer writes `loyalty-pro.env` from `packaging/loyalty-pro.env.template`, which is a
  * hand-written file. A setting added here as required and forgotten there does not
  * fail the build, the test suite, or a developer's machine — every one of those has a
  * repository `.env` that satisfies it. It fails on a merchant's first launch, as a
@@ -271,7 +271,7 @@ function configFailure(merchantMessage: string, detail: Record<string, unknown>)
  * ── The path is deliberately not in here ─────────────────────────────────────
  *
  * An earlier version interpolated `envFile`, producing
- * «…في ملف الإعدادات «C:\ProgramData\Walaa\walaa.env»» on the shop owner's screen.
+ * «…في ملف الإعدادات «C:\ProgramData\LoyaltyPro\loyalty-pro.env»» on the shop owner's screen.
  * Three things are wrong with that. He cannot act on it — the file is locked to SYSTEM
  * and the remedy in the same sentence is "reinstall or call support" either way. A
  * Windows path inside an RTL sentence renders with its drive letter stranded at the

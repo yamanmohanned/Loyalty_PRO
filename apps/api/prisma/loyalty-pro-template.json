@@ -1,9 +1,9 @@
 {
-  "file": "walaa-template.db",
+  "file": "loyalty-pro-template.db",
   "bytes": 364544,
-  "sha256": "0028c91be373c0b2ced8b07a7bcf11b0403a8f60c65fe429d34649818f1791b8",
-  "productVersion": "0.3.1",
-  "installationId": "5fdac4fa-ee4d-4169-acaf-a5f1de7b0222",
+  "sha256": "7fb77fd195634fbcf58ea22b491fdd926d6adda1d05b4c3be994025bdf2309f9",
+  "productVersion": "0.1.0",
+  "installationId": "5024991b-99d3-49c0-b577-8311f2aef01d",
   "schemaHash": "2d3a854bb6a10b738b32567cb01aa9151fa4422cb1597460bfbe1325e05f714f",
   "migrationsFingerprint": "3d93269f4b3225cf18bc3eb2dbc6e2575494ec7f81a9afde0ee7808b6feef713",
   "migrations": [
@@ -17,5 +17,5 @@
     "20260914090000_offline_licensing",
     "20260915090000_licensing_resilience"
   ],
-  "builtAt": "2026-09-16T23:39:26.957Z"
+  "builtAt": "2026-09-20T18:31:39.143Z"
 }

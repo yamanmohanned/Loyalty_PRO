@@ -5,7 +5,7 @@ import type {
   DriveStatus,
   DriveTestResult,
   DriveTestStepName,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { loadEnv } from '../../config/env';
 import { AppError } from '../../lib/errors';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
@@ -22,7 +22,7 @@ import { scheduleStatus } from './schedule.service';
 import { licensedFeature } from '../license.service';
 
 /**
- * What the Settings panel is told about Google Drive (CLAUDE_v3.md §7.3).
+ * What the Settings panel is told about Google Drive (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * ## The question this answers
  *

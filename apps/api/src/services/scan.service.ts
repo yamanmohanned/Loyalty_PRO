@@ -7,7 +7,7 @@ import {
   type ScanCardResponse,
   type ScanCustomer,
   type Voucher as VoucherDto,
-} from '@walaa/shared-types';
+} from '@loyalty-pro/shared-types';
 import { AppError, forbidden } from '../lib/errors';
 import { prisma } from '../lib/prisma';
 import { writeTransaction } from '../lib/write-transaction';
@@ -27,7 +27,7 @@ import { assertCanRecord } from './license.service';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  CARD SCAN — attribution and instant discount (CLAUDE_v3.md §2.4, §6.2)
+ *  CARD SCAN — attribution and instant discount (docs/legacy/CLAUDE_v3.md §2.4, §6.2)
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * The customer scans at the Loyalty Station and one of three things happens

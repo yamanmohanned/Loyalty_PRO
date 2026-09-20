@@ -15,7 +15,7 @@ import type { PrismaClient } from '@prisma/client';
  * SQLite makes this simpler than Postgres did: the "server" is a file, so setup is
  * deleting it and re-running migrations.
  *
- * **The file name is unique per run.** It used to be a fixed `walaa_test.db`, and two
+ * **The file name is unique per run.** It used to be a fixed `loyalty_pro_test.db`, and two
  * concurrent `pnpm test` invocations — a developer running the suite while one is
  * already going in a terminal or an agent's background job — then truncated each other's
  * rows mid-assertion. The failures land in whichever test happened to be running, look
@@ -28,7 +28,7 @@ const API_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const TEST_DB_DIR = join(API_ROOT, 'prisma');
 
 /** Set by `vitest.config.ts`; the fallback keeps a bare `vitest` invocation working. */
-const TEST_DB_NAME = process.env.WALAA_TEST_DB_NAME ?? `walaa_test_${process.pid}.db`;
+const TEST_DB_NAME = process.env.LOYALTY_TEST_DB_NAME ?? `loyalty_pro_test_${process.pid}.db`;
 const TEST_DB_FILE = join(TEST_DB_DIR, TEST_DB_NAME);
 
 /** Prisma resolves a relative file: URL from the schema directory. */
@@ -53,17 +53,17 @@ export function dropTestDatabase(): void {
     rmSync(backups, { recursive: true, force: true });
   }
 
-  const licenseDir = process.env.WALAA_LICENSE_DIR;
+  const licenseDir = process.env.LOYALTY_LICENSE_DIR;
   if (licenseDir && existsSync(licenseDir)) {
     rmSync(licenseDir, { recursive: true, force: true });
   }
 
-  // The run's own registry key (never `Software\Walaa`). Loaded here rather than at the
+  // The run's own registry key (never `Software\LoyaltyPro`). Loaded here rather than at the
   // top: this file is also imported by global setup, before any licence exists.
-  const registryKey = process.env.WALAA_LICENSE_REGISTRY_KEY;
-  if (registryKey && registryKey !== 'Software\\Walaa') {
+  const registryKey = process.env.LOYALTY_LICENSE_REGISTRY_KEY;
+  if (registryKey && registryKey !== 'Software\\LoyaltyPro') {
     process.env.VITEST ??= 'true';
-    const native = createRequire(import.meta.url)('@walaa/license-native') as {
+    const native = createRequire(import.meta.url)('@loyalty-pro/license-native') as {
       deleteRegistryKeyForTests?: (subkey: string) => void;
     };
     native.deleteRegistryKeyForTests?.(registryKey);

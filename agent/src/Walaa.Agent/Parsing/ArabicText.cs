@@ -4,7 +4,7 @@ namespace Walaa.Agent.Parsing;
 
 /// <summary>
 /// Decoding a receipt's bytes into text, and normalising the digits in it
-/// (CLAUDE_v3.md §4.5 step 2).
+/// (docs/legacy/CLAUDE_v3.md §4.5 step 2).
 /// </summary>
 /// <remarks>
 /// <para>

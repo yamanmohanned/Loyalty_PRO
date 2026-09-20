@@ -1,6 +1,6 @@
 {
-  "name": "@walaa/manager-desktop",
-  "version": "0.3.1",
+  "name": "@loyalty-pro/manager-desktop",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Walaa manager desktop app — Tauri 2 + Vite + React, RTL Arabic.",
@@ -13,7 +13,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "dev:alt": "vite --force --port 5180 --strictPort"
+    "dev:alt": "vite --force --port 5190 --strictPort"
   },
   "dependencies": {
     "@fontsource/cairo": "^5.1.1",
@@ -26,7 +26,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-store": "^2.2.0",
     "@tauri-apps/plugin-updater": "^2.11.0",
-    "@walaa/shared-types": "workspace:*",
+    "@loyalty-pro/shared-types": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.474.0",
     "react": "^18.3.1",
@@ -42,7 +42,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "@walaa/config": "workspace:*",
+    "@loyalty-pro/config": "workspace:*",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.18.0",
     "globals": "^15.14.0",

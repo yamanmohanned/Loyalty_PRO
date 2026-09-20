@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /**
- * Free space on the volume that holds the database (CLAUDE_v3.md §12.15).
+ * Free space on the volume that holds the database (docs/legacy/CLAUDE_v3.md §12.15).
  *
  * §12.15 established that a full system drive at a merchant is not a nuisance but an
  * outage, and that its symptom is misleading: SQLite fails writes cleanly rather than

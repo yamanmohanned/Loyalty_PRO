@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { DASHBOARD_ROLES, DriveClientUpdateSchema, type DriveClientUpdate } from '@walaa/shared-types';
+import { DASHBOARD_ROLES, DriveClientUpdateSchema, type DriveClientUpdate } from '@loyalty-pro/shared-types';
 import { requireDashboardRole } from '../plugins/auth';
 import {
   beginConnect,
@@ -18,7 +18,7 @@ import { DriveError } from '../services/backup/drive-errors';
 import { AppError } from '../lib/errors';
 
 /**
- * The Google Drive destination's own surface (CLAUDE_v3.md §7.3).
+ * The Google Drive destination's own surface (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * Separate from `backup.routes.ts` deliberately. Everything under `/backup` is about the
  * backup itself — the key, the run, the restore test — and every one of those must keep

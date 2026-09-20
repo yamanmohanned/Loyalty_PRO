@@ -8,7 +8,7 @@ echo walaa-development-only-key | tools/license-issuer/target/release/license-is
 
 Its password is `walaa-development-only-key`, written here on purpose: this key protects
 nothing. It exists so that a build can be run and its licensing tested end to end before
-the vendor has generated the real key. `crates/walaa-license/src/public_key.rs` marks it
+the vendor has generated the real key. `crates/loyalty-pro-license/src/public_key.rs` marks it
 `KeyKind::Development`, and `pnpm package:installer` refuses to package any build that
 embeds it (`packaging/scripts/verify-license-key.mjs`).
 

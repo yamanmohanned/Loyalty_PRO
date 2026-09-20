@@ -1,8 +1,8 @@
 ; Walaa — NSIS installer hooks.
 ;
-; CLAUDE_v3.md 12.3 requires ONE installer covering the Tauri app, the API service
+; docs/legacy/CLAUDE_v3.md 12.3 requires ONE installer covering the Tauri app, the API service
 ; and SQLite. These hooks are how the single setup file also registers the Windows
-; Service: Tauri copies `runtime\` in as a bundled resource, and `walaa-service.exe`
+; Service: Tauri copies `runtime\` in as a bundled resource, and `loyalty-pro-service.exe`
 ; does the SCM registration, per-installation secret generation and firewall rule.
 ;
 ; ASCII only, deliberately. Every user-visible string comes from Tauri's own
@@ -24,7 +24,7 @@
 ;  about it.
 ;
 ;  A demo supervises its own backend instead: the app launches
-;  `walaa-service.exe console`, which runs the SAME supervisor the service runs.
+;  `loyalty-pro-service.exe console`, which runs the SAME supervisor the service runs.
 ;  The launcher is the fork; the supervision is shared. A demo that were babysat by
 ;  different code would prove nothing about the merchant's real install.
 ;
@@ -38,9 +38,9 @@
   ; first install this path does not exist yet and the call is a no-op.
   ; The +4 skips DetailPrint, nsExec and its Pop. nsExec always pushes a result;
   ; leaving it on the stack would corrupt the next Pop in Tauri's own template.
-  IfFileExists "$INSTDIR\runtime\walaa-service.exe" 0 +4
+  IfFileExists "$INSTDIR\runtime\loyalty-pro-service.exe" 0 +4
     DetailPrint "Stopping the API service..."
-    nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" uninstall'
+    nsExec::ExecToLog '"$INSTDIR\runtime\loyalty-pro-service.exe" uninstall'
     Pop $0
 !macroend
 
@@ -49,16 +49,16 @@
   ;  Deregister ANY previously registered service before registering this one.
   ; ---------------------------------------------------------------------------
   ;
-  ;  See CLAUDE_v3.md 12.36. `productName` sets $INSTDIR, so renaming the product
+  ;  See docs/legacy/CLAUDE_v3.md 12.36. `productName` sets $INSTDIR, so renaming the product
   ;  points a new installer at a new directory and leaves the old installation
   ;  untouched: its service keeps running from stale binaries, holding the API port
   ;  and the SQLite database, while the new service cannot register because
-  ;  `WalaaApi` already exists. The shop keeps working on the old code and nobody
+  ;  `LoyaltyProApi` already exists. The shop keeps working on the old code and nobody
   ;  notices — which is what makes it dangerous rather than obvious.
   ;
   ;  This line is the whole fix, and it works for one reason: the service is
   ;  deregistered **by name**, and `SERVICE_NAME` is frozen by the rule in 12.36.
-  ;  `uninstall` opens the SCM and acts on `WalaaApi` wherever its binary lives, so
+  ;  `uninstall` opens the SCM and acts on `LoyaltyProApi` wherever its binary lives, so
   ;  the new build can retire an installation it cannot even see on disk. It stops
   ;  the old service first (with a grace period), which is also what releases the
   ;  database before the new one starts.
@@ -77,22 +77,22 @@
   ;  install with it. The no-op cases (first install, same-path upgrade) are the
   ;  only ones actually exercised.
   ; A demo build stops here: no SCM registration, no firewall rule, no elevation.
-  IfFileExists "$INSTDIR\runtime\walaa-demo.db" demo_no_service 0
+  IfFileExists "$INSTDIR\runtime\loyalty-pro-demo.db" demo_no_service 0
 
   DetailPrint "Removing any previously registered API service..."
-  nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" uninstall'
+  nsExec::ExecToLog '"$INSTDIR\runtime\loyalty-pro-service.exe" uninstall'
   Pop $0
 
   DetailPrint "Registering the API service..."
-  nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" install'
+  nsExec::ExecToLog '"$INSTDIR\runtime\loyalty-pro-service.exe" install'
   Pop $0
   ${If} $0 != 0
     ; Not fatal to the install: the dashboard is on disk and the service can be
     ; registered by hand. Saying so beats a silent half-installation.
-    MessageBox MB_ICONEXCLAMATION|MB_OK "The API service could not be registered (code $0).$\r$\nRun runtime\walaa-service.exe install from an elevated prompt."
+    MessageBox MB_ICONEXCLAMATION|MB_OK "The API service could not be registered (code $0).$\r$\nRun runtime\loyalty-pro-service.exe install from an elevated prompt."
   ${Else}
     DetailPrint "Starting the API service..."
-    nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" start'
+    nsExec::ExecToLog '"$INSTDIR\runtime\loyalty-pro-service.exe" start'
     Pop $0
   ${EndIf}
 
@@ -106,10 +106,10 @@
   ;
   ; A demo registered nothing, so there is nothing to deregister -- its backend is a
   ; child of the app and went with the window.
-  IfFileExists "$INSTDIR\runtime\walaa-demo.db" demo_no_unregister 0
-  IfFileExists "$INSTDIR\runtime\walaa-service.exe" 0 +4
+  IfFileExists "$INSTDIR\runtime\loyalty-pro-demo.db" demo_no_unregister 0
+  IfFileExists "$INSTDIR\runtime\loyalty-pro-service.exe" 0 +4
     DetailPrint "Removing the API service..."
-    nsExec::ExecToLog '"$INSTDIR\runtime\walaa-service.exe" uninstall'
+    nsExec::ExecToLog '"$INSTDIR\runtime\loyalty-pro-service.exe" uninstall'
     Pop $0
   demo_no_unregister:
 !macroend

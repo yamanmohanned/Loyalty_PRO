@@ -4,7 +4,7 @@ using Walaa.Agent.Parsing;
 namespace Walaa.Agent.Tests;
 
 /// <summary>
-/// Builds synthetic ESC/POS print jobs to parse against (CLAUDE_v3.md §12.6).
+/// Builds synthetic ESC/POS print jobs to parse against (docs/legacy/CLAUDE_v3.md §12.6).
 /// </summary>
 /// <remarks>
 /// <para>

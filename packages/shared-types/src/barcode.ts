@@ -1,5 +1,5 @@
 /**
- * Code 128 encoding for the printed customer card (CLAUDE_v3.md §6.2 #4, §6.3).
+ * Code 128 encoding for the printed customer card (docs/legacy/CLAUDE_v3.md §6.2 #4, §6.3).
  *
  * ## Why the card number is numeric
  *

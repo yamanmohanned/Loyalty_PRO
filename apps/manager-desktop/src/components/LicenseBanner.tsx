@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, AlertTriangle } from 'lucide-react';
-import { formatIqd, type LicenseState } from '@walaa/shared-types';
+import { formatIqd, type LicenseState } from '@loyalty-pro/shared-types';
 import { api } from '../lib/api';
 import { formatDate, locale } from '../lib/locale';
 import { onRealtimeConnect } from '../lib/realtime';

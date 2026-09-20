@@ -33,8 +33,8 @@ and not here: in the shop, when the till is connected.
 
 ```powershell
 Set-Location E:\loyalty
-pnpm --filter @walaa/api db:template
-git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/walaa-template.json
+pnpm --filter @loyalty-pro/api db:template
+git add apps/api/src/config/schema-fingerprint.ts apps/api/prisma/loyalty-pro-template.json
 ```
 
 `EXPECTED_MIGRATIONS_FINGERPRINT` and `EXPECTED_SCHEMA_HASH` are compiled into the
@@ -67,9 +67,9 @@ them where the script reads them. They extend this PC's own licence by one day e
 
 ```powershell
 Set-Location E:\loyalty
-$env:WALAA_VERIFY_LICENSE_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" renew --device WL-34V4-WZNE --days 1 | Out-String) -split 'Send the merchant this code \(the lines can be pasted as they are\):')[1].Trim()
-$env:WALAA_VERIFY_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-34V4-WZNE --days 1 --note "release verification" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
-$env:WALAA_VERIFY_OTHER_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.walaa-issuer" --password-file "C:\Users\yaman\.walaa-issuer\PASSWORD.txt" unlock --device WL-2222-2222 --days 1 --note "release verification - a shop that does not exist" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
+$env:LOYALTY_VERIFY_LICENSE_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" renew --device WL-34V4-WZNE --days 1 | Out-String) -split 'Send the merchant this code \(the lines can be pasted as they are\):')[1].Trim()
+$env:LOYALTY_VERIFY_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" unlock --device WL-34V4-WZNE --days 1 --note "release verification" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
+$env:LOYALTY_VERIFY_OTHER_UNLOCK_CODE = ((& "E:\loyalty\tools\license-issuer\target\release\license-issuer.exe" --home "C:\Users\yaman\.loyalty-pro-issuer" --password-file "C:\Users\yaman\.loyalty-pro-issuer\PASSWORD.txt" unlock --device WL-2222-2222 --days 1 --note "release verification - a shop that does not exist" | Out-String) -split 'three groups:')[1].Trim().Split("`n")[0].Trim()
 pnpm package:build
 pnpm package:verify
 ```
@@ -99,7 +99,7 @@ production mode:
 
 ```powershell
 Set-Location E:\loyalty
-pnpm --filter @walaa/api drill:kill 3
+pnpm --filter @loyalty-pro/api drill:kill 3
 node apps/api/drills/matrix.mjs 4971
 ```
 
@@ -152,7 +152,7 @@ with the provider's **production** key (fingerprint `FCA66207230B90CA`, confirme
 `verify-license-key.mjs`; emergency codes until 2046-09-09), bounded fail-open, sales held
 on the manager PC. Built from `84f20cc` by `pnpm version:check && pnpm package:build &&
 pnpm package:verify && pnpm package:installer`, all exit 0; `package:verify` ran with
-`WALAA_VERIFY_LICENSE_CODE`, `WALAA_VERIFY_UNLOCK_CODE` and `WALAA_VERIFY_OTHER_UNLOCK_CODE`
+`LOYALTY_VERIFY_LICENSE_CODE`, `LOYALTY_VERIFY_UNLOCK_CODE` and `LOYALTY_VERIFY_OTHER_UNLOCK_CODE`
 issued for the build machine (`WL-34V4-WZNE`) and a non-existent shop. `verify-signing
 --post` confirmed the `.sig` (420 bytes,
 `8527AE1DCA2224C51CADA82C97B9E44ECB0F5E8DD4E9FFD5FC168F333D05B386`) is by key
@@ -200,8 +200,8 @@ the password from your password manager between quotes on the second line instea
 
 ```powershell
 Set-Location E:\loyalty
-$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.walaa-signing\walaa-updater.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.walaa-signing\PASSWORD.txt").Trim()
+$env:TAURI_SIGNING_PRIVATE_KEY = "C:\Users\yaman\.loyalty-pro-signing\loyalty-pro-updater.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = [IO.File]::ReadAllText("C:\Users\yaman\.loyalty-pro-signing\PASSWORD.txt").Trim()
 pnpm package:installer
 ```
 

@@ -5,7 +5,7 @@ using Walaa.Agent.Capture;
 namespace Walaa.Agent;
 
 /// <summary>
-/// Everything about this installation (CLAUDE_v3.md §4.3).
+/// Everything about this installation (docs/legacy/CLAUDE_v3.md §4.3).
 /// </summary>
 /// <remarks>
 /// Written by the installer and by the manager's Print Capture settings screen. The
@@ -15,9 +15,9 @@ namespace Walaa.Agent;
 /// </remarks>
 public sealed record AgentSettings
 {
-    /// <summary>Where the Manager machine's API lives, e.g. <c>http://192.168.0.106:4000</c>.</summary>
+    /// <summary>Where the Manager machine's API lives, e.g. <c>http://192.168.0.106:4100</c>.</summary>
     [JsonPropertyName("managerUrl")]
-    public string ManagerUrl { get; init; } = "http://localhost:4000";
+    public string ManagerUrl { get; init; } = "http://localhost:4100";
 
     [JsonPropertyName("username")]
     public string Username { get; init; } = string.Empty;
@@ -71,7 +71,7 @@ public sealed record AgentSettings
     public string QueueDirectory { get; init; } =
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "Walaa",
+            "LoyaltyPro",
             "agent",
             "queue");
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { summarizeFieldErrors } from '@walaa/shared-types';
+import { summarizeFieldErrors } from '@loyalty-pro/shared-types';
 import { ApiRequestError } from './api';
 import { locale } from './locale';
 
@@ -96,7 +96,7 @@ export function useFormErrors() {
 
   /*
     Typed structurally rather than against `zod`, which this app does not depend on
-    directly — it gets its schemas through `@walaa/shared-types`, and adding a second
+    directly — it gets its schemas through `@loyalty-pro/shared-types`, and adding a second
     copy of zod to the Station's dependency tree to name one type would be a real risk
     for no benefit: two zod instances means two error-map registries, and the Arabic
     one is installed on exactly one of them.

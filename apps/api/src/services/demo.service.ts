@@ -23,14 +23,14 @@ import { DEMO_PASSWORD } from '../lib/demo-credentials';
  *
  * ── It is gated twice ────────────────────────────────────────────────────────
  *
- *  1. `isDemoBuild()` — the API only registers the reset route when `WALAA_DEMO=1`,
+ *  1. `isDemoBuild()` — the API only registers the reset route when `LOYALTY_DEMO=1`,
  *     which the demo launcher sets and a production install never does.
  *  2. `assertDemoDatabase()` — this refuses to wipe anything unless the database file
  *     it is connected to has `demo` in its name.
  *
  * Either alone would be enough on a good day. Together they mean that turning a real
  * installation into a demo takes two independent mistakes, and that the destructive
- * half cannot run at all against a file called `walaa.db`.
+ * half cannot run at all against a file called `loyalty-pro.db`.
  */
 
 /**

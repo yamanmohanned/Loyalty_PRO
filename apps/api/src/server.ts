@@ -9,12 +9,12 @@ import { recordStartupFailure } from './lib/startup-error';
  * bottom recording why a start had failed. That covered every failure inside `main`
  * and missed the whole class in front of it: **configuration is read at module scope**,
  * by `config/env` and by every module that calls `loadEnv()` while being evaluated. A
- * missing or malformed `walaa.env` therefore throws during module loading, before
+ * missing or malformed `loyalty-pro.env` therefore throws during module loading, before
  * `main` exists and before any handler is attached to it.
  *
  * It is not a theoretical gap. A demo install whose environment file had not been
  * written died precisely there, with a perfectly clear Arabic sentence —
- * «WALAA_ENV_FILE يشير إلى ملف غير موجود» — going only to stderr, while the supervisor
+ * «LOYALTY_ENV_FILE يشير إلى ملف غير موجود» — going only to stderr, while the supervisor
  * recorded `exit code: 1` and the dashboard had nothing to show but a generic failure.
  * The mechanism built to stop exactly that had been installed one layer too far in.
  *

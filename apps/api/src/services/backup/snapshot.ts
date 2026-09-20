@@ -7,13 +7,13 @@ import { liveDatabasePath } from '../../config/paths';
 import { readFreeSpace } from '../storage.service';
 
 /**
- * Taking a consistent copy of a live SQLite database (CLAUDE_v3.md §12.17).
+ * Taking a consistent copy of a live SQLite database (docs/legacy/CLAUDE_v3.md §12.17).
  *
  * ## `VACUUM INTO`, and why it settles the WAL question rather than answering it
  *
  * §12.17 states the trap: the database runs in WAL mode, so the most recent
- * transactions live in `walaa.db-wal` until a checkpoint folds them in, and copying
- * `walaa.db` alone silently restores to an older day.
+ * transactions live in `loyalty-pro.db-wal` until a checkpoint folds them in, and copying
+ * `loyalty-pro.db` alone silently restores to an older day.
  *
  * The obvious fix — `PRAGMA wal_checkpoint(TRUNCATE)` and then copy the file — is not
  * actually a fix. It leaves a race: a sale committed between the checkpoint and the copy

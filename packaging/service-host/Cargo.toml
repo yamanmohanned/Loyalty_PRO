@@ -1,12 +1,12 @@
 [package]
-name = "walaa-service"
+name = "loyalty-pro-service"
 version = "1.0.0"
 edition = "2021"
 description = "Windows Service host for the Walaa API (ولاء)"
 publish = false
 
 [[bin]]
-name = "walaa-service"
+name = "loyalty-pro-service"
 path = "src/main.rs"
 
 [dependencies]

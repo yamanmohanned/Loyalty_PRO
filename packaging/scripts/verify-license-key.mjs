@@ -18,17 +18,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const STAGED = join(REPO, 'packaging', 'dist', 'runtime', 'node_modules', '@walaa', 'license-native');
+const STAGED = join(REPO, 'packaging', 'dist', 'runtime', 'node_modules', '@loyalty-pro', 'license-native');
 
 function fail(message) {
   console.error(`\n  verify-license-key: ${message}\n`);
   process.exit(1);
 }
 
-if (!existsSync(join(STAGED, 'walaa-license.node'))) {
+if (!existsSync(join(STAGED, 'loyalty-pro-license.node'))) {
   fail(`no staged licensing module at ${STAGED} — run \`pnpm package:build\` first`);
 }
-if (existsSync(join(STAGED, 'walaa-license.test.node'))) {
+if (existsSync(join(STAGED, 'loyalty-pro-license.test.node'))) {
   fail('the TEST build of the licensing module is in the staged runtime; it can sign codes and must never ship');
 }
 
@@ -36,6 +36,27 @@ if (existsSync(join(STAGED, 'walaa-license.test.node'))) {
 delete process.env.VITEST;
 const native = createRequire(import.meta.url)(STAGED);
 const key = native.keyInfo();
+
+// The frozen «ولاء» line's production key. Inherited by the fork and still compiled in
+// until the provider runs `license-issuer keygen` here. It is a PRODUCTION key, so the
+// check below waves it through — and a licence sold for one product would then activate
+// the other, and one phone-read emergency code would unlock both.
+const FROZEN_LINE_FINGERPRINT = 'FCA66207230B90CA';
+
+if (key.fingerprint === FROZEN_LINE_FINGERPRINT) {
+  fail(
+    [
+      `the staged licensing module embeds the FROZEN «ولاء» line's key (${key.fingerprint}).`,
+      '  Loyalty Pro is sold separately (PRD §5, G6). Sharing a key means a code sold for one',
+      '  product activates the other, and one emergency unlock code opens both.',
+      '',
+      '  Generate this product\'s own keypair, once, on the provider\'s machine:',
+      '      tools/license-issuer/target/release/license-issuer.exe keygen',
+      '  which rewrites crates/loyalty-pro-license/src/public_key.rs. Commit it, then',
+      '  `pnpm package:build` and run this again. See packaging/LICENSING.md.',
+    ].join('\n'),
+  );
+}
 
 if (key.kind !== 'production') {
   fail(
@@ -46,7 +67,7 @@ if (key.kind !== 'production') {
       '',
       '  The provider generates the production key once, on their own machine:',
       '      tools/license-issuer/target/release/license-issuer.exe keygen',
-      '  which writes crates/walaa-license/src/public_key.rs. Commit that file, then run',
+      '  which writes crates/loyalty-pro-license/src/public_key.rs. Commit that file, then run',
       '  `pnpm package:build` and this command again. See packaging/LICENSING.md.',
     ].join('\n'),
   );

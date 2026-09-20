@@ -21,7 +21,7 @@ import { resetDatabase } from './helpers/db';
 import { createWorld, type World } from './helpers/fixtures';
 
 /**
- * Scheduled backups (CLAUDE_v3.md §7.3, §12.21).
+ * Scheduled backups (docs/legacy/CLAUDE_v3.md §7.3, §12.21).
  *
  * The requirement that shapes this suite is not "fires at 23:30". It is **a missed run
  * happens late rather than disappearing** — a till switched off overnight is normal, and

@@ -4,7 +4,7 @@ namespace Walaa.Agent.Capture;
 /// Where captured bytes go. Implementations must never throw and never block.
 /// </summary>
 /// <remarks>
-/// This interface exists to make the FORWARD-FIRST rule (CLAUDE_v3.md §4.6 rule 2)
+/// This interface exists to make the FORWARD-FIRST rule (docs/legacy/CLAUDE_v3.md §4.6 rule 2)
 /// enforceable rather than aspirational. Everything the agent does with a receipt —
 /// parsing it, queueing it, sending it — happens behind this boundary, on another
 /// thread, after the bytes are already on their way to the printer.

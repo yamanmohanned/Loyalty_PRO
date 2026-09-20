@@ -245,7 +245,7 @@ describe('a damaged archive', () => {
 
   /**
    * The dangerous half. GCM cannot detect tampering until `final()`, so the decrypt
-   * pipeline had already written plaintext to the destination — a 16 KB `walaa.db`
+   * pipeline had already written plaintext to the destination — a 16 KB `loyalty-pro.db`
    * sitting exactly where the operator aimed the restore, beside an error they may not
    * have read, and the runbook's next instruction is to copy that file into place.
    */
@@ -287,7 +287,7 @@ describe('restoring an archive', () => {
   }
 
   it('reports integrity, foreign keys, schema and recency', async () => {
-    const dir = tempDir('walaa-restore-report-');
+    const dir = tempDir('loyalty-pro-restore-report-');
     const archive = await backupTo(dir);
 
     const result = await restoreArchive(archive, join(dir, 'restored.db'), KEY);
@@ -308,7 +308,7 @@ describe('restoring an archive', () => {
    * passed, so a killed restore leaves `<destination>.partial` and no destination.
    */
   it('writes through a .partial file and leaves none behind on success', async () => {
-    const dir = tempDir('walaa-restore-partial-');
+    const dir = tempDir('loyalty-pro-restore-partial-');
     const archive = await backupTo(dir);
     const destination = join(dir, 'restored.db');
 
@@ -323,7 +323,7 @@ describe('restoring an archive', () => {
   });
 
   it('refuses an archive encrypted with a different key, naming the one it needs', async () => {
-    const dir = tempDir('walaa-restore-key-');
+    const dir = tempDir('loyalty-pro-restore-key-');
     const archive = await backupTo(dir);
     const wrong = Buffer.alloc(32, 7);
 
@@ -340,7 +340,7 @@ describe('restoring an archive', () => {
    * original.
    */
   it('reports a schema that does not match this build', async () => {
-    const dir = tempDir('walaa-restore-schema-');
+    const dir = tempDir('loyalty-pro-restore-schema-');
     const archive = await backupTo(dir);
     const restored = join(dir, 'restored.db');
     await restoreArchive(archive, restored, KEY);
@@ -456,7 +456,7 @@ describe('the restore command', () => {
 describe('a backup taken while the shop is trading', () => {
   /**
    * The §12.17 loss, stated as the difference between two files. Measured against the
-   * live development database: a plain copy of `walaa.db` held 25 transactions and none
+   * live development database: a plain copy of `loyalty-pro.db` held 25 transactions and none
    * of the three sales committed ten seconds earlier, while the product's own
    * `VACUUM INTO` backup restored 28. `PRAGMA integrity_check` says `ok` on the
    * deficient copy, because that check answers *is this sound*, never *is this current*.

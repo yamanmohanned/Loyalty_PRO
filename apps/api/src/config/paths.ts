@@ -4,10 +4,10 @@ import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 
 /**
  * Runtime path resolution — the seam between "running from the repo" and
- * "installed on a merchant's machine" (CLAUDE_v3.md §12.3).
+ * "installed on a merchant's machine" (docs/legacy/CLAUDE_v3.md §12.3).
  *
  * In the repo, configuration is the root `.env` and the database is
- * `apps/api/prisma/walaa.db`. After the NSIS installer runs, the service account
+ * `apps/api/prisma/loyalty-pro.db`. After the NSIS installer runs, the service account
  * owns neither: the program directory is read-only to it and there is no repo.
  * Everything writable therefore lives in one **data directory**, and every path
  * the packaged service needs is derived from it.
@@ -20,14 +20,14 @@ import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
  */
 
 /** Set by the service host. Absolute path to the writable runtime directory. */
-const DATA_DIR_VAR = 'WALAA_DATA_DIR';
+const DATA_DIR_VAR = 'LOYALTY_DATA_DIR';
 /** Explicit path to the environment file. Overrides discovery entirely. */
-const ENV_FILE_VAR = 'WALAA_ENV_FILE';
+const ENV_FILE_VAR = 'LOYALTY_ENV_FILE';
 /** Explicit path to the directory holding Prisma migration folders. */
-const MIGRATIONS_DIR_VAR = 'WALAA_MIGRATIONS_DIR';
+const MIGRATIONS_DIR_VAR = 'LOYALTY_MIGRATIONS_DIR';
 
 /** Name of the environment file inside the data directory. */
-export const DATA_ENV_FILENAME = 'walaa.env';
+export const DATA_ENV_FILENAME = 'loyalty-pro.env';
 
 /**
  * The writable runtime directory.
@@ -35,7 +35,7 @@ export const DATA_ENV_FILENAME = 'walaa.env';
  * Windows default is `%PROGRAMDATA%\Walaa` — readable and writable by
  * `LocalSystem`, which is the account the service runs as, and outside
  * `Program Files`, which it must not write to. On any other platform (developers
- * run macOS and Linux too) it falls back to `~/.walaa`.
+ * run macOS and Linux too) it falls back to `~/.loyalty-pro`.
  */
 export function resolveDataDir(): string {
   const explicit = process.env[DATA_DIR_VAR];
@@ -43,9 +43,9 @@ export function resolveDataDir(): string {
 
   if (process.platform === 'win32') {
     const programData = process.env.PROGRAMDATA ?? 'C:\\ProgramData';
-    return join(programData, 'Walaa');
+    return join(programData, 'LoyaltyPro');
   }
-  return join(homedir(), '.walaa');
+  return join(homedir(), '.loyalty-pro');
 }
 
 /**
@@ -73,16 +73,16 @@ export function findRepoEnvFile(startDir: string = process.cwd()): string | null
 /**
  * Which file the environment is read from, in priority order:
  *
- *  1. `WALAA_ENV_FILE` — set by the service host, so the installed service is never
+ *  1. `LOYALTY_ENV_FILE` — set by the service host, so the installed service is never
  *     guessing. A value that does not exist is a hard error, never a silent
  *     fallback: booting the till on the wrong secrets because of a typo'd path is
  *     worse than not booting at all.
  *  2. The repository `.env` — development and tests.
- *  3. `<data dir>/walaa.env` — a packaged runtime started without the service host.
+ *  3. `<data dir>/loyalty-pro.env` — a packaged runtime started without the service host.
  *
  * The repository outranks the installed file on purpose. A developer who also has
  * the product installed on their machine would otherwise find `pnpm dev` silently
- * reading `%PROGRAMDATA%\Walaa\walaa.env` and writing to the shop's real database.
+ * reading `%PROGRAMDATA%\LoyaltyPro\loyalty-pro.env` and writing to the shop's real database.
  * The installed service can never hit that branch — there is no workspace above
  * `Program Files` — so nothing is lost by preferring the checkout.
  */
@@ -94,7 +94,7 @@ export function resolveEnvFile(): string | null {
       /*
         This is the reason the merchant reads — it travels through `startup-error.json`
         and `status.json` to the dashboard verbatim — and it was
-        «WALAA_ENV_FILE يشير إلى ملف غير موجود: C:\ProgramData\Walaa\walaa.env»: an
+        «LOYALTY_ENV_FILE يشير إلى ملف غير موجود: C:\ProgramData\LoyaltyPro\loyalty-pro.env»: an
         environment variable name and a Windows path, in a sentence with no remedy. The
         variable and the path go with the error as its cause, which `server.ts` writes
         to stderr and so to the log.
@@ -120,7 +120,7 @@ export function resolveEnvFile(): string | null {
 /**
  * Where the committed Prisma migrations live, in priority order:
  *
- *  1. `WALAA_MIGRATIONS_DIR` — set by the service host.
+ *  1. `LOYALTY_MIGRATIONS_DIR` — set by the service host.
  *  2. `<cwd>/migrations` — the installed layout, where the staged runtime directory
  *     is the working directory.
  *  3. `<repo>/apps/api/prisma/migrations` — found by walking up from the cwd.
@@ -159,7 +159,7 @@ export function resolveMigrationsDir(startDir: string = process.cwd()): string |
  * provider.
  *
  * Deliberately not `new URL()`. Prisma treats everything after `file:` as a path,
- * and `new URL('file:C:/ProgramData/Walaa/walaa.db').pathname` returns
+ * and `new URL('file:C:/ProgramData/LoyaltyPro/loyalty-pro.db').pathname` returns
  * `/C:/ProgramData/...` — a leading slash that makes the path invalid on Windows.
  */
 export function sqlitePathFromUrl(databaseUrl: string): string | null {
@@ -201,10 +201,10 @@ export function liveDatabasePath(databaseUrl: string): string | null {
 }
 
 /** Explicit path to the shipped, fully-migrated database template. */
-const DB_TEMPLATE_VAR = 'WALAA_DB_TEMPLATE';
+const DB_TEMPLATE_VAR = 'LOYALTY_DB_TEMPLATE';
 
 /** Filename of the shipped production template, in the repo and in the staged runtime. */
-export const DB_TEMPLATE_FILENAME = 'walaa-template.db';
+export const DB_TEMPLATE_FILENAME = 'loyalty-pro-template.db';
 
 /**
  * The fully-migrated database the installer ships, or `null` when none is present.
@@ -224,13 +224,13 @@ export const DB_TEMPLATE_FILENAME = 'walaa-template.db';
  *
  * Resolution mirrors the migrations directory:
  *
- *  1. `WALAA_DB_TEMPLATE` — an explicit path. A value naming a file that does not
+ *  1. `LOYALTY_DB_TEMPLATE` — an explicit path. A value naming a file that does not
  *     exist is a hard error rather than a silent fall-through to migrating, for the
- *     same reason `WALAA_ENV_FILE` is: a typo must not quietly select the behaviour
+ *     same reason `LOYALTY_ENV_FILE` is: a typo must not quietly select the behaviour
  *     the variable was set to prevent.
- *  2. `<cwd>/walaa-template.db` — the installed layout, where the staged runtime
+ *  2. `<cwd>/loyalty-pro-template.db` — the installed layout, where the staged runtime
  *     directory is the working directory.
- *  3. `<repo>/apps/api/prisma/walaa-template.db` — a development build, found by
+ *  3. `<repo>/apps/api/prisma/loyalty-pro-template.db` — a development build, found by
  *     walking up.
  *
  * `null` is a normal answer in development, where the database is provisioned by
@@ -275,7 +275,7 @@ export function resolveRuntimeStatePath(): string {
 }
 
 /** Explicit path to the built Loyalty Station bundle. */
-const STATION_DIR_VAR = 'WALAA_STATION_DIR';
+const STATION_DIR_VAR = 'LOYALTY_STATION_DIR';
 
 /**
  * Where the built Loyalty Station lives, if it is built at all.
@@ -286,7 +286,7 @@ const STATION_DIR_VAR = 'WALAA_STATION_DIR';
  *
  * Resolution mirrors the migrations directory:
  *
- *  1. `WALAA_STATION_DIR` — set by the service host.
+ *  1. `LOYALTY_STATION_DIR` — set by the service host.
  *  2. `<cwd>/station` — the installed layout, where the staged runtime is the
  *     working directory.
  *  3. `<repo>/apps/station/dist` — a development build, found by walking up.

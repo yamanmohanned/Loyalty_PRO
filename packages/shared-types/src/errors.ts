@@ -21,7 +21,7 @@ export const ApiErrorCodeSchema = z.enum([
   'RATE_LIMITED',
   /**
    * The write reached the server and the server could not store it — a full disk
-   * being the case this was added for (CLAUDE_v3.md §12.15).
+   * being the case this was added for (docs/legacy/CLAUDE_v3.md §12.15).
    *
    * Distinct from INTERNAL_ERROR because the two demand different things of the
    * operator. A bug is ours to fix and the till can carry on; a datastore that
@@ -32,7 +32,7 @@ export const ApiErrorCodeSchema = z.enum([
   'STORAGE_UNAVAILABLE',
   /**
    * Backups are switched off because the encryption key has not been confirmed as
-   * recorded off the machine (CLAUDE_v3.md §12.19).
+   * recorded off the machine (docs/legacy/CLAUDE_v3.md §12.19).
    *
    * Its own code because the dashboard must react to it specifically — by reopening the
    * key ceremony, not by showing a failure the manager cannot act on.

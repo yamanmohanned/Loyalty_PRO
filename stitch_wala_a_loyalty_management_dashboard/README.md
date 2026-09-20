@@ -5,7 +5,7 @@ the thirteen are screens for things v3 deliberately stopped building — the cou
 redemption flow, the four screens of the Expo assistant that no longer exists, and a
 customer detail built around a coupon list — so following them literally walks the
 product backwards, and `CLAUDE.md` §6's instruction to align implementation to these
-exports no longer holds. **`CLAUDE_v3.md` §12.26 is the ruling that governs how they may
+exports no longer holds. **`docs/legacy/CLAUDE_v3.md` §12.26 is the ruling that governs how they may
 be used:** they are authoritative for layout and visual grammar only, on the four screens
 that survive (Overview, Customers, Customer detail structure, and the dashboard Login);
 their content model is discarded entirely, the Material-3 palette every export ships

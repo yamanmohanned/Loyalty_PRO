@@ -31,8 +31,8 @@ const require = createRequire('E:/loyalty/apps/api/package.json');
 const { PrismaClient } = require('@prisma/client');
 
 const BASE = process.argv[2] ?? 'http://127.0.0.1:4931';
-const SOURCE_DB = process.argv[3] ?? 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad/prod-drill/walaa.db';
-const BACKUP_DIR = process.argv[4] ?? 'E:/loyalty/.walaa-dev/backups';
+const SOURCE_DB = process.argv[3] ?? 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad/prod-drill/loyalty-pro.db';
+const BACKUP_DIR = process.argv[4] ?? 'E:/loyalty/.loyalty-pro-dev/backups';
 const SCRATCH = 'E:/temp/claude/E--loyalty/f563cfe8-5fe9-4704-8ff7-20f7ac1e703d/scratchpad';
 const ROOT = `${SCRATCH}/recoverdrill`;
 const PORT = 4951;
@@ -184,7 +184,7 @@ record('reads what the shop has, to compare against', true,
 // ── 2. Restore into an EMPTY directory ─────────────────────────────────────
 rmSync(ROOT, { recursive: true, force: true });
 mkdirSync(ROOT, { recursive: true });
-const DB = `${ROOT}/walaa.db`;
+const DB = `${ROOT}/loyalty-pro.db`;
 
 {
   let ok = false;
@@ -219,7 +219,7 @@ const DB = `${ROOT}/walaa.db`;
 
   const child = spawn('npx', ['tsx', 'src/server.ts'], {
     cwd: API,
-    env: { ...process.env, WALAA_ENV_FILE: `${ROOT}/env`, WALAA_DATA_DIR: ROOT },
+    env: { ...process.env, LOYALTY_ENV_FILE: `${ROOT}/env`, LOYALTY_DATA_DIR: ROOT },
     stdio: 'ignore', shell: true,
   });
 

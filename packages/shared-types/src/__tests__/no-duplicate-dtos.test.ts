@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * No client redeclares a server DTO (CLAUDE_v3.md §12.27).
+ * No client redeclares a server DTO (docs/legacy/CLAUDE_v3.md §12.27).
  *
  * ## Why this is a test and not a convention
  *
@@ -24,7 +24,7 @@ import { describe, expect, it } from 'vitest';
  * ## What it checks
  *
  * Every type argument to `api.get<T>` / `api.post<T>` / `api.put<T>` in a client
- * app must be built **only** from types imported from `@walaa/shared-types`.
+ * app must be built **only** from types imported from `@loyalty-pro/shared-types`.
  *
  * That is the precise rule rather than a proxy for it: the type argument to an API
  * call IS the client's claim about what the server returns, and the contract
@@ -82,7 +82,7 @@ function sourceFiles(directory: string): string[] {
 /** Names imported from the contract package in one file. */
 function contractImports(source: string): Set<string> {
   const names = new Set<string>();
-  const pattern = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'@walaa\/shared-types'/g;
+  const pattern = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'@loyalty-pro\/shared-types'/g;
   for (const match of source.matchAll(pattern)) {
     for (const raw of match[1]!.split(',')) {
       const name = raw.replace(/\btype\b/, '').trim().split(/\s+as\s+/).pop();
@@ -204,7 +204,7 @@ describe('no client redeclares a server DTO', () => {
             if (imported.has(name)) continue;
             offences.push(
               `${file.slice(REPO.length + 1).replace(/\\/g, '/')}: api call typed with ` +
-                `\`${name}\`, which is not imported from @walaa/shared-types`,
+                `\`${name}\`, which is not imported from @loyalty-pro/shared-types`,
             );
           }
         }
@@ -218,7 +218,7 @@ describe('no client redeclares a server DTO', () => {
       offences,
       `A client is describing a server response with a type it declared itself.\n` +
         `Move the shape into packages/shared-types and import it in BOTH the API and\n` +
-        `the client, so the two cannot drift (CLAUDE_v3.md §12.27).\n\n` +
+        `the client, so the two cannot drift (docs/legacy/CLAUDE_v3.md §12.27).\n\n` +
         offences.join('\n'),
     ).toEqual([]);
   });

@@ -4,7 +4,7 @@ import { verifyAccessToken } from '../lib/jwt';
 import { subscribe } from '../services/realtime.service';
 
 /**
- * WebSocket endpoint for real-time client updates (CLAUDE_v3.md §7.2).
+ * WebSocket endpoint for real-time client updates (docs/legacy/CLAUDE_v3.md §7.2).
  *
  * The Station and Agent hold persistent connections and the manager dashboard
  * updates in under a second without polling.

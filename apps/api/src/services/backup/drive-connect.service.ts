@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { DriveConnectProgress, DriveConnectStart, DriveFailure } from '@walaa/shared-types';
+import type { DriveConnectProgress, DriveConnectStart, DriveFailure } from '@loyalty-pro/shared-types';
 import { loadEnv } from '../../config/env';
 import { AUDIT_ACTIONS, recordAudit } from '../audit.service';
 import {
@@ -16,7 +16,7 @@ import { clearConnection, readConnection, writeConnection } from './drive-store'
 import { driveClient, driveEndpoints, DRIVE_SCOPE, type DriveEndpoints } from './drive';
 
 /**
- * Connecting a Google account from inside the manager app (CLAUDE_v3.md §7.3).
+ * Connecting a Google account from inside the manager app (docs/legacy/CLAUDE_v3.md §7.3).
  *
  * ## Why the flow lives in the API and not in the desktop app
  *
@@ -56,7 +56,7 @@ import { driveClient, driveEndpoints, DRIVE_SCOPE, type DriveEndpoints } from '.
 const CONSENT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** The folder created in the merchant's Drive, so archives do not litter the root. */
-const FOLDER_NAME = 'Walaa Backups';
+const FOLDER_NAME = 'Loyalty Pro Backups';
 
 /**
  * A waiting attempt with at least this long left is handed back rather than replaced —

@@ -49,13 +49,13 @@ Windows Service and add the firewall rule; nothing after that does.
 The installer:
 
 - copies the program and its runtime into `C:\Program Files\Walaa`
-- creates `C:\ProgramData\Walaa` and locks it to SYSTEM and Administrators — the
+- creates `C:\ProgramData\LoyaltyPro` and locks it to SYSTEM and Administrators — the
   database in it holds every customer's phone number
-- generates this installation's own secrets into `walaa.env` (no two shops share a
+- generates this installation's own secrets into `loyalty-pro.env` (no two shops share a
   signing key)
 - **copies the pre-migrated database** and verifies it. A merchant's machine never runs
   a database migration
-- registers `WalaaApi` with the Service Control Manager, set to start automatically
+- registers `LoyaltyProApi` with the Service Control Manager, set to start automatically
 - opens **inbound TCP 4000 on private and domain networks only**
 
 If the machine's network is classified **Public**, the firewall rule will not match and
@@ -109,7 +109,7 @@ Open **ولاء** from the Start menu.
 On the tablet's browser:
 
 ```
-http://<MANAGER-IP>:4000
+http://<MANAGER-IP>:4100
 ```
 
 Bookmark it and put the bookmark on the home screen. Sign in with the **محطة** account
@@ -134,7 +134,7 @@ firewall profile or the address.
    استعادة — <date>» and «في النسخة: N زبون وM فاتورة». If those numbers look like the
    shop, the backup is real. A failure is shown in the same place, with its reason, until
    the next test.
-3. Copy the newest `.walaabk` from `C:\ProgramData\Walaa\backups` onto a USB stick and
+3. Copy the newest `.walaabk` from `C:\ProgramData\LoyaltyPro\backups` onto a USB stick and
    take it away with you. Along with the key from §4, that is a complete recovery.
 4. **Google Drive** — the off-machine copy. Set it up from **الإعدادات → النسخ الاحتياطي
    إلى Google Drive** following [`GOOGLE-DRIVE-SETUP.md`](GOOGLE-DRIVE-SETUP.md), then
@@ -169,7 +169,7 @@ Work down it. Every line was performed during verification.
 - [ ] Manager PC has a static address that survived a reboot
 - [ ] Network profile is **Private**, not Public
 - [ ] Installer run as Administrator, finished without an error dialog
-- [ ] `services.msc` shows **WalaaApi** — Running, Automatic
+- [ ] `services.msc` shows **LoyaltyProApi** — Running, Automatic
 - [ ] Dashboard opens on «إعداد المتجر لأول مرة» and the shop's own owner is created
 - [ ] The password was chosen by the merchant, is 10+ characters, and is written down
 - [ ] The login screen afterwards shows **only** a username and a password
@@ -178,7 +178,7 @@ Work down it. Every line was performed during verification.
 - [ ] **محطة** and **برنامج الالتقاط** accounts created in الإعدادات → حسابات الدخول, passwords written down
 - [ ] The capture agent's `agent-settings.json` holds the **برنامج الالتقاط** account, not the owner's
 - [ ] الالتقاط الفواتير shows «وصلت … فاتورة من الصندوق» after a test print
-- [ ] Tablet reaches `http://<MANAGER-IP>:4000` and the station account signs in
+- [ ] Tablet reaches `http://<MANAGER-IP>:4100` and the station account signs in
 - [ ] Discount rules match what the merchant actually agreed to
 - [ ] Smoke test below passes end to end
 - [ ] Backup taken, restore test passed, one archive copied to a USB stick
@@ -215,27 +215,27 @@ report → recover.
 ## 10. When something goes wrong
 
 Keyed to the Arabic the merchant will actually read on screen. He sees a sentence; the
-detail is in `C:\ProgramData\Walaa\logs\` (readable by whoever is logged in — you do not
+detail is in `C:\ProgramData\LoyaltyPro\logs\` (readable by whoever is logged in — you do not
 need Administrator to read the logs).
 
 | What he sees | What it means | What to do |
 |---|---|---|
-| «جارٍ تشغيل البرنامج» for more than a minute | The service is not coming up | `services.msc` → WalaaApi → Start. Then read `logs\api.log` |
+| «جارٍ تشغيل البرنامج» for more than a minute | The service is not coming up | `services.msc` → LoyaltyProApi → Start. Then read `logs\api.log` |
 | «لم يُعثر على جهاز المدير» | A PC that does not host the service has no address for the manager PC | Type the manager PC's address in the box on that screen. **This screen cannot appear on the manager PC** — the shell knows the service is installed there |
-| «خدمة ولاء متوقّفة على هذا الجهاز» | Installed and configured, not running | Restart the PC; the service starts with Windows. Then `services.msc` → WalaaApi |
-| «إعدادات البرنامج مفقودة» / «ملف إعدادات البرنامج غير موجود» | `walaa.env` is gone and the shop's data is still there | **Do not reinstall and do not delete anything.** The installer deliberately refuses to write new secrets beside existing data: new ones invalidate every printed card and every session. Put back a copy of `walaa.env` if one exists. If none does, generating a new one is a decision with a cost — every printed card has to be re-issued — so make it deliberately, not by reinstalling |
-| «تعذّر تشغيل الخدمة: … من إعدادات البرنامج ناقصة أو غير صالحة» | A value in `walaa.env` is missing or wrong | Do not reinstall — it never rewrites an existing `walaa.env`. `logs\api.log` names the setting on its `configuration validation failed` line |
-| «قاعدة البيانات الموجودة على هذا الجهاز أنشأها إصدار مختلف» | A database holding the shop's records, made by another build | **Do not delete anything, do not reinstall** — it changes nothing. Note the version the sentence names and call me. (An **empty** database from another build no longer stops the service: it is renamed `walaa.db.superseded-<time>` and the setup screen appears) |
+| «خدمة ولاء متوقّفة على هذا الجهاز» | Installed and configured, not running | Restart the PC; the service starts with Windows. Then `services.msc` → LoyaltyProApi |
+| «إعدادات البرنامج مفقودة» / «ملف إعدادات البرنامج غير موجود» | `loyalty-pro.env` is gone and the shop's data is still there | **Do not reinstall and do not delete anything.** The installer deliberately refuses to write new secrets beside existing data: new ones invalidate every printed card and every session. Put back a copy of `loyalty-pro.env` if one exists. If none does, generating a new one is a decision with a cost — every printed card has to be re-issued — so make it deliberately, not by reinstalling |
+| «تعذّر تشغيل الخدمة: … من إعدادات البرنامج ناقصة أو غير صالحة» | A value in `loyalty-pro.env` is missing or wrong | Do not reinstall — it never rewrites an existing `loyalty-pro.env`. `logs\api.log` names the setting on its `configuration validation failed` line |
+| «قاعدة البيانات الموجودة على هذا الجهاز أنشأها إصدار مختلف» | A database holding the shop's records, made by another build | **Do not delete anything, do not reinstall** — it changes nothing. Note the version the sentence names and call me. (An **empty** database from another build no longer stops the service: it is renamed `loyalty-pro.db.superseded-<time>` and the setup screen appears) |
 | «نسخة البرنامج المثبّتة غير مكتملة» | A packaging fault, **not his data** | His database is untouched. Reinstall from the full installer. Never restore a backup for this |
-| «تحديث لبنية قاعدة البيانات بدأ ولم يكتمل» / «ملف قاعدة البيانات تالف» | Stopped mid-upgrade, or damaged | Restore the newest `.walaabk` with `walaa-restore.cjs` from the runtime folder — the dashboard's backup screen cannot restore while the service is down. Do not delete files |
+| «تحديث لبنية قاعدة البيانات بدأ ولم يكتمل» / «ملف قاعدة البيانات تالف» | Stopped mid-upgrade, or damaged | Restore the newest `.walaabk` with `loyalty-pro-restore.cjs` from the runtime folder — the dashboard's backup screen cannot restore while the service is down. Do not delete files |
 | «تم استخدام هذه القسيمة مسبقاً» | Correct behaviour — the slip was already redeemed | Nothing. This is the protection working |
 | «عدد كبير من المحاولات» | Too many login attempts | Wait a minute. If it repeats without cause, tell me — someone may be guessing passwords |
 | «النسخ الاحتياطي متوقف: لم يتم تأكيد حفظ مفتاح التشفير» | The key ceremony was never completed | Finish it in **النسخ الاحتياطي**. No backup runs until it is done |
 | «تعذّر الاتصال بالخادم» on the tablet | Network, not data | Check Wi-Fi, then the firewall profile is Private, then that the address matches §5 |
-| Tablet shows nothing at all | Firewall or address | From the tablet's browser try `http://<MANAGER-IP>:4000/health`. It should answer JSON |
+| Tablet shows nothing at all | Firewall or address | From the tablet's browser try `http://<MANAGER-IP>:4100/health`. It should answer JSON |
 
 **What to send me when it is none of these:** the whole of
-`C:\ProgramData\Walaa\logs\` — `api.log`, `service.log`, `status.json` and
+`C:\ProgramData\LoyaltyPro\logs\` — `api.log`, `service.log`, `status.json` and
 `startup-error.json` if present — plus the version from the bottom of the dashboard's
 navigation rail.
 
@@ -262,7 +262,7 @@ deliberate migration.
 
 ### What the upgrade path has been proven to do
 
-`pnpm --filter @walaa/api drill:upgrade` builds two genuine runtimes and walks the
+`pnpm --filter @loyalty-pro/api drill:upgrade` builds two genuine runtimes and walks the
 boundary: 0.2.0 creates a shop, 0.2.1 opens the same database. Verified across it —
 the identity, integrity and migration-set checks all pass on the inherited file, **no
 migration runs**, every customer, invoice, voucher and user survives with an identical

@@ -1,6 +1,6 @@
 //! Windows Service host for the Walaa API (ولاء).
 //!
-//! CLAUDE_v3.md §12.3 requires the API to run as a Windows Service rather than a
+//! docs/legacy/CLAUDE_v3.md §12.3 requires the API to run as a Windows Service rather than a
 //! Tauri sidecar: the Loyalty Station and the Print Capture Agent need it alive for
 //! every trading hour, whether or not the manager has the dashboard window open.
 //!
@@ -18,7 +18,7 @@
 //! surface on a machine whose whole security model is "no inbound network") or
 //! closing a pipe the child already holds. This host keeps the child's stdin open and
 //! closes it to ask for shutdown; `apps/api/src/server.ts` treats that as the stop
-//! signal when `WALAA_SUPERVISED=1`. If the child has not exited within
+//! signal when `LOYALTY_SUPERVISED=1`. If the child has not exited within
 //! `STOP_GRACE`, it is terminated — SQLite is in WAL mode, so even that is safe,
 //! it just costs the in-flight request.
 
@@ -46,17 +46,17 @@ use windows_service::{define_windows_service, service_dispatcher};
 ///
 /// It is how an upgrade finds the service it is replacing. Rename it and the
 /// installer registers a second service while the first keeps running from the old
-/// binaries — holding the API port and `walaa.db` open, so the new one cannot bind.
+/// binaries — holding the API port and `loyalty-pro.db` open, so the new one cannot bind.
 /// The product was renamed to "Customer loyalty" on 2026-09-02 and this stayed.
-const SERVICE_NAME: &str = "WalaaApi";
+const SERVICE_NAME: &str = "LoyaltyProApi";
 /// What services.msc shows. Safe to change: the SCM keys on `SERVICE_NAME`.
-const DISPLAY_NAME: &str = "Customer loyalty API";
+const DISPLAY_NAME: &str = "Loyalty Pro API";
 /// Name of the inbound firewall rule that lets the Loyalty Station reach the API.
 ///
 /// **Do not rename** without deleting the old rule by its old name first: the rule
 /// is created and removed by name, so a rename orphans the previous one — left open
 /// on the shop's network with nothing to close it — and adds a duplicate beside it.
-const FIREWALL_RULE: &str = "Walaa Loyalty API";
+const FIREWALL_RULE: &str = "Loyalty Pro API";
 
 const DESCRIPTION: &str =
     "خدمة Customer loyalty — واجهة البرمجة وقاعدة البيانات المحلية. Local API and SQLite datastore for the Customer loyalty system.";
@@ -65,8 +65,8 @@ const DESCRIPTION: &str =
 /// The database filename each build kind opens. They differ on purpose — see
 /// `Paths::database`. Changing either without changing `apps/api/src/lib/demo-guard.ts`
 /// breaks the runtime guard that checks them.
-const PRODUCTION_DATABASE_NAME: &str = "walaa.db";
-const DEMO_DATABASE_NAME: &str = "walaa-demo.db";
+const PRODUCTION_DATABASE_NAME: &str = "loyalty-pro.db";
+const DEMO_DATABASE_NAME: &str = "loyalty-pro-demo.db";
 
 /// What `install_demo_seed_if_absent` did, so the caller can say so in the log.
 enum SeedPlacement {
@@ -146,15 +146,15 @@ impl Paths {
         let data = DATA_DIR_OVERRIDE
             .get()
             .cloned()
-            .or_else(|| std::env::var_os("WALAA_DATA_DIR").map(PathBuf::from))
+            .or_else(|| std::env::var_os("LOYALTY_DATA_DIR").map(PathBuf::from))
             .unwrap_or_else(|| {
                 let program_data = std::env::var_os("PROGRAMDATA")
                     .unwrap_or_else(|| OsString::from("C:\\ProgramData"));
-                Path::new(&program_data).join("Walaa")
+                Path::new(&program_data).join("LoyaltyPro")
             });
 
         Ok(Paths {
-            env_file: data.join("walaa.env"),
+            env_file: data.join("loyalty-pro.env"),
             logs: data.join("logs"),
             migrations: program.join("migrations"),
             program,
@@ -185,16 +185,16 @@ impl Paths {
     ///
     /// ── Why the two builds use different names ───────────────────────────────
     ///
-    /// They used to share one. The demo shipped its shop as `walaa-demo.db` and then
-    /// configured the API to open `walaa.db`, and `install_demo_seed_if_absent` — which
-    /// declines to overwrite an existing database, correctly — found a `walaa.db` left
+    /// They used to share one. The demo shipped its shop as `loyalty-pro-demo.db` and then
+    /// configured the API to open `loyalty-pro.db`, and `install_demo_seed_if_absent` — which
+    /// declines to overwrite an existing database, correctly — found a `loyalty-pro.db` left
     /// by an earlier install and silently handed it over. The demo spent its whole life
     /// attached to a database nobody had placed. On the machine where this was caught
     /// the file was empty; on a merchant's machine it would have been his customers.
     ///
     /// Giving each build its own name makes that adoption impossible rather than
-    /// unlikely: a demo build has no code path that opens `walaa.db`, and a production
-    /// build has none that opens `walaa-demo.db`. It also repairs a second bug for
+    /// unlikely: a demo build has no code path that opens `loyalty-pro.db`, and a production
+    /// build has none that opens `loyalty-pro-demo.db`. It also repairs a second bug for
     /// free — `assertDemoDatabase()` in the API gates the destructive reset on the open
     /// file's name containing `demo`, which under the old scheme was never true in a
     /// shipped demo, so the reset control was rendered and could not work.
@@ -284,7 +284,7 @@ fn json_escape(input: &str) -> String {
 /// The manager machine runs its own backend, so asking its owner to type an address
 /// is asking him a question the machine can already answer. The one thing the shell
 /// could not previously discover was the PORT: it is fixed at install time and lives
-/// in `walaa.env`, which `restrict_permissions` locks to SYSTEM and Administrators —
+/// in `loyalty-pro.env`, which `restrict_permissions` locks to SYSTEM and Administrators —
 /// deliberately, because that file holds the JWT signing keys. The interactive user
 /// cannot read it, and must not be able to.
 ///
@@ -569,18 +569,18 @@ fn spawn_api(paths: &Paths) -> Result<Child, String> {
         })?;
 
     Command::new(node)
-        .arg("walaa-api.cjs")
+        .arg("loyalty-pro-api.cjs")
         .current_dir(&paths.program)
         .env("NODE_ENV", "production")
-        .env("WALAA_DATA_DIR", &paths.data)
-        .env("WALAA_ENV_FILE", &paths.env_file)
-        .env("WALAA_MIGRATIONS_DIR", &paths.migrations)
-        .env("WALAA_SUPERVISED", "1")
+        .env("LOYALTY_DATA_DIR", &paths.data)
+        .env("LOYALTY_ENV_FILE", &paths.env_file)
+        .env("LOYALTY_MIGRATIONS_DIR", &paths.migrations)
+        .env("LOYALTY_SUPERVISED", "1")
         // Demo builds ship the seed database beside the service. Its presence IS the
         // signal — there is no separate flag file to fall out of step with it, and a
         // production install has no such file to find.
         .env(
-            "WALAA_DEMO",
+            "LOYALTY_DEMO",
             if paths.demo_seed().exists() { "1" } else { "0" },
         )
         .stdin(Stdio::piped())
@@ -642,7 +642,7 @@ fn supervise(paths: &Paths, stop: Receiver<()>) {
       The port, resolved once and published with every status write.
 
       This is what lets the manager dashboard find its own backend without anybody
-      typing an address: the service account can read `walaa.env`, the logged-on user
+      typing an address: the service account can read `loyalty-pro.env`, the logged-on user
       cannot, and `status.json` in the log directory is the one file that crosses that
       boundary. `console` has already recorded its `--port` by the time it gets here,
       and `OnceLock` keeps that authoritative value rather than re-reading a file.
@@ -896,7 +896,7 @@ fn random_secret() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Writes `walaa.env` from the shipped template, with secrets generated for this one
+/// Writes `loyalty-pro.env` from the shipped template, with secrets generated for this one
 /// installation.
 ///
 /// Per-installation secrets matter more than they look: a signing key baked into the
@@ -909,7 +909,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
           ── An existing configuration this process cannot read ───────────────────
 
           A demo build once ran the production ACL lockdown on a per-user install,
-          leaving `walaa.env` owned by SYSTEM and Administrators inside the user's own
+          leaving `loyalty-pro.env` owned by SYSTEM and Administrators inside the user's own
           profile. Every later launch then did the worst possible thing: saw the file,
           declined to rewrite it, and handed the API a configuration it could not open.
           The API died on env validation, the merchant saw a product that would not
@@ -923,7 +923,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
 
           So: demo only, and only when it is genuinely unreadable, the file is replaced.
           A demo has no printed cards to invalidate and its sessions are worthless. A
-          production install is never touched — there, an unreadable `walaa.env` is a
+          production install is never touched — there, an unreadable `loyalty-pro.env` is a
           real operator problem and silently minting new signing keys would be a far
           worse answer than refusing with a clear one.
         */
@@ -983,7 +983,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
 
       The rule that `ensure_env_file` never OVERWRITES an existing file was written for
       exactly this reason. What it did not cover is the file being GONE — a restore that
-      copied `walaa.db` and not `walaa.env`, a data directory moved by hand, an
+      copied `loyalty-pro.db` and not `loyalty-pro.env`, a data directory moved by hand, an
       antivirus quarantine — where the same code path silently mints a new identity for
       a shop that already has one.
 
@@ -1007,7 +1007,7 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         );
     }
 
-    let template_path = paths.program.join("walaa.env.template");
+    let template_path = paths.program.join("loyalty-pro.env.template");
     let template = fs::read_to_string(&template_path)
         .map_err(|e| format!("read {}: {e}", template_path.display()))?;
 
@@ -1022,9 +1022,9 @@ fn ensure_env_file(paths: &Paths, port: Option<u16>) -> Result<bool, String> {
         /*
           ── Rewritten by line prefix, not by matching the default ───────────────
 
-          This was `replace("API_PORT=4000", …)`, which silently coupled two files: the
-          moment `packaging/walaa.env.template` ships a different default, the match
-          finds nothing, the substitution no-ops, and the service binds 4000 while the
+          This was `replace("API_PORT=4100", …)`, which silently coupled two files: the
+          moment `packaging/loyalty-pro.env.template` ships a different default, the match
+          finds nothing, the substitution no-ops, and the service binds 4100 while the
           installer's firewall rule, the status file and the dashboard all expect the
           port that was asked for. Nothing fails; the machine simply cannot be reached,
           and the reason is a string that used to be in two places and now is not.
@@ -1081,14 +1081,14 @@ fn forward_slashes(path: &Path) -> String {
     path.display().to_string().replace('\\', "/")
 }
 
-/// Points an EXISTING `walaa.env` at the database this build actually opens.
+/// Points an EXISTING `loyalty-pro.env` at the database this build actually opens.
 ///
 /// ── Why an upgrade has to touch a file that is otherwise never rewritten ─────
 ///
 /// `ensure_env_file` refuses to overwrite an existing configuration, and that rule is
 /// load-bearing: regenerating `QR_TOKEN_SECRET` would invalidate every loyalty card
 /// already printed. But the demo and production builds now open differently-named
-/// databases, and a machine carrying an older `walaa.env` has the old single name
+/// databases, and a machine carrying an older `loyalty-pro.env` has the old single name
 /// baked into it. Left alone, that install would come up, hit the runtime guard, and
 /// refuse to start — technically correct and useless to the merchant.
 ///
@@ -1108,7 +1108,7 @@ fn repair_database_url(paths: &Paths) {
               A machine in that state never recovers on its own.
 
               It is reachable in practice: a per-user demo installed over a data
-              directory whose `walaa.env` was locked to SYSTEM by an earlier build.
+              directory whose `loyalty-pro.env` was locked to SYSTEM by an earlier build.
             */
             log_line(
                 &paths.logs,
@@ -1190,7 +1190,7 @@ fn set_configured_port(paths: &Paths, port: u16) {
 /// it carefully.
 ///
 /// Removing inheritance on the directory re-propagates to existing children, so this
-/// covers `walaa.db` and its WAL sidecars. The service account is SYSTEM and the
+/// covers `loyalty-pro.db` and its WAL sidecars. The service account is SYSTEM and the
 /// dashboard reaches its data over HTTP, so no other identity needs access to those.
 ///
 /// **The logs are deliberately exempted — see `relax_log_directory`.** They used to be
@@ -1239,7 +1239,7 @@ fn restrict_directory(path: &Path) {
 ///
 /// A log nobody can read is not a safety feature. So the two concerns are separated:
 ///
-///   - the database, the WAL sidecars and `walaa.env` stay SYSTEM + Administrators
+///   - the database, the WAL sidecars and `loyalty-pro.env` stay SYSTEM + Administrators
 ///   - `logs\` gets `INTERACTIVE` **read and execute** — no write, so a log cannot be
 ///     tampered with to hide something, only read
 ///
@@ -1335,7 +1335,7 @@ fn remember_serving_port(port: u16) {
 /// place where "I do not know" is a correct one and produces the right next step.
 ///
 /// The file being unreadable is not hypothetical. `restrict_permissions` locks
-/// `walaa.env` to SYSTEM and Administrators because it holds the JWT signing keys, so
+/// `loyalty-pro.env` to SYSTEM and Administrators because it holds the JWT signing keys, so
 /// any caller that is not the service account reads nothing here.
 fn configured_port_opt(paths: &Paths) -> Option<u16> {
     fs::read_to_string(&paths.env_file).ok().and_then(|text| {
@@ -1349,7 +1349,7 @@ fn configured_port_opt(paths: &Paths) -> Option<u16> {
 /// Reads `API_PORT` back out of the configuration, so the firewall rule always
 /// matches what the service will actually listen on.
 fn configured_port(paths: &Paths, fallback: Option<u16>) -> u16 {
-    configured_port_opt(paths).or(fallback).unwrap_or(4000)
+    configured_port_opt(paths).or(fallback).unwrap_or(4100)
 }
 
 /// Opens the API port for the local network.
@@ -1471,7 +1471,7 @@ fn install(paths: &Paths, port: Option<u16>, delayed: bool) -> Result<(), String
     // `--delayed` exists for the machine that disagrees. If a merchant's PC turns out
     // to start the service before something it needs (an antivirus filter driver
     // holding the disk, a domain profile that has not applied), this moves it after
-    // the boot rush without a rebuild. `sc config WalaaApi start= delayed-auto` does
+    // the boot rush without a rebuild. `sc config LoyaltyProApi start= delayed-auto` does
     // the same thing on an already-installed machine.
     if delayed {
         service
@@ -1596,14 +1596,14 @@ fn control(action: &str) -> Result<(), String> {
 
 fn usage() {
     println!(
-        "\nwalaa-service — Windows Service host for the Walaa API\n\n\
+        "\nloyalty-pro-service — Windows Service host for the Walaa API\n\n\
          USAGE:\n  \
-         walaa-service install [--data-dir <path>] [--port <n>] [--delayed]
+         loyalty-pro-service install [--data-dir <path>] [--port <n>] [--delayed]
                                                                   register and configure (Administrator)\n  \
-         walaa-service uninstall [--data-dir <path>]              stop and deregister; keeps the data\n  \
-         walaa-service start | stop | status                      control the registered service\n  \
-         walaa-service console [--data-dir <path>]                run in the foreground (diagnostics)\n  \
-         walaa-service run                                        the Service Control Manager entry point\n"
+         loyalty-pro-service uninstall [--data-dir <path>]              stop and deregister; keeps the data\n  \
+         loyalty-pro-service start | stop | status                      control the registered service\n  \
+         loyalty-pro-service console [--data-dir <path>]                run in the foreground (diagnostics)\n  \
+         loyalty-pro-service run                                        the Service Control Manager entry point\n"
     );
 }
 
@@ -1796,10 +1796,10 @@ mod tests {
         fs::create_dir_all(&program).unwrap();
         fs::create_dir_all(data.join("logs")).unwrap();
         fs::write(
-            program.join("walaa.env.template"),
+            program.join("loyalty-pro.env.template"),
             "NODE_ENV=production
 DATABASE_URL=\"file:{{DATABASE_FILE}}\"
-API_PORT=4000
+API_PORT=4100
              JWT_ACCESS_SECRET={{JWT_ACCESS_SECRET}}
 JWT_REFRESH_SECRET={{JWT_REFRESH_SECRET}}
              QR_TOKEN_SECRET={{QR_TOKEN_SECRET}}
@@ -1807,7 +1807,7 @@ JWT_REFRESH_SECRET={{JWT_REFRESH_SECRET}}
         )
         .unwrap();
         Paths {
-            env_file: data.join("walaa.env"),
+            env_file: data.join("loyalty-pro.env"),
             logs: data.join("logs"),
             migrations: program.join("migrations"),
             program,
@@ -1867,7 +1867,7 @@ JWT_REFRESH_SECRET={{JWT_REFRESH_SECRET}}
 
     /// ── The one that matters ────────────────────────────────────────────────
     ///
-    /// `walaa.env` gone, `walaa.db` still there — a restore that copied the database
+    /// `loyalty-pro.env` gone, `loyalty-pro.db` still there — a restore that copied the database
     /// and not the configuration, a directory moved by hand, an antivirus quarantine.
     /// Generating fresh secrets here rotates `QR_TOKEN_SECRET`, which invalidates every
     /// loyalty card ever printed, silently and irreversibly. It must refuse.

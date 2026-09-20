@@ -42,14 +42,14 @@ export interface BackendStatus {
 
      Reported by the shell (`src-tauri/src/status.rs`) because the frontend was
      inferring it from a missing port and inferring it wrongly. A manager PC whose
-     `walaa.env` had gone answered `backend_port → null`, which the dashboard read as
+     `loyalty-pro.env` had gone answered `backend_port → null`, which the dashboard read as
      "no address configured" and answered with «لم يُعثر على خادم ولاء» and a box
      asking the shop owner to type a server address — on the machine that IS the
      server, for a fault no address could fix. */
 
-  /** `walaa-service.exe` is installed here. False only on a second machine. */
+  /** `loyalty-pro-service.exe` is installed here. False only on a second machine. */
   hostsService: boolean;
-  /** `walaa.env` is present. Its absence is its own failure with its own remedy. */
+  /** `loyalty-pro.env` is present. Its absence is its own failure with its own remedy. */
   configPresent: boolean;
   /** A database for this build exists in the data directory. */
   databasePresent: boolean;
@@ -139,7 +139,7 @@ export async function probeBackend(base: string, timeoutMs = 2500): Promise<Prob
     return { ok: false, why: 'not-walaa' };
   }
 
-  if (!response.ok || body.service !== 'walaa-api') return { ok: false, why: 'not-walaa' };
+  if (!response.ok || body.service !== 'loyalty-pro-api') return { ok: false, why: 'not-walaa' };
 
   /*
     Major.minor only, matching `testApiUrl` deliberately: a patch release must not lock

@@ -1,4 +1,4 @@
-import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@walaa/shared-types';
+import { formatIqd, SETTLEMENT_STRATEGY_LABELS } from '@loyalty-pro/shared-types';
 import {
   generateVoucherCode,
   type DiscountSettlementStrategy,
@@ -8,7 +8,7 @@ import {
 } from './strategy';
 
 /**
- * **Daily promotional expense** — an explicit-procedure settlement (CLAUDE_v3.md §9).
+ * **Daily promotional expense** — an explicit-procedure settlement (docs/legacy/CLAUDE_v3.md §9).
  *
  * For a store whose POS cannot accept a second payment method on one invoice. The
  * invoice is still recorded and paid at full value; the discount is handed to the

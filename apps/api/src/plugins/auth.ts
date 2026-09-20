@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
-import { DASHBOARD_ROLES, type AccessTokenClaims, type Role } from '@walaa/shared-types';
+import { DASHBOARD_ROLES, type AccessTokenClaims, type Role } from '@loyalty-pro/shared-types';
 import { forbidden, unauthenticated } from '../lib/errors';
 import { verifyAccessToken } from '../lib/jwt';
 
