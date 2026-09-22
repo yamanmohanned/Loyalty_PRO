@@ -52,6 +52,7 @@ import {
 import { loadEnv } from '../config/env';
 import { resolveDataDir } from '../config/paths';
 import { AppError } from '../lib/errors';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AUDIT_ACTIONS, recordAudit, type AuditAction } from './audit.service';
 
@@ -700,6 +701,8 @@ async function noteStoredCodes(result: NativeStatus): Promise<void> {
 }
 
 let rememberWrite: Promise<void> | null = null;
+/** Test seam only — see `dropStatusWritesForTests`. */
+let dropStatusWrites = false;
 let rememberedAt = 0;
 
 /**
@@ -713,22 +716,100 @@ let rememberedAt = 0;
  * invoice apart, and turned "another station claimed it" answers into replays of the
  * winner's result (concurrency.test.ts caught it). `degradedState` waits for it instead.
  */
-function rememberStatus(state: LicenseState): void {
+/**
+ * The row the fallback reads, and the key that says whether it changed.
+ *
+ * One shape for both writers — the routine un-awaited one below, and the atomic one a
+ * licence change commits with (`commitWithStatus`). Two copies of this expression would
+ * be two chances for the fallback to read a status written in a different form.
+ */
+function statusRecord(state: LicenseState): {
+  key: string;
+  data: { lastStatus: string; lastStatusUntil: Date | null; lastStatusAt: Date };
+} {
   const until = state.status === 'PERPETUAL' ? null : state.graceEndsAt;
-  const key = `${state.status}|${until ?? ''}`;
+  return {
+    key: `${state.status}|${until ?? ''}`,
+    data: { lastStatus: state.status, lastStatusUntil: until ? new Date(until) : null, lastStatusAt: new Date() },
+  };
+}
+
+function rememberStatus(state: LicenseState): void {
+  const { key, data } = statusRecord(state);
   if (key === rememberedStatus && Date.now() - rememberedAt < TOUCH_INTERVAL_MS) return;
   rememberedStatus = key;
   rememberedAt = Date.now();
+  // Test seam: the process died after claiming this status in memory and before the
+  // un-awaited write below reached the disk. See `dropStatusWritesForTests`.
+  if (dropStatusWrites) return;
   rememberWrite = prisma.installationState
-    .update({
-      where: { id: 1 },
-      data: { lastStatus: state.status, lastStatusUntil: until ? new Date(until) : null, lastStatusAt: new Date() },
-    })
+    .update({ where: { id: 1 }, data })
     .then(() => undefined)
     .catch(() => {
       rememberedStatus = null;
       rememberedAt = 0;
     });
+}
+
+/**
+ * Stores a licence change and the status it produces, in ONE transaction (FND-10).
+ *
+ * ── Why the paths that make a shop's status BETTER cannot use `rememberStatus` ──
+ *
+ * `rememberStatus` is not awaited, by design, and for a status that got WORSE that is
+ * harmless: whatever it leaves behind is a better status, which the fallback bounds.
+ *
+ * For a status that got BETTER it is not. Activation stored the new code first and
+ * recorded the new status later, un-awaited, at the end. A process that died in between
+ * — a power cut during a generator switch-over is the ordinary way — left the code on
+ * disk and `last_status` still reading UNLICENSED or EXPIRED. With the licensing module
+ * working, the next check put that right. With the module broken, `fallbackVerdict` read
+ * the old status and the shop that had just paid was read-only; and §13.10 blocks phone
+ * codes while the module is out, so nothing in the shop could undo it. The FND-10
+ * durability tests in `license-resilience.test.ts` reproduced exactly that before this
+ * function existed.
+ *
+ * So the status is computed BEFORE anything is written — from the codes as they will be
+ * once the change lands, judged against the time the status will be judged against —
+ * and the change and its status commit together. There is no longer a moment when one is
+ * on disk without the other.
+ *
+ * The in-memory claim is updated afterwards so the `licenseState()` that follows sees an
+ * unchanged status and does not write the same row a second time.
+ */
+async function commitWithStatus<T>(
+  current: Installation,
+  after: Mirror,
+  latestSeen: number | null,
+  write: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const result = evaluateStatus(after.codes, after.unlocks, current.deviceId, nowSeconds(), latestSeen);
+  const record = statusRecord(toState(result, current.deviceId));
+
+  const written = await prisma.$transaction(async (tx) => {
+    const value = await write(tx);
+    await tx.installationState.update({ where: { id: 1 }, data: record.data });
+    return value;
+  });
+
+  rememberedStatus = record.key;
+  rememberedAt = Date.now();
+  return written;
+}
+
+/**
+ * The state to hand back after a licence change, with its status on disk first.
+ *
+ * Used on the paths that found the change already stored — a repeated activation, a
+ * code entered twice. Those are what a manager tries after an activation that seemed to
+ * fail, and a crash under an older build is exactly what could have left the status
+ * behind. Awaiting the write here makes the retry the thing that repairs it, and means a
+ * manager is only told "activated" once the fallback would agree.
+ */
+async function durableState(): Promise<LicenseState> {
+  const state = await licenseState();
+  await rememberWrite?.catch(() => undefined);
+  return state;
 }
 
 async function evaluateNow(): Promise<LicenseState> {
@@ -1174,7 +1255,7 @@ export async function activateLicense(
   const existing = await prisma.licenseActivation.findUnique({ where: { licenseId: license.licenseId } });
   if (existing) {
     await recordEvent(AUDIT_ACTIONS.LICENSE_ACTIVATED, { kind: license.kind, repeat: true }, actor);
-    return { state: await licenseState(), activation: await entryFor(existing), alreadyActive: true };
+    return { state: await durableState(), activation: await entryFor(existing), alreadyActive: true };
   }
 
   const before = await licenseState();
@@ -1182,18 +1263,28 @@ export async function activateLicense(
     throw await refuse('PERPETUAL_ACTIVE', REFUSALS.PERPETUAL_ACTIVE, { licenseId: license.licenseId });
   }
 
-  const row = await prisma.licenseActivation.create({
-    data: activationData(license, code, actor.merchantId, actor.userId),
-  });
-  await refreshMirror();
-
   // The vendor's clock signed this code. A recorded time well after the moment it was
   // issued is not a time this machine can have seen — the clock once ran in the future
   // — and it would otherwise keep the shop TAMPERED until that date comes round.
-  if (current.latestSeen !== null && current.latestSeen > license.issuedAt + TOLERANCE_SECONDS) {
-    const was = current.latestSeen;
-    current.latestSeen = Math.max(now, license.issuedAt);
-    await writeAnchors(current.latestSeen);
+  //
+  // Decided BEFORE the code is stored, because the status committed with it has to be
+  // judged against the recorded time it will actually have. Written to the anchors after.
+  const resetAnchor = current.latestSeen !== null && current.latestSeen > license.issuedAt + TOLERANCE_SECONDS;
+  const was = current.latestSeen;
+  const latestSeen = resetAnchor ? Math.max(now, license.issuedAt) : current.latestSeen;
+
+  const stored = await storedCodes();
+  const row = await commitWithStatus(
+    current,
+    { codes: [...stored.codes, code], unlocks: stored.unlocks },
+    latestSeen,
+    (tx) => tx.licenseActivation.create({ data: activationData(license, code, actor.merchantId, actor.userId) }),
+  );
+  await refreshMirror();
+
+  if (resetAnchor && latestSeen !== null) {
+    current.latestSeen = latestSeen;
+    await writeAnchors(latestSeen);
     await recordEvent(
       AUDIT_ACTIONS.LICENSE_CLOCK_ANCHOR_RESET,
       { was: iso(was), issuedAt: iso(license.issuedAt), now: iso(current.latestSeen), licenseId: license.licenseId },
@@ -1248,20 +1339,30 @@ export async function enterUnlock(
   }
 
   const validUntil = new Date(outcome.validUntil * 1000).toISOString();
-  const existing = await prisma.licenseUnlock.findUnique({ where: { code: outcome.normalized } });
+  // Captured once it is known to be a string: a property narrowed here is not narrowed
+  // inside the transaction callback below.
+  const normalized = outcome.normalized;
+  const existing = await prisma.licenseUnlock.findUnique({ where: { code: normalized } });
   if (existing) {
-    return { state: await licenseState(), validUntil, alreadyEntered: true };
+    return { state: await durableState(), validUntil, alreadyEntered: true };
   }
 
-  await prisma.licenseUnlock.create({
-    data: {
-      merchantId: actor.merchantId,
-      code: outcome.normalized,
-      deviceId: current.deviceId,
-      validUntil: new Date(validUntil),
-      enteredByUserId: actor.userId,
-    },
-  });
+  const stored = await storedCodes();
+  await commitWithStatus(
+    current,
+    { codes: stored.codes, unlocks: [...stored.unlocks, normalized] },
+    current.latestSeen,
+    (tx) =>
+      tx.licenseUnlock.create({
+        data: {
+          merchantId: actor.merchantId,
+          code: normalized,
+          deviceId: current.deviceId,
+          validUntil: new Date(validUntil),
+          enteredByUserId: actor.userId,
+        },
+      }),
+  );
   await refreshMirror();
   await recordEvent(AUDIT_ACTIONS.LICENSE_UNLOCK_ENTERED, { validUntil, deviceId: current.deviceId }, actor);
 
@@ -1376,6 +1477,7 @@ export function reloadLicensingForTests(): void {
   rememberedStatus = null;
   rememberedAt = 0;
   rememberWrite = null;
+  dropStatusWrites = false;
   lastFallbackTouchAt = 0;
   checks = 0;
   lastWallMs = Date.now();
@@ -1396,6 +1498,18 @@ export function resetLicensingForTests(): void {
   } catch {
     /* Only the test build provides it; nothing else calls this. */
   }
+}
+
+/**
+ * Makes `rememberStatus` claim a status in memory and then never write it.
+ *
+ * That is the state a process leaves behind when it dies between a licence change and
+ * the moment the un-awaited status write reaches the disk: the change is stored, the
+ * status the fallback reads is not. FND-10's durability tests use it to prove that the
+ * paths which IMPROVE a shop's status do not depend on that write landing.
+ */
+export function dropStatusWritesForTests(drop: boolean): void {
+  dropStatusWrites = drop;
 }
 
 /** Makes every check fail with `error` — a missing module, a bug — until cleared. */
