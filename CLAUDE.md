@@ -1107,3 +1107,110 @@ meet it again.
 **The lesson worth keeping:** a flake that only appears when an unrelated file is added
 is usually not flaky. It is a race that the old timing happened to win, and the honest
 response is to find the write, not to re-run until it is green.
+
+### 13.20 A licence change that improves a shop's status is committed with that status
+*(FND-10, 2026-09-23. Operator's question: what happens if the service dies between a
+status change and the un-awaited write landing?)*
+
+**The question had two answers, depending on direction.**
+
+*A status that gets WORSE* — a trial ending, grace running out, an emergency window
+closing — is benign. The write that never landed leaves a *better* status behind, and
+`fallbackVerdict` bounds what a better status may do: a time-limited one is honoured until
+the earlier of its own recorded end (grace included) and seven days after the module last
+confirmed it, and not a day longer. **The shop keeps trading within its grace, and stops
+where it would have stopped anyway.** Left un-awaited on purpose, and pinned by two tests:
+three days after a two-day trial ends the fallback still trades (grace), eight days after
+it refuses.
+
+*A status that gets BETTER* — a licence activated, a phone code entered — **locked a
+paying shop.** Activation stored the new code first and recorded the new status later,
+un-awaited, at the end. A process that died in between left the code on disk and
+`last_status` still reading UNLICENSED or EXPIRED. With the licensing module working, the
+next check repaired it. With the module broken, the fallback read the old status and the
+shop that had just paid was read-only — and §13.10 blocks phone codes while the module is
+out, so nothing in the shop could undo it. Reproduced before it was fixed: the two FND-10
+upgrade tests in `license-resilience.test.ts` answered `423` where `200` was due.
+
+**The fix is on the two paths that improve a status, not on the hot path.**
+`commitWithStatus` computes the status the change *will* produce — from the codes as they
+will be, against the recorded time they will be judged by — and commits the new code row
+and `last_status` in one transaction. There is no longer a moment when one is on disk
+without the other. `rememberStatus` stays un-awaited: it runs at the top of every scan,
+and awaiting it is what `concurrency.test.ts` caught originally.
+
+The anchor reset in `activateLicense` is now *decided* before the commit (so the status is
+judged against the time the anchors will have) and *written* after it. A crash between
+the two leaves the anchors in the future, which is the same exposure the code had before;
+the difference is that the fallback now reads PERPETUAL rather than UNLICENSED while it
+lasts.
+
+A repeated activation, and a phone code entered twice, now await the status write before
+replying (`durableState`). Those are what a manager tries after an activation that seemed
+to fail, so the retry is what repairs a status an older build left behind — and a manager
+is only told «تم التفعيل» once the fallback would agree.
+
+**The residual case, stated rather than decided.** One improvement is driven by time
+rather than by a person: a clock that was wound back is corrected, and TAMPERED clears by
+itself. That transition still goes through the un-awaited `rememberStatus`. If the process
+dies within those milliseconds *and* the module is broken on restart, the fallback reads
+TAMPERED and the shop stays read-only. It is a triple coincidence, and the shop was already
+read-only a moment earlier because of its own clock — but it is a paying shop that does not
+come back when it should. Closing it means awaiting one write on the scan path, once, on
+that transition. Not done without the operator's word, because the scan path is where the
+concurrency cost lives.
+
+### 13.21 The Hub: this project's stack, and a host chosen by whether an Iraqi card can pay it
+*(operator decisions, 2026-09-23; PRD §22. The payment check was asked for before building
+on any platform.)*
+
+**Technology — decided.** The Hub is Node.js and TypeScript with Prisma and PostgreSQL:
+the stack this repository already runs. The reason is the contract, not familiarity. The
+Hub and the local service exchange invoices, customers, journey snapshots and orders, and
+every one of those shapes already lives in `packages/shared-types` as a Zod schema with
+Arabic messages and tests. On the same stack the Hub imports them; on any other it
+re-declares them, and two declarations of one contract drift the way §13.16 exists to
+prevent. It lives in this monorepo as `apps/hub`, beside `apps/api`.
+
+**Hosting — decided in kind, open in brand until one test is run.** A managed platform
+with Postgres and automatic backups — Render, Fly or Railway — to begin with, with the
+option of moving to a VPS later. What the operator asked to be checked first is whether a
+payment method that works from Iraq can actually pay one of them. It changes the order:
+
+- **Railway accepts credit cards only**, in its own words: «Railway only accepts credit
+  cards for plan subscriptions» ([docs](https://docs.railway.com/pricing/faqs)).
+  Enterprise invoicing aside, there is no other route.
+- **The Iraqi options found are debit or prepaid.** Qi Card is a debit card
+  ([Wikipedia](https://en.wikipedia.org/wiki/Qi_Card)); Zain Cash's WalletCard is a
+  prepaid Mastercard marketed for international e-commerce
+  ([Zain](https://www.iq.zain.com/en/knowledge-center/services-category/services-offers/wallet-card));
+  FIB has **suspended** settlement of international card transactions and gives no date
+  for its return ([FIB](https://fib.iq/update-on-our-international-card-usage/)).
+- **The rules have moved three times in under three years.** The Central Bank of Iraq
+  ordered banks to stop using MasterCard for international transactions from
+  1 June 2025, with Qi Card and foreign banks excepted
+  ([The New Region](https://thenewregion.com/posts/2070/iraq-to-suspend-mastercard-use-for-foreign-transactions-june-source));
+  capped card spending abroad at $5,000 a month per card
+  ([Iraqi News](https://www.iraqinews.com/iraq/iraqs-central-bank-restricts-bank-cards-usage-abroad/));
+  and on 15 July 2026 cancelled a 2023 circular and allowed dollar cards, funded from
+  inbound remittances, for use inside and outside Iraq
+  ([Iraq Business News](https://www.iraq-businessnews.com/2026/07/14/central-bank-eases-rules-on-cash-dollar-withdrawals/)).
+- **Render and Fly** bill through Stripe. Neither's own pages, as fetched, state which card
+  types are accepted; a secondary source reports Render accepts debit cards with a small
+  authorisation charge. Unconfirmed, and recorded as such.
+
+**So the recommendation changes in two ways.** Railway drops from first place: its one
+accepted method is the one kind of card this search did not find an Iraqi issuer offering
+for foreign merchants. And **no reading of documentation settles it** — the only real test
+is adding the shop's actual card on a platform's billing page and seeing whether the
+authorisation succeeds. That is the operator's step: entering payment details is not
+something this assistant does.
+
+**What this does not block.** The Hub is written platform-neutral — plain PostgreSQL,
+configuration from the environment, a Dockerfile — so the host is a deployment choice, not
+a design one, and "move to a VPS later" is a redeploy rather than a rewrite. That
+neutrality is also the answer to the continuity risk the history above describes: a card
+that pays today can stop paying after the next circular, and a Hub whose bill fails is
+suspended, taking the storefront and the orders station down with it. Paying annually where
+a platform allows it, and keeping a second payer — a card issued outside Iraq, or a host that
+accepts Iraqi payment rails — are the two mitigations worth having ready before launch.

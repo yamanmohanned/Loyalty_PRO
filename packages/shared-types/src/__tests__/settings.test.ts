@@ -16,7 +16,7 @@ import {
  * and that resolution is total.
  */
 
-describe('the registry itself', () => {
+describe('FND-04: the registry itself', () => {
   it('has a unique, dotted key for every setting', () => {
     const keys = SETTING_DEFINITIONS.map((d) => d.key);
     expect(new Set(keys).size).toBe(keys.length);
@@ -67,7 +67,7 @@ describe('the registry itself', () => {
   });
 });
 
-describe('validation', () => {
+describe('FND-04: validation', () => {
   it('accepts a value inside the bounds', () => {
     const { accepted, rejected } = validateSettingValues('MERCHANT', {
       'security.login_attempts': 7,
@@ -140,7 +140,7 @@ describe('validation', () => {
   });
 });
 
-describe('resolution', () => {
+describe('FND-04: resolution', () => {
   it('returns a value for every setting when nothing is stored', () => {
     const resolved = resolveSettings({});
     expect(Object.keys(resolved).sort()).toEqual([...Object.keys(SETTING_DEFAULTS)].sort());

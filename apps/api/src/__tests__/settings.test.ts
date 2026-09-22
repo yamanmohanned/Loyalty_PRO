@@ -75,7 +75,7 @@ async function effective(token: string) {
   return response.json().settings as Record<string, { value: unknown; origin: string }>;
 }
 
-describe('a shop with no settings of its own', () => {
+describe('FND-04: a shop with no settings of its own', () => {
   it('is governed by the registry defaults, and says so', async () => {
     const settings = await effective(await tokenFor('owner'));
     expect(settings['station.receipt_fade_ms']).toEqual({ value: 500, origin: 'SYSTEM' });
@@ -101,7 +101,7 @@ describe('a shop with no settings of its own', () => {
   });
 });
 
-describe('the draft', () => {
+describe('FND-04: the draft', () => {
   /**
    * The promise §4 makes. A manager reconfiguring the station mid-afternoon must not be
    * changing the station mid-afternoon — the states between his first field and his last
@@ -181,7 +181,7 @@ describe('the draft', () => {
   });
 });
 
-describe('who may change what', () => {
+describe('FND-04: who may change what', () => {
   /**
    * The screen disables what a manager may not edit. A disabled field is not an absent
    * one, so the same rule is enforced where it cannot be skipped.
@@ -223,7 +223,7 @@ describe('who may change what', () => {
   });
 });
 
-describe('versions and rollback', () => {
+describe('FND-04: versions and rollback', () => {
   it('numbers versions from one and keeps them newest-first', async () => {
     const owner = await tokenFor('owner');
 
@@ -339,7 +339,7 @@ describe('versions and rollback', () => {
   });
 });
 
-describe('the trail', () => {
+describe('FND-04: the trail', () => {
   /**
    * §4 point 4 and FND-06. The draft is deliberately absent from it: a trail carrying
    * every keystroke of a manager changing his mind buries the one row that matters —
@@ -391,7 +391,7 @@ describe('the trail', () => {
   });
 });
 
-describe('tenant isolation', () => {
+describe('FND-04: tenant isolation', () => {
   /**
    * Every query in the service is scoped by merchant. Asserted because the settings
    * tables are new and A9 — «تاجران على الـHub: لا يرى أحدهما بيانات الآخر» — is a

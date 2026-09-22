@@ -72,7 +72,7 @@ async function setLimits(merchantId: string, attempts: number, minutes: number) 
   });
 }
 
-describe('the rules, without a database', () => {
+describe('FND-01: the rules, without a database', () => {
   const limits = { maxAttempts: 3, lockMinutes: 5 };
   const now = new Date('2026-09-20T10:00:00Z');
 
@@ -117,7 +117,7 @@ describe('the rules, without a database', () => {
   });
 });
 
-describe('signing in', () => {
+describe('FND-01: signing in', () => {
   it('locks the account on the configured attempt, and says so on that attempt', async () => {
     await setLimits(world.merchantId, 3, 5);
 
@@ -195,7 +195,7 @@ describe('signing in', () => {
   });
 });
 
-describe('getting back in without waiting', () => {
+describe('FND-01: getting back in without waiting', () => {
   /**
    * The lock's worst case is a till stuck mid-queue, so the remedy has to be somebody
    * already in the shop. A manager, not only the owner — the owner may be elsewhere.
@@ -253,7 +253,7 @@ describe('getting back in without waiting', () => {
   });
 });
 
-describe('the trail', () => {
+describe('FND-01: the trail', () => {
   /**
    * One row per lock, not one per wrong password. The question asked later is «why could
    * the till not sign in on Thursday evening», and a row per attempt buries its answer.

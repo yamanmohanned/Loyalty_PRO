@@ -64,7 +64,7 @@ async function pair(code: string, deviceLabel?: string) {
   });
 }
 
-describe('creating a station', () => {
+describe('FND-03: creating a station', () => {
   it('returns a pairing code and a URL, and starts it waiting to be paired', async () => {
     const owner = await tokenFor('owner');
     const response = await create(owner);
@@ -113,7 +113,7 @@ describe('creating a station', () => {
   });
 });
 
-describe('pairing a device', () => {
+describe('FND-03: pairing a device', () => {
   it('exchanges the code for a device token, once', async () => {
     const owner = await tokenFor('owner');
     const { pairing } = (await create(owner)).json();
@@ -203,7 +203,7 @@ describe('pairing a device', () => {
   });
 });
 
-describe('what a paired device can ask', () => {
+describe('FND-03: what a paired device can ask', () => {
   async function paired() {
     const owner = await tokenFor('owner');
     const created = (await create(owner)).json();
@@ -254,7 +254,7 @@ describe('what a paired device can ask', () => {
   });
 });
 
-describe('revoking', () => {
+describe('FND-03: revoking', () => {
   /** FND-03's second acceptance criterion, and the reason the token is checked per request. */
   it('stops the device on its very next request', async () => {
     const owner = await tokenFor('owner');
@@ -347,7 +347,7 @@ describe('revoking', () => {
   });
 });
 
-describe('requiring a paired device', () => {
+describe('FND-03: requiring a paired device', () => {
   async function requirePairing(required: boolean) {
     await prisma.settingVersion.create({
       data: {
@@ -414,7 +414,7 @@ describe('requiring a paired device', () => {
   });
 });
 
-describe('the trail', () => {
+describe('FND-03: the trail', () => {
   it('records creation, pairing and revocation', async () => {
     const owner = await tokenFor('owner');
     const created = (await create(owner)).json();
